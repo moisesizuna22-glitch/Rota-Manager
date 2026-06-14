@@ -15,9 +15,11 @@ Online (PaaS - Railway/Render/Fly etc.):
 """
 
 import base64
+import hashlib
 import http.server
 import json
 import os
+import secrets
 import subprocess
 import sys
 from io import BytesIO
@@ -31,6 +33,47 @@ HTML_FILE        = "rota_manager1.html"
 ARQ_ENTRADA      = "rota.xlsx"
 ARQ_PROCESSADO   = "rota_processada_final.xlsx"
 TRATAMENTO_PY    = "tratamento_dados.py"
+USERS_FILE       = "usuarios.json"
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  GERENCIAMENTO DE USUÁRIOS
+# ════════════════════════════════════════════════════════════════════════
+
+def _hash_senha(senha: str) -> str:
+    return hashlib.sha256(senha.encode('utf-8')).hexdigest()
+
+def carregar_usuarios() -> dict:
+    p = Path(USERS_FILE)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text('utf-8'))
+    except Exception:
+        return {}
+
+def salvar_usuarios(users: dict):
+    Path(USERS_FILE).write_text(json.dumps(users, ensure_ascii=False, indent=2), 'utf-8')
+
+def cadastrar_usuario(username: str, senha: str) -> tuple[bool, str]:
+    username = username.strip()
+    if not username or len(username) < 3:
+        return False, "Usuário deve ter pelo menos 3 caracteres."
+    if not senha or len(senha) < 4:
+        return False, "Senha deve ter pelo menos 4 caracteres."
+    users = carregar_usuarios()
+    if username in users:
+        return False, "Usuário já existe."
+    users[username] = {"hash": _hash_senha(senha)}
+    salvar_usuarios(users)
+    return True, "Usuário cadastrado com sucesso."
+
+def autenticar_usuario(username: str, senha: str) -> bool:
+    users = carregar_usuarios()
+    u = users.get(username)
+    if not u:
+        return False
+    return u.get("hash") == _hash_senha(senha)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -189,10 +232,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
-        if not self.check_auth():
+        global _dados_cache
+
+        # ── /auth/cadastro → não exige login (cria conta) ────────────
+        if self.path == '/auth/cadastro':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                data = json.loads(self.rfile.read(length))
+            except Exception:
+                self.send_json({'ok': False, 'erro': 'JSON inválido.'})
+                return
+            ok, msg = cadastrar_usuario(data.get('usuario',''), data.get('senha',''))
+            self.send_json({'ok': ok, 'msg': msg})
             return
 
-        global _dados_cache
+        # ── /auth/login → não exige login (autentica) ────────────────
+        if self.path == '/auth/login':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                data = json.loads(self.rfile.read(length))
+            except Exception:
+                self.send_json({'ok': False, 'erro': 'JSON inválido.'})
+                return
+            usuario = data.get('usuario','').strip()
+            senha   = data.get('senha','')
+            if autenticar_usuario(usuario, senha):
+                token = secrets.token_hex(32)
+                self.send_json({'ok': True, 'token': token, 'usuario': usuario})
+            else:
+                self.send_json({'ok': False, 'erro': 'Usuário ou senha incorretos.'})
+            return
+
+        # ── demais rotas exigem o header X-RM-User ───────────────────
+        rm_user = self.headers.get('X-RM-User', '').strip()
+        if not rm_user:
+            if not self.check_auth():
+                return
 
         # ── /upload → recebe rota.xlsx, salva no disco ───────────────
         if self.path == '/upload':
