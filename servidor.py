@@ -4,17 +4,12 @@ servidor.py — com autenticação por token JWT real
 
 import base64
 import hashlib
-import hmac
 import http.server
 import json
 import os
 import secrets
 import subprocess
 import sys
-import time
-import urllib.parse
-import urllib.request
-from collections import defaultdict
 from pathlib import Path
 
 HOST = os.environ.get('HOST', '0.0.0.0')
@@ -29,57 +24,10 @@ TRATAMENTO_PY = "tratamento_dados.py"
 USERS_FILE = "usuarios.json"
 HISTORICO_FILE = "historico_rotas.json"
 
-# Chaves de mapa — ficam só no servidor (variáveis de ambiente), nunca no HTML
-HERE_API_KEY = os.environ.get('HERE_API_KEY', '')
-GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
-
-# Tokens de sessão expiram depois de N segundos (padrão: 7 dias)
-TOKEN_TTL_SECONDS = int(os.environ.get('TOKEN_TTL_SECONDS', 7 * 24 * 3600))
-
-# Custo do hash de senha (PBKDF2)
-PBKDF2_ITERATIONS = 200_000
-
-# Rate limiting simples para /auth/login e /auth/cadastro (por IP)
-RATE_LIMIT_WINDOW = 300   # segundos
-RATE_LIMIT_MAX = 10        # tentativas por janela
-
 # ════════════════════════════════════════════════════════════════
-# TOKENS VÁLIDOS EM MEMÓRIA  {token: {"usuario": ..., "expira": ts}}
+# TOKENS VÁLIDOS EM MEMÓRIA  {token: username}
 # ════════════════════════════════════════════════════════════════
-_tokens_validos: dict[str, dict] = {}
-
-# ════════════════════════════════════════════════════════════════
-# RATE LIMITING EM MEMÓRIA  {ip: [timestamps]}
-# ════════════════════════════════════════════════════════════════
-_rate_hist: dict[str, list] = defaultdict(list)
-
-
-def _rate_limited(ip: str) -> bool:
-    """Retorna True se o IP excedeu o limite de tentativas na janela atual."""
-    agora = time.time()
-    hist = _rate_hist[ip]
-    hist[:] = [t for t in hist if agora - t < RATE_LIMIT_WINDOW]
-    if len(hist) >= RATE_LIMIT_MAX:
-        return True
-    hist.append(agora)
-    return False
-
-
-def _gerar_token(usuario: str) -> str:
-    token = secrets.token_hex(32)
-    _tokens_validos[token] = {"usuario": usuario, "expira": time.time() + TOKEN_TTL_SECONDS}
-    return token
-
-
-def _token_usuario(token: str):
-    """Retorna o usuário do token se válido e não expirado, senão None."""
-    info = _tokens_validos.get(token)
-    if not info:
-        return None
-    if info["expira"] < time.time():
-        _tokens_validos.pop(token, None)
-        return None
-    return info["usuario"]
+_tokens_validos: dict[str, str] = {}
 
 
 # ════════════════════════════════════════════════════════════════
@@ -117,25 +65,11 @@ def adicionar_ao_historico(nome_arquivo: str, rows: list, headers: list):
 
 
 # ════════════════════════════════════════════════════════════════
-# USUÁRIOS — senha com salt (PBKDF2-HMAC-SHA256)
+# USUÁRIOS
 # ════════════════════════════════════════════════════════════════
 
-def _hash_senha(senha: str, salt: bytes | None = None) -> dict:
-    if salt is None:
-        salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac('sha256', senha.encode('utf-8'), salt, PBKDF2_ITERATIONS)
-    return {"salt": salt.hex(), "hash": dk.hex(), "iter": PBKDF2_ITERATIONS}
-
-def _verifica_senha(senha: str, registro: dict) -> bool:
-    # Formato novo: salt + PBKDF2
-    if "salt" in registro:
-        salt = bytes.fromhex(registro["salt"])
-        iters = registro.get("iter", PBKDF2_ITERATIONS)
-        dk = hashlib.pbkdf2_hmac('sha256', senha.encode('utf-8'), salt, iters)
-        return hmac.compare_digest(dk.hex(), registro["hash"])
-    # Formato antigo (SHA-256 sem salt) — ainda aceito para não travar contas antigas
-    legado = hashlib.sha256(senha.encode('utf-8')).hexdigest()
-    return hmac.compare_digest(legado, registro.get("hash", ""))
+def _hash_senha(senha: str) -> str:
+    return hashlib.sha256(senha.encode('utf-8')).hexdigest()
 
 def carregar_usuarios() -> dict:
     p = Path(USERS_FILE)
@@ -158,7 +92,7 @@ def cadastrar_usuario(username: str, senha: str) -> tuple[bool, str]:
     users = carregar_usuarios()
     if username in users:
         return False, "Usuário já existe."
-    users[username] = _hash_senha(senha)
+    users[username] = {"hash": _hash_senha(senha)}
     salvar_usuarios(users)
     return True, "Usuário cadastrado com sucesso."
 
@@ -167,12 +101,7 @@ def autenticar_usuario(username: str, senha: str) -> bool:
     u = users.get(username)
     if not u:
         return False
-    ok = _verifica_senha(senha, u)
-    # Migra silenciosamente registros antigos (sem salt) para o novo formato
-    if ok and "salt" not in u:
-        users[username] = _hash_senha(senha)
-        salvar_usuarios(users)
-    return ok
+    return u.get("hash") == _hash_senha(senha)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -281,14 +210,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         auth = self.headers.get('Authorization', '')
         if auth.startswith('Bearer '):
             token = auth[7:].strip()
-            if _token_usuario(token):
+            if token in _tokens_validos:
                 return True
         # Fallback: Basic Auth de variável de ambiente (compatibilidade)
         if APP_USER and APP_PASS:
             expected = 'Basic ' + base64.b64encode(f'{APP_USER}:{APP_PASS}'.encode()).decode()
             if self.headers.get('Authorization') == expected:
                 return True
-        self.send_json({'ok': False, 'erro': 'Não autorizado ou sessão expirada.'}, 401)
+        self.send_json({'ok': False, 'erro': 'Não autorizado.'}, 401)
         return False
 
     def do_OPTIONS(self):
@@ -349,66 +278,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'erro': 'Rota não encontrada no histórico.'}, 404)
 
-        # /api/config — entrega as chaves de mapa SÓ para quem já está logado
-        elif self.path.startswith('/api/config'):
-            self.send_json({'ok': True, 'here_key': HERE_API_KEY, 'google_key': GOOGLE_MAPS_API_KEY})
-
-        # /api/geocode — proxy para o HERE Geocode (a chave nunca sai do servidor)
-        elif self.path.startswith('/api/geocode'):
-            from urllib.parse import urlparse, parse_qs
-            qs = parse_qs(urlparse(self.path).query)
-            q  = qs.get('q', [''])[0].strip()
-            if not q:
-                self.send_json({'ok': False, 'erro': 'Parâmetro q vazio.'}, 400); return
-            if not HERE_API_KEY:
-                self.send_json({'ok': False, 'erro': 'HERE_API_KEY não configurada no servidor.'}, 500); return
-            try:
-                data = self._here_get('https://geocode.search.hereapi.com/v1/geocode', {
-                    'q': q, 'limit': '1', 'lang': 'pt-BR',
-                })
-                self.send_json({'ok': True, **data})
-            except Exception as e:
-                self.send_json({'ok': False, 'erro': f'Erro ao consultar HERE: {e}'}, 502)
-
-        # /api/autosuggest — proxy para o HERE Autosuggest (a chave nunca sai do servidor)
-        elif self.path.startswith('/api/autosuggest'):
-            from urllib.parse import urlparse, parse_qs
-            qs = parse_qs(urlparse(self.path).query)
-            q  = qs.get('q', [''])[0].strip()
-            at = qs.get('at', ['-16.7159,-49.2925'])[0]
-            if not q:
-                self.send_json({'ok': False, 'erro': 'Parâmetro q vazio.'}, 400); return
-            if not HERE_API_KEY:
-                self.send_json({'ok': False, 'erro': 'HERE_API_KEY não configurada no servidor.'}, 500); return
-            try:
-                data = self._here_get('https://autosuggest.search.hereapi.com/v1/autosuggest', {
-                    'q': q, 'at': at, 'limit': '6', 'lang': 'pt-BR', 'in': 'countryCode:BRA',
-                })
-                self.send_json({'ok': True, **data})
-            except Exception as e:
-                self.send_json({'ok': False, 'erro': f'Erro ao consultar HERE: {e}'}, 502)
-
         else:
             self.send_response(404); self.end_headers()
-
-    # ── Faz uma requisição GET ao HERE com a chave do servidor ────
-    def _here_get(self, base_url: str, params: dict) -> dict:
-        params = dict(params)
-        params['apiKey'] = HERE_API_KEY
-        url = base_url + '?' + urllib.parse.urlencode(params)
-        with urllib.request.urlopen(url, timeout=8) as resp:
-            return json.loads(resp.read().decode('utf-8'))
 
     # ═══════════════════ POST ═══════════════════════════════════
 
     def do_POST(self):
         global _dados_cache
 
-        # /auth/cadastro — público (com rate limit por IP)
+        # /auth/cadastro — público
         if self.path == '/auth/cadastro':
-            if _rate_limited(self.client_address[0]):
-                self.send_json({'ok': False, 'erro': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'}, 429)
-                return
             length = int(self.headers.get('Content-Length', 0))
             try:
                 data = json.loads(self.rfile.read(length))
@@ -419,11 +298,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok': ok, 'msg': msg})
             return
 
-        # /auth/login — público; GERA e ARMAZENA o token (com rate limit por IP)
+        # /auth/login — público; GERA e ARMAZENA o token
         if self.path == '/auth/login':
-            if _rate_limited(self.client_address[0]):
-                self.send_json({'ok': False, 'erro': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'}, 429)
-                return
             length = int(self.headers.get('Content-Length', 0))
             try:
                 data = json.loads(self.rfile.read(length))
@@ -433,10 +309,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             usuario = data.get('usuario', '').strip()
             senha   = data.get('senha', '')
             if autenticar_usuario(usuario, senha):
-                token = _gerar_token(usuario)
+                token = secrets.token_hex(32)
+                _tokens_validos[token] = usuario
                 print(f" [AUTH] Login OK: {usuario}")
-                self.send_json({'ok': True, 'token': token, 'usuario': usuario,
-                                 'expira_em': TOKEN_TTL_SECONDS})
+                self.send_json({'ok': True, 'token': token, 'usuario': usuario})
             else:
                 self.send_json({'ok': False, 'erro': 'Usuário ou senha incorretos.'})
             return
@@ -446,9 +322,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             auth = self.headers.get('Authorization', '')
             if auth.startswith('Bearer '):
                 token = auth[7:].strip()
-                info = _tokens_validos.pop(token, None)
-                if info:
-                    print(f" [AUTH] Logout: {info['usuario']}")
+                usuario = _tokens_validos.pop(token, None)
+                if usuario:
+                    print(f" [AUTH] Logout: {usuario}")
             self.send_json({'ok': True})
             return
 
@@ -529,17 +405,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def main():
     auth_status = "ATIVADO (login exigido)" if (APP_USER and APP_PASS) else "Token JWT (usuarios.json)"
-    here_status   = "configurada" if HERE_API_KEY else "NÃO configurada (mapas HERE não vão funcionar)"
-    google_status = "configurada" if GOOGLE_MAPS_API_KEY else "NÃO configurada (Google Maps não vai funcionar)"
     print(f"""
 ╔══════════════════════════════════════════════════╗
 ║ ROTA MANAGER — SERVIDOR                          ║
 ╠══════════════════════════════════════════════════╣
-║ Endereço     : http://{HOST}:{PORT}
-║ Pasta        : {Path('.').resolve()}
-║ Auth         : {auth_status}
-║ HERE_API_KEY : {here_status}
-║ GOOGLE_MAPS_API_KEY : {google_status}
+║ Endereço : http://{HOST}:{PORT}
+║ Pasta    : {Path('.').resolve()}
+║ Auth     : {auth_status}
 ╚══════════════════════════════════════════════════╝
 """)
     try:
