@@ -416,6 +416,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self.send_response(404)
             self.end_headers()
+
+
+def main():
     auth_status = "ATIVADO (login exigido)" if (APP_USER and APP_PASS) else "DESATIVADO (sem login)"
     print(f"""
 ╔══════════════════════════════════════════════════╗
