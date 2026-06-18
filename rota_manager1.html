@@ -414,6 +414,70 @@ background: #ef4444;
 color: #fff;
 }
 
+/* ── Checkbox de seleção ── */
+.td-check { text-align: center; width: 36px; }
+.td-check input,
+#check-all {
+width: 16px;
+height: 16px;
+cursor: pointer;
+accent-color: var(--accent);
+}
+tbody tr.tr-selecionada {
+background: rgba(245, 158, 11, .10) !important;
+}
+
+/* ── Botão flutuante: Agrupar selecionados ── */
+.fab-agrupar {
+position: fixed;
+right: 24px;
+bottom: 24px;
+z-index: 400;
+display: flex;
+align-items: center;
+gap: 8px;
+padding: 13px 22px;
+border: none;
+border-radius: 999px;
+background: var(--accent);
+color: #000;
+font-size: 14px;
+font-weight: 800;
+cursor: pointer;
+box-shadow: 0 6px 24px rgba(0,0,0,.5);
+opacity: 0;
+visibility: hidden;
+transform: translateY(16px);
+transition: opacity .18s, transform .18s, visibility .18s, filter .15s;
+}
+.fab-agrupar.show {
+opacity: 1;
+visibility: visible;
+transform: translateY(0);
+}
+.fab-agrupar:hover { filter: brightness(1.1); }
+.fab-agrupar.vazio {
+background: var(--surface2);
+color: var(--muted);
+border: 1px solid var(--border);
+}
+.fab-count {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+min-width: 20px;
+height: 20px;
+padding: 0 5px;
+border-radius: 999px;
+background: rgba(0,0,0,.25);
+font-size: 12px;
+}
+.fab-agrupar.vazio .fab-count { background: rgba(255,255,255,.08); }
+
+@media (max-width: 640px) {
+.fab-agrupar { right: 16px; bottom: 16px; padding: 12px 18px; font-size: 13px; }
+}
+
 /* Botão de mapa */
 .btn-map {
 width: 34px; height: 34px;
@@ -880,6 +944,7 @@ Escolher arquivo .xlsx
 <table id="main-table">
 <thead>
 <tr>
+<th style="width:36px"><input type="checkbox" id="check-all" title="Selecionar todos os visíveis" onclick="toggleSelecionarTodos(this.checked)"></th>
 <th>MAPA</th>
 <th>STOP</th>
 <th>ENDEREÇO</th>
@@ -890,6 +955,11 @@ Escolher arquivo .xlsx
 <tbody id="table-body"></tbody>
 </table>
 </div>
+
+<!-- Botão flutuante: agrupar endereços selecionados -->
+<button id="fab-agrupar" class="fab-agrupar vazio" onclick="agruparSelecionados()" title="Agrupar os endereços selecionados">
+🔗 Agrupar <span class="fab-count" id="fab-count">0</span>
+</button>
 
 <script>
 // ══════════════════════════════════════════════════════════
@@ -1241,11 +1311,12 @@ const tbody = document.getElementById('table-body');
 tbody.innerHTML = '';
 
 if (!rows.length) {
-tbody.innerHTML = '<tr><td colspan="5" class="empty-filter">Nenhum endereço encontrado.</td></tr>';
+tbody.innerHTML = '<tr><td colspan="6" class="empty-filter">Nenhum endereço encontrado.</td></tr>';
 } else {
 for (const row of rows) {
 const tr = document.createElement('tr');
 if (row.group_size > 1) tr.classList.add('grouped');
+if (_selecionados.has(row._cid)) tr.classList.add('tr-selecionada');
 
 const hasCoord   = !!row.coord;
 const coordText  = row.coord || '—';
@@ -1264,6 +1335,17 @@ grupoHtml = `<span class="badge-group">✕${row.group_size}</span>`;
 } else {
 grupoHtml = '<span class="badge-single">—</span>';
 }
+
+// Checkbox de seleção (para agrupar manualmente depois)
+const tdCheck = document.createElement('td');
+tdCheck.className = 'td-check';
+const chk = document.createElement('input');
+chk.type = 'checkbox';
+chk.className = 'row-check';
+chk.dataset.cid = row._cid;
+chk.checked = _selecionados.has(row._cid);
+tr.appendChild(tdCheck);
+tdCheck.appendChild(chk);
 
 // Botão mapa
 const tdAction = document.createElement('td');
@@ -1325,6 +1407,7 @@ desagruparMembro(cid, mi);
 
 let _nextGroupId = 1;
 let _nextCid = 1;
+let _selecionados = new Set();
 
 function desagruparMembro(cid, memberIndex) {
 const idx = _allRows.findIndex(r => r._cid === cid);
@@ -1369,6 +1452,128 @@ _editado: false,
 };
 
 _allRows.splice(idx + 1, 0, novaLinha);
+
+const q = document.getElementById('filter-input').value.trim();
+if (q) filtrarTabela(); else renderTable(_allRows);
+updateStats(_allRows);
+}
+
+// ══════════════════════════════════════════════════════════
+//  SELEÇÃO MANUAL + AGRUPAR PELO BOTÃO FLUTUANTE
+// ══════════════════════════════════════════════════════════
+
+// Delegação: marcar/desmarcar checkbox de uma linha
+document.getElementById('table-body').addEventListener('change', (e) => {
+const chk = e.target.closest('.row-check');
+if (!chk) return;
+const cid = parseInt(chk.dataset.cid);
+if (chk.checked) _selecionados.add(cid);
+else _selecionados.delete(cid);
+chk.closest('tr').classList.toggle('tr-selecionada', chk.checked);
+atualizarFab();
+});
+
+function toggleSelecionarTodos(marcar) {
+const checks = document.querySelectorAll('#table-body .row-check');
+checks.forEach(chk => {
+const cid = parseInt(chk.dataset.cid);
+chk.checked = marcar;
+if (marcar) _selecionados.add(cid); else _selecionados.delete(cid);
+chk.closest('tr').classList.toggle('tr-selecionada', marcar);
+});
+atualizarFab();
+}
+
+function atualizarFab() {
+const fab = document.getElementById('fab-agrupar');
+const cnt = document.getElementById('fab-count');
+const n = _selecionados.size;
+cnt.textContent = n;
+fab.classList.toggle('vazio', n < 2);
+fab.title = n < 2
+? 'Marque ao menos 2 endereços para agrupar'
+: `Agrupar os ${n} endereços selecionados`;
+}
+
+// Mostra o botão flutuante só quando o usuário rola a tabela pra baixo
+(function configurarScrollFab() {
+const container = document.getElementById('table-section');
+const fab = document.getElementById('fab-agrupar');
+let ticking = false;
+container.addEventListener('scroll', () => {
+if (ticking) return;
+ticking = true;
+requestAnimationFrame(() => {
+fab.classList.toggle('show', container.scrollTop > 80);
+ticking = false;
+});
+});
+})();
+
+// Junta manualmente os endereços marcados em um único grupo
+function agruparSelecionados() {
+if (_selecionados.size < 2) {
+alert('Selecione pelo menos 2 endereços (marque as caixinhas) para agrupar.');
+return;
+}
+
+const escolhidos = _allRows.filter(r => _selecionados.has(r._cid));
+if (escolhidos.length < 2) return;
+
+if (!confirm(`Agrupar estes ${escolhidos.length} endereços em um único grupo?`)) return;
+
+// Junta os membros de todos os endereços escolhidos (cada um pode já ser um grupo)
+const membrosCombinados = [];
+for (const r of escolhidos) {
+const ms = Array.isArray(r.membros) && r.membros.length
+? r.membros
+: [{ stop: r.stop, original: r.endereco_original || r.address }];
+membrosCombinados.push(...ms);
+}
+
+// Escolhe o rótulo mais "completo" entre os selecionados (com número/detalhe)
+const candidatos = escolhidos.map(r => r.group_label || r.address || '');
+const melhor = candidatos.reduce((a, b) => {
+const scoreA = a.length + (a.includes(',') ? 100 : 0);
+const scoreB = b.length + (b.includes(',') ? 100 : 0);
+return scoreA >= scoreB ? a : b;
+}, candidatos[0] || '');
+
+const stopsJoined = membrosCombinados.map(m => m.stop).filter(Boolean).join(', ');
+const origsUnicos = [];
+for (const m of membrosCombinados) {
+if (m.original && !origsUnicos.includes(m.original)) origsUnicos.push(m.original);
+}
+
+// Reaproveita coordenada/lat/lon do primeiro selecionado que já tiver
+const comCoord = escolhidos.find(r => r.coord);
+
+const novoGrupo = {
+raw_row: escolhidos[0].raw_row,
+stop: '',
+address: melhor,
+endereco_original: origsUnicos.join(' | '),
+coord: comCoord ? comCoord.coord : '',
+lat:   comCoord ? comCoord.lat   : '',
+lon:   comCoord ? comCoord.lon   : '',
+group_id: _nextGroupId++,
+group_label: melhor,
+group_stops: stopsJoined,
+group_size: membrosCombinados.length,
+membros: membrosCombinados,
+_cid: _nextCid++,
+_editado: false,
+};
+
+// Remove os selecionados e insere o novo grupo no lugar do primeiro deles
+const primeiroIdx = Math.min(..._allRows.map((r, i) => _selecionados.has(r._cid) ? i : Infinity));
+_allRows = _allRows.filter(r => !_selecionados.has(r._cid));
+_allRows.splice(primeiroIdx, 0, novoGrupo);
+
+_selecionados.clear();
+const checkAll = document.getElementById('check-all');
+if (checkAll) checkAll.checked = false;
+atualizarFab();
 
 const q = document.getElementById('filter-input').value.trim();
 if (q) filtrarTabela(); else renderTable(_allRows);
@@ -1992,6 +2197,10 @@ return row;
 });
 _nextCid     = norm.length + 1;
 _nextGroupId = maxGid + 1;
+_selecionados.clear();
+const checkAll = document.getElementById('check-all');
+if (checkAll) checkAll.checked = false;
+if (typeof atualizarFab === 'function') atualizarFab();
 return norm;
 }
 
