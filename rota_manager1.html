@@ -2199,18 +2199,18 @@ try {
 // 1) Upload do rota.xlsx
 const fd = new FormData();
 fd.append('arquivo', file, 'rota.xlsx');
-const up = await fetch(SERVER + '/upload', { method: 'POST', body: fd });
+const up = await fetch(SERVER + '/upload', { method: 'POST', body: fd, headers: authHeaders() });
 if (!up.ok) throw new Error('Falha no upload');
 
 // 2) Roda tratamento_dados.py
 document.getElementById('loading-msg').textContent = 'Rodando tratamento_dados.py...';
-const pipe = await fetch(SERVER + '/pipeline', { method: 'POST' });
+const pipe = await fetch(SERVER + '/pipeline', { method: 'POST', headers: authHeaders() });
 const pd   = await pipe.json();
 if (!pd.ok) throw new Error(pd.erro || 'Erro no pipeline');
 
 // 3) Busca o resultado (rota_processada_final.xlsx já lido pelo servidor)
 document.getElementById('loading-msg').textContent = 'Carregando rota_processada_final.xlsx...';
-const res  = await fetch(SERVER + '/dados');
+const res  = await fetch(SERVER + '/dados', { headers: authHeaders() });
 const dado = await res.json();
 if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
@@ -2317,7 +2317,7 @@ function fecharHistorico(e) {
 
 async function carregarListaHistorico() {
   try {
-    const r = await fetch(SERVER + '/historico');
+    const r = await fetch(SERVER + '/historico', { headers: authHeaders() });
     const d = await r.json();
     if (!d.ok) return;
     renderHistoricoLista(d.historico || []);
@@ -2349,7 +2349,7 @@ async function carregarDoHistorico(nome) {
   document.getElementById('hist-overlay').classList.remove('show');
   showLoading(`Carregando "${nome}"...`);
   try {
-    const r = await fetch(SERVER + '/historico/carregar?nome=' + encodeURIComponent(nome));
+    const r = await fetch(SERVER + '/historico/carregar?nome=' + encodeURIComponent(nome), { headers: authHeaders() });
     const d = await r.json();
     if (!d.ok) throw new Error(d.erro || 'Erro ao carregar');
     mostrarRotaNoApp(d.rows, d.headers, d.nome);
@@ -2363,7 +2363,7 @@ async function carregarDoHistorico(nome) {
 async function apagarDoHistorico(nome) {
   if (!confirm(`Remover "${nome}" do histórico?`)) return;
   try {
-    await fetch(SERVER + '/historico/apagar?nome=' + encodeURIComponent(nome), { method: 'DELETE' });
+    await fetch(SERVER + '/historico/apagar?nome=' + encodeURIComponent(nome), { method: 'DELETE', headers: authHeaders() });
     carregarListaHistorico();
     if (_nomeAtual === nome) _nomeAtual = '';
   } catch(e) { alert('Erro ao remover.'); }
@@ -2374,12 +2374,12 @@ function renderHistoricoPanel() { /* chamado ao carregar rota — já atualiza b
 // ── Auto-restaurar última rota ao dar F5 ─────────────────────────────
 async function tentarRestaurarUltimaRota() {
   try {
-    const r = await fetch(SERVER + '/historico');
+    const r = await fetch(SERVER + '/historico', { headers: authHeaders() });
     const d = await r.json();
     if (!d.ok || !d.historico.length) return;
     const ultima = d.historico[0];
     // Carrega a rota completa automaticamente
-    const r2 = await fetch(SERVER + '/historico/carregar?nome=' + encodeURIComponent(ultima.nome));
+    const r2 = await fetch(SERVER + '/historico/carregar?nome=' + encodeURIComponent(ultima.nome), { headers: authHeaders() });
     const d2  = await r2.json();
     if (!d2.ok) return;
     mostrarRotaNoApp(d2.rows, d2.headers, d2.nome);
@@ -2458,8 +2458,10 @@ const SESSION_KEY = 'rm_session_v1';
 function getSession() {
 try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
 }
-function saveSession(user) { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user })); }
+function saveSession(user, token) { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, token })); }
 function clearSession()    { sessionStorage.removeItem(SESSION_KEY); }
+function getToken()        { const s = getSession(); return s && s.token ? s.token : null; }
+function authHeaders()     { const t = getToken(); return t ? { 'Authorization': 'Bearer ' + t } : {}; }
 
 // ── UI helpers ────────────────────────────────────────────────────────
 function showError(msg)   {
@@ -2519,7 +2521,7 @@ body: JSON.stringify({ usuario, senha })
 });
 const d = await r.json();
 if (d.ok) {
-saveSession(d.usuario);
+saveSession(d.usuario, d.token);
 entrarNoApp(d.usuario);
 } else {
 showError(d.erro || 'Usuário ou senha incorretos.');
@@ -2582,6 +2584,8 @@ document.getElementById('header-username').textContent = user;
 
 // ── Sair ──────────────────────────────────────────────────────────────
 function fazerLogout() {
+const token = getToken();
+if (token) fetch(SERVER + '/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {});
 clearSession();
 document.getElementById('login-screen').classList.remove('hidden');
 document.getElementById('header-user').style.display = 'none';

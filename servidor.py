@@ -23,7 +23,8 @@ import re
 import secrets
 import subprocess
 import sys
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 HOST           = os.environ.get('HOST', '0.0.0.0')
@@ -36,6 +37,54 @@ ARQ_PROCESSADO = "rota_processada_final.xlsx"
 TRATAMENTO_PY  = "tratamento_dados.py"
 USERS_FILE     = "usuarios.json"
 HISTORICO_FILE = "historico_rotas.json"
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  SESSÕES EM MEMÓRIA  (token → {user_id, usuario, dados, criado_em})
+#  Expiram após SESSION_TTL_HORAS horas sem reiniciar o servidor.
+# ════════════════════════════════════════════════════════════════════════
+
+SESSION_TTL_HORAS = 12
+_sessoes: dict = {}   # { token: { user_id, usuario, dados, criado_em } }
+
+
+def _limpar_sessoes_expiradas():
+    """Remove sessões expiradas — chamada automaticamente nas operações."""
+    agora = datetime.now()
+    expiradas = [
+        t for t, s in _sessoes.items()
+        if agora - s['criado_em'] > timedelta(hours=SESSION_TTL_HORAS)
+    ]
+    for t in expiradas:
+        del _sessoes[t]
+
+
+def criar_sessao(user_id: str, usuario: str) -> str:
+    _limpar_sessoes_expiradas()
+    token = secrets.token_hex(32)
+    _sessoes[token] = {
+        'user_id':  user_id,
+        'usuario':  usuario,
+        'dados':    None,       # (rows, headers) — preenchido após /pipeline
+        'criado_em': datetime.now(),
+    }
+    return token
+
+
+def obter_sessao(token: str) -> dict | None:
+    """Retorna a sessão se válida, None se inexistente ou expirada."""
+    _limpar_sessoes_expiradas()
+    s = _sessoes.get(token)
+    if s is None:
+        return None
+    if datetime.now() - s['criado_em'] > timedelta(hours=SESSION_TTL_HORAS):
+        del _sessoes[token]
+        return None
+    return s
+
+
+def destruir_sessao(token: str):
+    _sessoes.pop(token, None)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -58,19 +107,20 @@ def salvar_historico(historico: list):
     )
 
 
-def adicionar_ao_historico(nome_arquivo: str, rows: list, headers: list):
-    """Salva ou atualiza a entrada do histórico para este arquivo."""
+def adicionar_ao_historico(nome_arquivo: str, rows: list, headers: list, user_id: str = ''):
+    """Salva ou atualiza a entrada do histórico para este arquivo e usuário."""
     historico = carregar_historico()
     entrada = {
         "nome":     nome_arquivo,
         "total":    len(rows),
         "headers":  headers,
         "rows":     rows,
+        "user_id":  user_id,
         "salvo_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
     }
-    historico = [h for h in historico if h.get("nome") != nome_arquivo]
+    historico = [h for h in historico if not (h.get("nome") == nome_arquivo and h.get("user_id") == user_id)]
     historico.insert(0, entrada)
-    historico = historico[:20]
+    historico = historico[:50]   # aumentado de 20 para 50 (agora há vários usuários)
     salvar_historico(historico)
     return entrada
 
@@ -108,17 +158,27 @@ def cadastrar_usuario(username: str, senha: str) -> tuple[bool, str]:
     users = carregar_usuarios()
     if username in users:
         return False, "Usuário já existe."
-    users[username] = {"hash": _hash_senha(senha)}
+    users[username] = {
+        "id":   str(uuid.uuid4()),
+        "hash": _hash_senha(senha),
+    }
     salvar_usuarios(users)
     return True, "Usuário cadastrado com sucesso."
 
 
-def autenticar_usuario(username: str, senha: str) -> bool:
+def autenticar_usuario(username: str, senha: str) -> str | None:
+    """Retorna o user_id se credenciais corretas, None caso contrário."""
     users = carregar_usuarios()
     u = users.get(username)
     if not u:
-        return False
-    return u.get("hash") == _hash_senha(senha)
+        return None
+    if u.get("hash") != _hash_senha(senha):
+        return None
+    # Usuários antigos (antes do uuid) ganham id na primeira autenticação
+    if not u.get("id"):
+        u["id"] = str(uuid.uuid4())
+        salvar_usuarios(users)
+    return u["id"]
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -221,14 +281,31 @@ def ler_processado():
 #  SERVIDOR HTTP
 # ════════════════════════════════════════════════════════════════════════
 
-_dados_cache = None
-
 
 class Handler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         status = args[1] if len(args) > 1 else ''
         print(f"  [{self.command}] {self.path} {status}")
+
+    def _token_da_requisicao(self) -> str | None:
+        """Extrai o token Bearer do header Authorization."""
+        auth = self.headers.get('Authorization', '')
+        if auth.startswith('Bearer '):
+            return auth[7:].strip()
+        return None
+
+    def _sessao_ou_401(self) -> dict | None:
+        """Valida o token e devolve a sessão, ou envia 401 e retorna None."""
+        token = self._token_da_requisicao()
+        if not token:
+            self.send_json({'ok': False, 'erro': 'Não autenticado.'}, 401)
+            return None
+        sess = obter_sessao(token)
+        if sess is None:
+            self.send_json({'ok': False, 'erro': 'Sessão expirada ou inválida. Faça login novamente.'}, 401)
+            return None
+        return sess
 
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
@@ -291,28 +368,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
 
         elif self.path == '/dados':
-            global _dados_cache
-            if _dados_cache is None:
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
+            if sess['dados'] is None:
                 self.send_json({'ok': False, 'erro': 'Nenhum dado processado ainda.'}, 404)
             else:
-                rows, headers = _dados_cache
+                rows, headers = sess['dados']
                 self.send_json({'ok': True, 'arquivo': ARQ_PROCESSADO,
                                 'rows': rows, 'headers': headers})
 
         elif self.path == '/historico':
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
             historico = carregar_historico()
+            # Filtra apenas o histórico deste usuário
+            historico_user = [h for h in historico if h.get('user_id') == sess['user_id']]
             resumo = [
                 {"nome": h["nome"], "total": h["total"], "salvo_em": h.get("salvo_em", "")}
-                for h in historico
+                for h in historico_user
             ]
             self.send_json({'ok': True, 'historico': resumo})
 
         elif self.path.startswith('/historico/carregar'):
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
             from urllib.parse import urlparse, parse_qs
             qs   = parse_qs(urlparse(self.path).query)
             nome = qs.get('nome', [''])[0]
             historico = carregar_historico()
-            entrada = next((h for h in historico if h.get('nome') == nome), None)
+            entrada = next(
+                (h for h in historico
+                 if h.get('nome') == nome and h.get('user_id') == sess['user_id']),
+                None
+            )
             if entrada:
                 self.send_json({'ok': True, **entrada})
             else:
@@ -349,18 +440,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             usuario = data.get('usuario', '').strip()
             senha   = data.get('senha', '')
-            if autenticar_usuario(usuario, senha):
-                token = secrets.token_hex(32)
+            user_id = autenticar_usuario(usuario, senha)
+            if user_id:
+                token = criar_sessao(user_id, usuario)
                 self.send_json({'ok': True, 'token': token, 'usuario': usuario})
             else:
                 self.send_json({'ok': False, 'erro': 'Usuário ou senha incorretos.'})
             return
 
-        # demais rotas exigem X-RM-User ou Basic Auth
-        rm_user = self.headers.get('X-RM-User', '').strip()
-        if not rm_user:
-            if not self.check_auth():
-                return
+        # /auth/logout — invalida sessão no servidor
+        if self.path == '/auth/logout':
+            token = self._token_da_requisicao()
+            if token:
+                destruir_sessao(token)
+            self.send_json({'ok': True})
+            return
+
+        # demais rotas exigem token de sessão válido
+        sess = self._sessao_ou_401()
+        if sess is None:
+            return
 
         # /upload
         if self.path == '/upload':
@@ -448,9 +547,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     print(result.stdout)
 
                 rows, headers = ler_processado()
-                _dados_cache  = (rows, headers)
+                sess['dados'] = (rows, headers)
                 nome_arq = Path(ARQ_PROCESSADO).name
-                adicionar_ao_historico(nome_arq, rows, headers)
+                adicionar_ao_historico(nome_arq, rows, headers, sess['user_id'])
                 print(f"  [PIPELINE] ✅ {len(rows)} endereços carregados")
                 self.send_json({'ok': True, 'total': len(rows)})
 
@@ -470,10 +569,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_DELETE(self):
         from urllib.parse import urlparse, parse_qs
         if self.path.startswith('/historico/apagar'):
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
             qs   = parse_qs(urlparse(self.path).query)
             nome = qs.get('nome', [''])[0]
             historico = carregar_historico()
-            novo = [h for h in historico if h.get('nome') != nome]
+            # Só apaga entradas que pertencem a este usuário
+            novo = [
+                h for h in historico
+                if not (h.get('nome') == nome and h.get('user_id') == sess['user_id'])
+            ]
             salvar_historico(novo)
             self.send_json({'ok': True})
         else:
