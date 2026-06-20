@@ -915,7 +915,14 @@ transition: .15s;
 <label>Usuário</label>
 <div class="login-input-wrap">
 <span class="icon">👤</span>
-<input class="login-input" id="cad-user" type="text" placeholder="Escolha um usuário" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('cad-pass').focus()">
+<input class="login-input" id="cad-user" type="text" placeholder="Escolha um usuário" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('cad-email').focus()">
+</div>
+</div>
+<div class="login-field">
+<label>Email</label>
+<div class="login-input-wrap">
+<span class="icon">✉️</span>
+<input class="login-input" id="cad-email" type="email" placeholder="seuemail@exemplo.com" autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('cad-pass').focus()">
 </div>
 </div>
 <div class="login-field">
@@ -936,8 +943,23 @@ transition: .15s;
 </div>
 <button class="btn-login" id="btn-cadastrar" onclick="cadastrar()">Cadastrar</button>
 </div>
+
+<!-- Formulário Confirmar código (etapa 2 do cadastro) -->
+<div id="form-confirmar" style="display:none">
+<div class="login-field">
+<label>Código de verificação</label>
+<p style="font-size:13px;color:#9ca3af;margin:0 0 10px 0">Enviamos um código de 6 dígitos para <strong id="confirmar-email-alvo"></strong>. Confira também a caixa de spam.</p>
+<div class="login-input-wrap">
+<span class="icon">🔢</span>
+<input class="login-input" id="confirmar-codigo" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')confirmarCodigo()">
 </div>
 </div>
+<button class="btn-login" id="btn-confirmar-codigo" onclick="confirmarCodigo()">Confirmar e criar conta</button>
+<button class="btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarConfirmacao()">‹ Voltar</button>
+</div>
+</div>
+</div>
+
 
 <!-- ══ PAINEL HISTÓRICO ══ -->
 <div id="hist-overlay" onclick="fecharHistorico(event)">
@@ -2513,10 +2535,13 @@ document.getElementById('login-success').classList.remove('show');
 
 function switchTab(tab) {
 clearMsgs();
-document.getElementById('form-entrar').style.display   = tab === 'entrar'   ? '' : 'none';
-document.getElementById('form-cadastro').style.display = tab === 'cadastro' ? '' : 'none';
+document.getElementById('form-entrar').style.display    = tab === 'entrar'   ? '' : 'none';
+document.getElementById('form-cadastro').style.display  = tab === 'cadastro' ? '' : 'none';
+document.getElementById('form-confirmar').style.display = 'none';
 document.getElementById('tab-entrar').className  = 'login-tab' + (tab === 'entrar'   ? ' active' : '');
 document.getElementById('tab-cadastro').className = 'login-tab' + (tab === 'cadastro' ? ' active' : '');
+document.getElementById('tab-entrar').style.display   = '';
+document.getElementById('tab-cadastro').style.display = '';
 setTimeout(() => {
 const el = tab === 'entrar'
 ? document.getElementById('in-user')
@@ -2566,14 +2591,19 @@ setBtnLoading('btn-entrar', false, 'Entrar');
 }
 }
 
-// ── Cadastrar (chama /auth/cadastro no servidor) ──────────────────────
+// ── Cadastrar — Etapa 1: envia usuário+email+senha, recebe código por email ──
+let _pendingToken = null;
+let _pendingUsuario = null;
+
 async function cadastrar() {
 const usuario = document.getElementById('cad-user').value.trim();
+const email   = document.getElementById('cad-email').value.trim();
 const senha   = document.getElementById('cad-pass').value;
 const senha2  = document.getElementById('cad-pass2').value;
 
 if (!usuario)           { showError('Informe um nome de usuário.'); return; }
 if (usuario.length < 3) { showError('Usuário deve ter pelo menos 3 caracteres.'); return; }
+if (!email || !email.includes('@')) { showError('Informe um email válido.'); return; }
 if (!senha)             { showError('Informe uma senha.'); return; }
 if (senha.length < 4)   { showError('Senha deve ter pelo menos 4 caracteres.'); return; }
 if (senha !== senha2)   { showError('As senhas não coincidem.'); return; }
@@ -2584,19 +2614,20 @@ try {
 const r = await fetch(SERVER + '/auth/cadastro', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ usuario, senha })
+body: JSON.stringify({ usuario, email, senha })
 });
 const d = await r.json();
 if (d.ok) {
-document.getElementById('cad-user').value  = '';
-document.getElementById('cad-pass').value  = '';
-document.getElementById('cad-pass2').value = '';
-showSuccess('✅ Usuário cadastrado! Agora faça login.');
-setTimeout(() => {
-switchTab('entrar');
-document.getElementById('in-user').value = usuario;
-document.getElementById('in-pass').focus();
-}, 1400);
+_pendingToken   = d.pending_token;
+_pendingUsuario = usuario;
+document.getElementById('confirmar-email-alvo').textContent = email;
+document.getElementById('confirmar-codigo').value = '';
+document.getElementById('form-cadastro').style.display  = 'none';
+document.getElementById('form-confirmar').style.display = '';
+document.getElementById('tab-entrar').style.display    = 'none';
+document.getElementById('tab-cadastro').style.display  = 'none';
+clearMsgs();
+setTimeout(() => document.getElementById('confirmar-codigo').focus(), 50);
 } else {
 showError(d.msg || d.erro || 'Erro ao cadastrar.');
 }
@@ -2605,6 +2636,50 @@ showError('Não foi possível conectar ao servidor. Verifique se o servidor.py e
 } finally {
 setBtnLoading('btn-cadastrar', false, 'Cadastrar');
 }
+}
+
+// ── Cadastrar — Etapa 2: confirma o código de 6 dígitos ─────────────────
+async function confirmarCodigo() {
+const codigo = document.getElementById('confirmar-codigo').value.trim();
+if (!codigo || codigo.length !== 6) { showError('Informe o código de 6 dígitos.'); return; }
+if (!_pendingToken) { showError('Sessão de cadastro expirada. Comece novamente.'); cancelarConfirmacao(); return; }
+
+setBtnLoading('btn-confirmar-codigo', true, 'Confirmar e criar conta');
+clearMsgs();
+try {
+const r = await fetch(SERVER + '/auth/confirmar-cadastro', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ pending_token: _pendingToken, codigo })
+});
+const d = await r.json();
+if (d.ok) {
+showSuccess('✅ Conta criada com sucesso! Agora faça login.');
+const usuarioCriado = _pendingUsuario;
+_pendingToken = null;
+_pendingUsuario = null;
+setTimeout(() => {
+document.getElementById('form-confirmar').style.display = 'none';
+switchTab('entrar');
+document.getElementById('in-user').value = usuarioCriado;
+document.getElementById('in-pass').focus();
+}, 1400);
+} else {
+showError(d.msg || 'Código incorreto.');
+}
+} catch(e) {
+showError('Não foi possível conectar ao servidor.');
+} finally {
+setBtnLoading('btn-confirmar-codigo', false, 'Confirmar e criar conta');
+}
+}
+
+function cancelarConfirmacao() {
+_pendingToken = null;
+_pendingUsuario = null;
+clearMsgs();
+document.getElementById('form-confirmar').style.display = 'none';
+switchTab('cadastro');
 }
 
 // ── Entrar no app ─────────────────────────────────────────────────────

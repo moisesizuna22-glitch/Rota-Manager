@@ -21,10 +21,12 @@ import json
 import os
 import re
 import secrets
+import smtplib
 import subprocess
 import sys
 import uuid
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from pathlib import Path
 
 HOST           = os.environ.get('HOST', '0.0.0.0')
@@ -35,6 +37,14 @@ HTML_FILE      = "rota_manager1.html"
 ARQ_ENTRADA    = "rota.xlsx"
 ARQ_PROCESSADO = "rota_processada_final.xlsx"
 TRATAMENTO_PY  = "tratamento_dados.py"
+
+# ── Envio de email (verificação de cadastro) ─────────────────────────────
+# Configurado via variáveis de ambiente — nunca hardcoded no código.
+SMTP_HOST  = "smtp.gmail.com"
+SMTP_PORT  = 587
+SMTP_USER  = os.environ.get('SMTP_USER')   # ex: moises.izuna22@gmail.com
+SMTP_PASS  = os.environ.get('SMTP_PASS')   # senha de app de 16 caracteres do Gmail
+EMAIL_TTL_MINUTOS = 10   # tempo de validade do código de verificação
 
 # ── Diretório de dados persistentes ──────────────────────────────────────
 # DATA_DIR aponta para o Volume do Railway (montado em /data), se existir.
@@ -113,8 +123,128 @@ def destruir_sessao(token: str):
 
 
 # ════════════════════════════════════════════════════════════════════════
-#  HISTÓRICO DE ROTAS
+#  VERIFICAÇÃO DE EMAIL NO CADASTRO
+#  Cadastros pendentes em memória (token → {username, email, senha_hash, codigo, criado_em})
+#  até o código de 6 dígitos ser confirmado.
 # ════════════════════════════════════════════════════════════════════════
+
+_cadastros_pendentes: dict = {}   # { pending_token: {...} }
+
+
+def _email_valido(email: str) -> bool:
+    return bool(re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email or ''))
+
+
+def _gerar_codigo() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def enviar_codigo_email(destino: str, codigo: str) -> tuple[bool, str]:
+    """Envia o código de verificação por email via SMTP (Gmail). Retorna (ok, erro)."""
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "Servidor não configurado para enviar email (SMTP_USER/SMTP_PASS ausentes)."
+    try:
+        corpo = (
+            f"Seu código de verificação do Rota Manager é: {codigo}\n\n"
+            f"Esse código expira em {EMAIL_TTL_MINUTOS} minutos.\n"
+            f"Se você não solicitou este cadastro, ignore este email."
+        )
+        msg = MIMEText(corpo, 'plain', 'utf-8')
+        msg['Subject'] = "Seu código de verificação — Rota Manager"
+        msg['From']    = SMTP_USER
+        msg['To']      = destino
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, [destino], msg.as_string())
+        return True, ""
+    except Exception as e:
+        return False, f"Falha ao enviar email: {e}"
+
+
+def _limpar_cadastros_expirados():
+    agora = datetime.now()
+    expirados = [
+        t for t, c in _cadastros_pendentes.items()
+        if agora - c['criado_em'] > timedelta(minutes=EMAIL_TTL_MINUTOS)
+    ]
+    for t in expirados:
+        del _cadastros_pendentes[t]
+
+
+def iniciar_cadastro_pendente(username: str, email: str, senha: str) -> tuple[bool, str, str | None]:
+    """Valida dados, gera código, envia email, guarda cadastro pendente.
+    Retorna (ok, mensagem, pending_token)."""
+    _limpar_cadastros_expirados()
+
+    username = username.strip()
+    email    = email.strip().lower()
+
+    if not username or len(username) < 3:
+        return False, "Usuário deve ter pelo menos 3 caracteres.", None
+    if not _email_valido(email):
+        return False, "Email inválido.", None
+    if not senha or len(senha) < 4:
+        return False, "Senha deve ter pelo menos 4 caracteres.", None
+
+    users = carregar_usuarios()
+    chave_existente, _ = _buscar_usuario(users, username)
+    if chave_existente is not None:
+        return False, "Usuário já existe.", None
+    if any(u.get('email', '').lower() == email for u in users.values()):
+        return False, "Este email já está cadastrado em outra conta.", None
+
+    codigo = _gerar_codigo()
+    ok, erro = enviar_codigo_email(email, codigo)
+    if not ok:
+        return False, erro, None
+
+    pending_token = secrets.token_hex(16)
+    _cadastros_pendentes[pending_token] = {
+        'username':   username,
+        'email':      email,
+        'senha_hash': _hash_senha(senha),
+        'codigo':     codigo,
+        'tentativas': 0,
+        'criado_em':  datetime.now(),
+    }
+    return True, "Código enviado para o email.", pending_token
+
+
+def confirmar_cadastro(pending_token: str, codigo: str) -> tuple[bool, str]:
+    """Confere o código e, se correto, efetiva o cadastro no usuarios.json."""
+    _limpar_cadastros_expirados()
+    pend = _cadastros_pendentes.get(pending_token)
+    if pend is None:
+        return False, "Cadastro expirado ou inválido. Solicite um novo código."
+
+    pend['tentativas'] += 1
+    if pend['tentativas'] > 5:
+        del _cadastros_pendentes[pending_token]
+        return False, "Muitas tentativas incorretas. Solicite um novo código."
+
+    if codigo.strip() != pend['codigo']:
+        return False, "Código incorreto."
+
+    users = carregar_usuarios()
+    # Revalida no momento da confirmação (evita corrida entre dois cadastros simultâneos)
+    chave_existente, _ = _buscar_usuario(users, pend['username'])
+    if chave_existente is not None:
+        del _cadastros_pendentes[pending_token]
+        return False, "Usuário já existe."
+
+    users[pend['username']] = {
+        "id":    str(uuid.uuid4()),
+        "hash":  pend['senha_hash'],
+        "email": pend['email'],
+    }
+    salvar_usuarios(users)
+    del _cadastros_pendentes[pending_token]
+    return True, "Conta criada com sucesso."
+
+
+
 
 def carregar_historico() -> list:
     p = Path(HISTORICO_FILE)
@@ -455,7 +585,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         global _dados_cache
 
-        # /auth/cadastro — sem login
+        # /auth/cadastro — Etapa 1: recebe usuário+email+senha, envia código por email
         if self.path == '/auth/cadastro':
             length = int(self.headers.get('Content-Length', 0))
             try:
@@ -463,7 +593,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception:
                 self.send_json({'ok': False, 'erro': 'JSON inválido.'})
                 return
-            ok, msg = cadastrar_usuario(data.get('usuario', ''), data.get('senha', ''))
+            ok, msg, pending_token = iniciar_cadastro_pendente(
+                data.get('usuario', ''), data.get('email', ''), data.get('senha', '')
+            )
+            resp = {'ok': ok, 'msg': msg}
+            if ok:
+                resp['pending_token'] = pending_token
+            self.send_json(resp)
+            return
+
+        # /auth/confirmar-cadastro — Etapa 2: confere o código de 6 dígitos
+        if self.path == '/auth/confirmar-cadastro':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                data = json.loads(self.rfile.read(length))
+            except Exception:
+                self.send_json({'ok': False, 'erro': 'JSON inválido.'})
+                return
+            ok, msg = confirmar_cadastro(
+                data.get('pending_token', ''), data.get('codigo', '')
+            )
             self.send_json({'ok': ok, 'msg': msg})
             return
 
