@@ -35,8 +35,33 @@ HTML_FILE      = "rota_manager1.html"
 ARQ_ENTRADA    = "rota.xlsx"
 ARQ_PROCESSADO = "rota_processada_final.xlsx"
 TRATAMENTO_PY  = "tratamento_dados.py"
-USERS_FILE     = "usuarios.json"
-HISTORICO_FILE = "historico_rotas.json"
+
+# ── Diretório de dados persistentes ──────────────────────────────────────
+# DATA_DIR aponta para o Volume do Railway (montado em /data), se existir.
+# Local (sem volume), continua salvando na pasta atual, como sempre foi.
+DATA_DIR = Path(os.environ.get('DATA_DIR', '/data' if Path('/data').is_dir() else '.'))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+USERS_FILE     = str(DATA_DIR / "usuarios.json")
+HISTORICO_FILE = str(DATA_DIR / "historico_rotas.json")
+
+# ── Migração única: se o volume está vazio mas existem arquivos antigos
+#    na pasta do projeto (de antes do volume existir), copia pra dentro
+#    do volume uma única vez, pra não perder usuários já cadastrados. ──
+def _migrar_para_volume():
+    if str(DATA_DIR) == '.':
+        return  # sem volume configurado, nada a migrar
+    for nome in ("usuarios.json", "historico_rotas.json"):
+        destino = DATA_DIR / nome
+        origem  = Path(nome)
+        if not destino.exists() and origem.exists():
+            try:
+                destino.write_text(origem.read_text('utf-8'), 'utf-8')
+                print(f"  [migração] {nome} copiado para o volume ({DATA_DIR}).")
+            except Exception as e:
+                print(f"  [migração] falha ao copiar {nome}: {e}")
+
+_migrar_para_volume()
 
 
 # ════════════════════════════════════════════════════════════════════════
