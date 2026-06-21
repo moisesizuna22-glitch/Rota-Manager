@@ -83,7 +83,7 @@ PLANOS = {
         "dias":      30,
         "beneficio": "1 importação por dia",
         "badge":     None,
-        "pagamento_automatico": False,
+        "pagamento_automatico": True,
     },
     "profissional": {
         "nome":      "Plano Profissional",
@@ -92,7 +92,7 @@ PLANOS = {
         "dias":      30,
         "beneficio": "2 importações por dia",
         "badge":     "MAIS POPULAR",
-        "pagamento_automatico": False,
+        "pagamento_automatico": True,
     },
 }
 
