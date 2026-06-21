@@ -2262,7 +2262,7 @@ async function carregarLotesVisiveis() {
        if (!p._qdr_lote) semQuadra++;
      });
      if (semQuadra > 0) {
-       console.warn(`[PMG] ${semQuadra} de ${geoLote.features.length} lote(s) sem número de quadra resolvido — verifique os nomes dos campos de junção (id_qdr / id).`);
+       console.warn('[PMG] ' + semQuadra + ' de ' + geoLote.features.length + ' lote(s) sem número de quadra resolvido — verifique os nomes dos campos de junção (id_qdr / id).');
      }
      arcgisMap.getSource('pmg-lotes').setData(geoLote);
    }
