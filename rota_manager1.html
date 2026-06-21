@@ -1833,7 +1833,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 .tgl-btn.active-arcgis { border-color:#a855f7; color:#a855f7; background:#150a1f; }
 #maps-container { flex:1; display:flex; min-height:0; }
 #map-here-wrap, #map-google-wrap, #map-arcgis-wrap { flex:1; display:flex; flex-direction:column; min-width:0; }
-#map-here-wrap, #map-google-wrap { border-right:2px solid #1e3a5f; }
+#map-google-wrap { border-right:2px solid #1e3a5f; }
 .map-label { height:24px; min-height:24px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:bold; letter-spacing:.07em; background:#0b1120; border-bottom:1px solid #111827; }
 #lbl-here { color:#f59e0b; }
 #lbl-google { color:#22c55e; }
@@ -1846,6 +1846,10 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 #google-map { flex:1; min-height:0; width:100%; }
 #arcgis-map { flex:1; min-height:0; width:100%; }
 .panel-hidden { display:none !important; }
+/* HERE Maps continua "vivo" (necessário para a busca/geocoding funcionar),
+   mas escondido visualmente — display:none quebra a renderização do HERE JS,
+   então usamos position:absolute fora da tela em vez disso. */
+.here-hidden { position:absolute !important; width:1px !important; height:1px !important; overflow:hidden !important; left:-9999px !important; top:-9999px !important; }
 #status-bar { height:26px; min-height:26px; background:#0b1120; display:flex; align-items:center; padding:0 18px; color:#475569; font-size:11px; border-top:1px solid #111827; }
 
 /* Popup do Mapbox com info do lote (quadra/lote da prefeitura) */
@@ -1867,8 +1871,8 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 
  /* Mapas empilhados (em vez de lado a lado, ilegíveis no celular) */
  #maps-container { flex-direction: column; }
- #map-here-wrap, #map-google-wrap { border-right: none; border-bottom: 2px solid #1e3a5f; }
- #map-here-wrap, #map-google-wrap, #map-arcgis-wrap { flex: 1 1 33%; min-height: 0; }
+ #map-google-wrap { border-right: none; border-bottom: 2px solid #1e3a5f; }
+ #map-google-wrap, #map-arcgis-wrap { flex: 1 1 50%; min-height: 0; }
 }
 </style>
 </head>
@@ -1903,13 +1907,12 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 
 <div id="map-toggle-bar">
  <span class="tgl-lbl">MAPA:</span>
- <button class="tgl-btn active-here" id="tgl-here"   onclick="toggleMap('here')">📍 HERE MAPS</button>
  <button class="tgl-btn"             id="tgl-google" onclick="toggleMap('google')">🌐 GOOGLE MAPS</button>
- <button class="tgl-btn"             id="tgl-arcgis" onclick="toggleMap('arcgis')">🗺️ LOTES (PMG)</button>
+ <button class="tgl-btn active-arcgis" id="tgl-arcgis" onclick="toggleMap('arcgis')">🗺️ LOTES (PMG)</button>
 </div>
 
 <div id="maps-container">
- <div id="map-here-wrap">
+ <div id="map-here-wrap" class="here-hidden" aria-hidden="true">
    <div class="map-label" id="lbl-here"><span class="dot"></span> HERE MAPS</div>
    <div id="map-here"></div>
  </div>
@@ -1917,7 +1920,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
    <div class="map-label" id="lbl-google"><span class="dot"></span> GOOGLE MAPS</div>
    <div id="google-map"></div>
  </div>
- <div id="map-arcgis-wrap" class="panel-hidden">
+ <div id="map-arcgis-wrap">
    <div class="map-label" id="lbl-arcgis"><span class="dot"></span> LOTES — PORTAL MAPA GOIÂNIA</div>
    <div id="arcgis-map"></div>
  </div>
@@ -2279,22 +2282,19 @@ function updateArcgis(lat, lng) {
 }
 
 // ── Toggle ────────────────────────────────────────────────────────────
-let _activeMap = 'both';
+// O HERE não tem mais painel visual (mapa removido a pedido do usuário),
+// mas o objeto hereMap/marker continua ativo em segundo plano (escondido
+// via .here-hidden) porque a busca/geocoding por HERE ainda depende dele.
+let _activeMap = 'arcgis';
 function toggleMap(which) {
  _activeMap = which;
- const hw = document.getElementById('map-here-wrap');
  const gw = document.getElementById('map-google-wrap');
  const aw = document.getElementById('map-arcgis-wrap');
- document.getElementById('tgl-here').className   = which === 'here'   ? 'tgl-btn active-here'   : 'tgl-btn';
  document.getElementById('tgl-google').className = which === 'google' ? 'tgl-btn active-google' : 'tgl-btn';
  document.getElementById('tgl-arcgis').className = which === 'arcgis' ? 'tgl-btn active-arcgis' : 'tgl-btn';
- hw.classList.add('panel-hidden');
  gw.classList.add('panel-hidden');
  aw.classList.add('panel-hidden');
- if (which === 'here') {
-   hw.classList.remove('panel-hidden');
-   setTimeout(() => hereMap.getViewPort().resize(), 50);
- } else if (which === 'google') {
+ if (which === 'google') {
    gw.classList.remove('panel-hidden');
  } else if (which === 'arcgis') {
    aw.classList.remove('panel-hidden');
@@ -2321,7 +2321,7 @@ const suggestionsEl = document.getElementById('suggestions');
 let suggestTimer = null;
 const hideSugg = () => { suggestionsEl.style.display = 'none'; suggestionsEl.innerHTML = ''; };
 
-toggleMap('here');   // chamado aqui, depois que hideSugg/atualizarBarraBusca já existem
+toggleMap('arcgis');   // chamado aqui, depois que hideSugg/atualizarBarraBusca já existem
 
 
 const parseCoords = (text) => {
