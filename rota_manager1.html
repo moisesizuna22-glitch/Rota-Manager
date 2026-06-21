@@ -1754,6 +1754,8 @@ return `<!DOCTYPE html>
 <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"><\/script>
 <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"><\/script>
 <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css"/>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"><\/script>
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { display:flex; flex-direction:column; height:100vh; background:#0b1120; font-family:Arial,sans-serif; overflow:hidden; }
@@ -1828,19 +1830,27 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 .tgl-btn { padding:5px 16px; border:2px solid transparent; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; transition:.15s; background:#0b1120; color:#64748b; }
 .tgl-btn.active-here  { border-color:#f59e0b; color:#f59e0b; background:#1a1200; }
 .tgl-btn.active-google { border-color:#22c55e; color:#22c55e; background:#001a0e; }
+.tgl-btn.active-arcgis { border-color:#a855f7; color:#a855f7; background:#150a1f; }
 #maps-container { flex:1; display:flex; min-height:0; }
-#map-here-wrap, #map-google-wrap { flex:1; display:flex; flex-direction:column; min-width:0; }
-#map-here-wrap { border-right:2px solid #1e3a5f; }
+#map-here-wrap, #map-google-wrap, #map-arcgis-wrap { flex:1; display:flex; flex-direction:column; min-width:0; }
+#map-here-wrap, #map-google-wrap { border-right:2px solid #1e3a5f; }
 .map-label { height:24px; min-height:24px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:bold; letter-spacing:.07em; background:#0b1120; border-bottom:1px solid #111827; }
 #lbl-here { color:#f59e0b; }
 #lbl-google { color:#22c55e; }
+#lbl-arcgis { color:#a855f7; }
 .dot { width:7px; height:7px; border-radius:50%; }
 #lbl-here .dot { background:#f59e0b; }
 #lbl-google .dot { background:#22c55e; }
+#lbl-arcgis .dot { background:#a855f7; }
 #map-here { flex:1; min-height:0; }
 #google-map { flex:1; min-height:0; width:100%; }
+#arcgis-map { flex:1; min-height:0; width:100%; }
 .panel-hidden { display:none !important; }
 #status-bar { height:26px; min-height:26px; background:#0b1120; display:flex; align-items:center; padding:0 18px; color:#475569; font-size:11px; border-top:1px solid #111827; }
+
+/* Popup do Mapbox com info do lote (quadra/lote da prefeitura) */
+.lote-popup { font-family:Arial,sans-serif; font-size:12px; line-height:1.5; color:#1e293b; }
+.lote-popup b { color:#7c3aed; }
 
 /* ── Responsivo mobile (mapa popup) ── */
 @media (max-width: 640px) {
@@ -1852,13 +1862,13 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
  #google-status { font-size:10px; }
  .btn { padding:6px 12px; font-size:11px; }
  #search-bar { padding:6px 10px; }
- #map-toggle-bar { padding:0 10px; height:34px; }
+ #map-toggle-bar { padding:0 10px; height:34px; flex-wrap:wrap; }
  .tgl-btn { padding:4px 12px; font-size:11px; }
 
- /* Mapas HERE e Google empilhados (em vez de lado a lado, ilegíveis no celular) */
+ /* Mapas empilhados (em vez de lado a lado, ilegíveis no celular) */
  #maps-container { flex-direction: column; }
- #map-here-wrap { border-right: none; border-bottom: 2px solid #1e3a5f; }
- #map-here-wrap, #map-google-wrap { flex: 1 1 50%; min-height: 0; }
+ #map-here-wrap, #map-google-wrap { border-right: none; border-bottom: 2px solid #1e3a5f; }
+ #map-here-wrap, #map-google-wrap, #map-arcgis-wrap { flex: 1 1 33%; min-height: 0; }
 }
 </style>
 </head>
@@ -1895,6 +1905,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
  <span class="tgl-lbl">MAPA:</span>
  <button class="tgl-btn active-here" id="tgl-here"   onclick="toggleMap('here')">📍 HERE MAPS</button>
  <button class="tgl-btn"             id="tgl-google" onclick="toggleMap('google')">🌐 GOOGLE MAPS</button>
+ <button class="tgl-btn"             id="tgl-arcgis" onclick="toggleMap('arcgis')">🗺️ LOTES (PMG)</button>
 </div>
 
 <div id="maps-container">
@@ -1905,6 +1916,10 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
  <div id="map-google-wrap">
    <div class="map-label" id="lbl-google"><span class="dot"></span> GOOGLE MAPS</div>
    <div id="google-map"></div>
+ </div>
+ <div id="map-arcgis-wrap" class="panel-hidden">
+   <div class="map-label" id="lbl-arcgis"><span class="dot"></span> LOTES — PORTAL MAPA GOIÂNIA</div>
+   <div id="arcgis-map"></div>
  </div>
 </div>
 
@@ -1987,6 +2002,7 @@ hereMap.addEventListener('dragend', e => {
    const pos = marker.getGeometry();
    updateDisplay(pos.lat, pos.lng);
    updateGoogle(pos.lat, pos.lng);
+   updateArcgis(pos.lat, pos.lng);
  }
 });
 hereMap.addEventListener('tap', e => {
@@ -1995,6 +2011,7 @@ hereMap.addEventListener('tap', e => {
  marker.setGeometry(pos);
  updateDisplay(pos.lat, pos.lng);
  updateGoogle(pos.lat, pos.lng);
+ updateArcgis(pos.lat, pos.lng);
 });
 
 // ── Google Maps iframe ────────────────────────────────────────────────
@@ -2062,6 +2079,7 @@ function sincronizarParaHere(lat, lng) {
  hereMap.setCenter({ lat, lng });
  hereMap.setZoom(19);
  updateDisplay(lat, lng);
+ updateArcgis(lat, lng);
  // Mostra badge Google capturado
  const el = document.getElementById('google-status');
  document.getElementById('gc-val').textContent = lat.toFixed(6) + ', ' + lng.toFixed(6);
@@ -2080,16 +2098,164 @@ function updateGoogle(lat, lng) {
 
 loadGoogleMapsAPI();
 
+// ════════════════════════════════════════════════════════════════════════
+//  MAPA 3 — LOTES (Portal Mapa de Goiânia) renderizado via Mapbox GL JS
+//  Consome a camada "Divisas de Lote" do ArcGIS REST público da prefeitura,
+//  já pedindo a geometria convertida para WGS84 (outSR=4326) para plotar
+//  direto no Mapbox, sem precisar converter UTM manualmente.
+// ════════════════════════════════════════════════════════════════════════
+
+const MAPBOX_TOKEN = 'pk.eyJ1IjoibW9pc2Vzc2VuanVpem8iLCJhIjoiY21xOHRzOXZyMDFidTJyb2x0Zml5a2FxNyJ9.EHf8W94vDiim9_EDVGlP1g';
+const PMG_LOTE_URL  = 'https://portalmapa.goiania.go.gov.br/servicogyn/rest/services/MapaServer/Feature_Base/FeatureServer/0/query';
+const PMG_QUADRA_URL = 'https://portalmapa.goiania.go.gov.br/servicogyn/rest/services/MapaServer/Feature_Base/FeatureServer/1/query';
+
+let arcgisMap = null;
+let _arcgisInicializado = false;
+let _arcgisFetchTimer = null;
+let arcgisMarker = null;
+
+function initArcgisMap() {
+ if (_arcgisInicializado) return;
+ _arcgisInicializado = true;
+
+ mapboxgl.accessToken = MAPBOX_TOKEN;
+ arcgisMap = new mapboxgl.Map({
+   container: 'arcgis-map',
+   style: 'mapbox://styles/mapbox/light-v11',
+   center: [currentLng, currentLat],
+   zoom: 18,
+ });
+
+ arcgisMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+ arcgisMarker = new mapboxgl.Marker({ color: '#a855f7', draggable: true })
+   .setLngLat([currentLng, currentLat])
+   .addTo(arcgisMap);
+
+ arcgisMarker.on('dragend', () => {
+   const pos = arcgisMarker.getLngLat();
+   moveMap(pos.lat, pos.lng, pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));
+ });
+
+ arcgisMap.on('load', () => {
+   arcgisMap.addSource('pmg-lotes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+   arcgisMap.addLayer({
+     id: 'pmg-lotes-fill',
+     type: 'fill',
+     source: 'pmg-lotes',
+     paint: { 'fill-color': '#a855f7', 'fill-opacity': 0.12 },
+   });
+   arcgisMap.addLayer({
+     id: 'pmg-lotes-linha',
+     type: 'line',
+     source: 'pmg-lotes',
+     paint: { 'line-color': '#a855f7', 'line-width': 1.5 },
+   });
+   arcgisMap.addLayer({
+     id: 'pmg-lotes-label',
+     type: 'symbol',
+     source: 'pmg-lotes',
+     layout: {
+       'text-field': ['concat', ['get', 'nm_qdr'], '-', ['get', 'nm_lot']],
+       'text-size': 11,
+       'text-allow-overlap': false,
+     },
+     paint: { 'text-color': '#581c87', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+   });
+
+   carregarLotesVisiveis();
+   arcgisMap.on('moveend', () => {
+     clearTimeout(_arcgisFetchTimer);
+     _arcgisFetchTimer = setTimeout(carregarLotesVisiveis, 400);
+   });
+
+   // Clique num lote mostra popup com quadra/lote/IPTU
+   arcgisMap.on('click', 'pmg-lotes-fill', (e) => {
+     const p = e.features[0].properties;
+     new mapboxgl.Popup()
+       .setLngLat(e.lngLat)
+       .setHTML(
+         '<div class="lote-popup">' +
+         '<b>Quadra:</b> ' + (p.nm_qdr || '—') + '<br>' +
+         '<b>Lote:</b> ' + (p.nm_lot || '—') + '<br>' +
+         '<b>Bairro:</b> ' + (p.nm_bai || '—') + '<br>' +
+         '<b>IPTU:</b> ' + (p.nr_iptu || '—') +
+         '</div>'
+       )
+       .addTo(arcgisMap);
+   });
+   arcgisMap.on('mouseenter', 'pmg-lotes-fill', () => { arcgisMap.getCanvas().style.cursor = 'pointer'; });
+   arcgisMap.on('mouseleave', 'pmg-lotes-fill', () => { arcgisMap.getCanvas().style.cursor = ''; });
+
+   // Clique fora de um lote já desenhado também move o pin (igual HERE/Google)
+   arcgisMap.on('click', (e) => {
+     if (e.defaultPrevented) return;
+     const feats = arcgisMap.queryRenderedFeatures(e.point, { layers: ['pmg-lotes-fill'] });
+     if (feats.length) return;   // já tratado pelo listener da camada acima
+     moveMap(e.lngLat.lat, e.lngLat.lng, e.lngLat.lat.toFixed(6) + ', ' + e.lngLat.lng.toFixed(6));
+   });
+ });
+}
+
+// Busca os lotes dentro da área visível do mapa (carregamento automático ao navegar)
+async function carregarLotesVisiveis() {
+ if (!arcgisMap) return;
+ const b = arcgisMap.getBounds();
+ const envelope = {
+   xmin: b.getWest(), ymin: b.getSouth(), xmax: b.getEast(), ymax: b.getNorth(),
+   spatialReference: { wkid: 4326 },
+ };
+ const params = new URLSearchParams({
+   f: 'geojson',
+   where: '1=1',
+   outFields: 'nm_qdr,nm_lot,nm_bai,nr_iptu',
+   geometry: JSON.stringify(envelope),
+   geometryType: 'esriGeometryEnvelope',
+   spatialRel: 'esriSpatialRelIntersects',
+   inSR: '4326',
+   outSR: '4326',
+ });
+ try {
+   const r = await fetch(PMG_LOTE_URL + '?' + params.toString());
+   const geojson = await r.json();
+   if (geojson && geojson.type === 'FeatureCollection' && arcgisMap.getSource('pmg-lotes')) {
+     arcgisMap.getSource('pmg-lotes').setData(geojson);
+   }
+ } catch (e) {
+   console.warn('Falha ao carregar lotes do Portal Mapa de Goiânia:', e);
+ }
+}
+
+// Move o Mapbox/ArcGIS para lat/lng (chamado quando HERE/Google mudam)
+function updateArcgis(lat, lng) {
+ if (!arcgisMap) return;
+ arcgisMap.flyTo({ center: [lng, lat], zoom: 18 });
+ if (arcgisMarker) arcgisMarker.setLngLat([lng, lat]);
+}
+
 // ── Toggle ────────────────────────────────────────────────────────────
 let _activeMap = 'both';
 function toggleMap(which) {
  _activeMap = which;
  const hw = document.getElementById('map-here-wrap');
  const gw = document.getElementById('map-google-wrap');
+ const aw = document.getElementById('map-arcgis-wrap');
  document.getElementById('tgl-here').className   = which === 'here'   ? 'tgl-btn active-here'   : 'tgl-btn';
  document.getElementById('tgl-google').className = which === 'google' ? 'tgl-btn active-google' : 'tgl-btn';
- if (which === 'here')   { hw.classList.remove('panel-hidden'); gw.classList.add('panel-hidden'); setTimeout(() => hereMap.getViewPort().resize(), 50); }
- else if (which === 'google') { hw.classList.add('panel-hidden'); gw.classList.remove('panel-hidden'); }
+ document.getElementById('tgl-arcgis').className = which === 'arcgis' ? 'tgl-btn active-arcgis' : 'tgl-btn';
+ hw.classList.add('panel-hidden');
+ gw.classList.add('panel-hidden');
+ aw.classList.add('panel-hidden');
+ if (which === 'here') {
+   hw.classList.remove('panel-hidden');
+   setTimeout(() => hereMap.getViewPort().resize(), 50);
+ } else if (which === 'google') {
+   gw.classList.remove('panel-hidden');
+ } else if (which === 'arcgis') {
+   aw.classList.remove('panel-hidden');
+   initArcgisMap();   // só carrega o Mapbox/lotes na primeira vez que a aba é aberta
+   setTimeout(() => { if (arcgisMap) arcgisMap.resize(); }, 50);
+ }
  atualizarBarraBusca();
 }
 
@@ -2127,6 +2293,7 @@ function moveMap(lat, lng, title) {
  hereMap.setZoom(19);
  updateDisplay(lat, lng);
  updateGoogle(lat, lng);
+ updateArcgis(lat, lng);
  searchInput.value = title;
  hideSugg();
  document.getElementById('status-bar').textContent = '📍 ' + title;
