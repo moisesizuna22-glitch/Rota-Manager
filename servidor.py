@@ -1001,7 +1001,8 @@ def ler_processado():
     col_count  = find_col([r'rotas_iguais'])
     col_stops  = find_col([r'stops do grupo'])
     col_orig   = find_col([r'endere.o_original', r'original'])
-    col_membros = find_col([r'membros.?json', r'membros'])
+    col_membros       = find_col([r'membros.?json', r'membros'])
+    col_validacao_here = find_col([r'validacao_here', r'validacao.here'])
 
     rows = []
     for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True)):
@@ -1058,6 +1059,7 @@ def ler_processado():
             'group_stops':       g(col_stops),
             'group_size':        count,
             'membros':           membros,
+            'validacao_here':    g(col_validacao_here),
         })
 
     return rows, headers

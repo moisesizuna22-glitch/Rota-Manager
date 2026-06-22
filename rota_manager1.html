@@ -603,6 +603,33 @@ color: var(--muted);
 margin-top: 2px;
 }
 
+/* ── Badge de validação HERE ── */
+.here-badge {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+margin-top: 4px;
+font-size: 10px;
+font-weight: 700;
+letter-spacing: .03em;
+border-radius: 999px;
+padding: 2px 8px;
+max-width: 100%;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+.here-badge-ok {
+background: rgba(34,197,94,.12);
+color: #22c55e;
+border: 1px solid rgba(34,197,94,.35);
+}
+.here-badge-parcial {
+background: rgba(245,158,11,.12);
+color: var(--accent);
+border: 1px solid rgba(245,158,11,.35);
+}
+
 /* ── Endereço com coordenada editada manualmente ── */
 .td-addr.coord-editada .td-addr-reformado {
 color: var(--accent);
@@ -1881,10 +1908,24 @@ membrosHtml = `<div class="td-addr-original">${escHtml(completo)}</div>`;
 }
 }
 
+// Badge de validação HERE
+const validacao = row.validacao_here || '';
+let hereBadgeHtml = '';
+if (validacao.startsWith('✅')) {
+  hereBadgeHtml = `<span class="here-badge here-badge-ok" title="${escHtml(validacao)}">✅ HERE ok</span>`;
+} else if (validacao.startsWith('⚠️')) {
+  // Extrai a rua encontrada pelo HERE, se houver
+  const matchRua = validacao.match(/HERE achou:\s*([^)]+)\)/);
+  const ruaHere  = matchRua ? matchRua[1].trim() : '';
+  const label    = ruaHere ? `⚠️ ${escHtml(ruaHere)}` : '⚠️ Parcial';
+  hereBadgeHtml  = `<span class="here-badge here-badge-parcial" title="${escHtml(validacao)}">${label}</span>`;
+}
+
 tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr${row._editado ? ' coord-editada' : ''}">
          <div class="td-addr-reformado">${escHtml(endReformado)}</div>
+         ${hereBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
