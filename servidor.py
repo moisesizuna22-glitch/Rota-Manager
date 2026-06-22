@@ -35,6 +35,7 @@ APP_PASS       = os.environ.get('APP_PASS')
 HTML_FILE      = "rota_manager1.html"
 ARQ_ENTRADA    = "rota.xlsx"
 ARQ_PROCESSADO = "rota_processada_final.xlsx"
+ARQ_VALIDADO   = "rota_validada_here.xlsx"
 TRATAMENTO_PY  = "tratamento_dados.py"
 
 # ── Envio de email (verificação de cadastro) — via API HTTPS do Brevo ────
@@ -972,13 +973,14 @@ def usuario_consumir_credito_avulso_se_necessario(username: str):
 # ════════════════════════════════════════════════════════════════════════
 
 def ler_processado():
-    """Lê o rota_processada_final.xlsx e retorna lista de dicts pro frontend."""
+    """Lê o rota_validada_here.xlsx (se existir) ou rota_processada_final.xlsx."""
     try:
         from openpyxl import load_workbook
     except ImportError:
         raise RuntimeError("openpyxl não instalado. Rode: pip install openpyxl")
 
-    path = Path(ARQ_PROCESSADO)
+    # Prefere o arquivo com validação HERE; cai de volta no processado se não existir
+    path = Path(ARQ_VALIDADO) if Path(ARQ_VALIDADO).exists() else Path(ARQ_PROCESSADO)
     if not path.exists():
         raise FileNotFoundError(f"{ARQ_PROCESSADO} não encontrado.")
 
@@ -1686,10 +1688,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 'erro': f'{TRATAMENTO_PY} não encontrado na pasta.'})
                 return
 
-            print(f"\n  [PIPELINE] Rodando {TRATAMENTO_PY}...")
+            print(f"\n  [PIPELINE] Rodando {TRATAMENTO_PY} (passos 1 e 2)...")
             try:
+                # ── Passo 1 + 2: agrupa e consolida endereços ──────────────
                 result = subprocess.run(
-                    [sys.executable, TRATAMENTO_PY],
+                    [sys.executable, TRATAMENTO_PY, "--passo", "1,2"],
                     capture_output=True, text=True, timeout=120
                 )
                 if result.returncode != 0:
@@ -1697,14 +1700,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     print(f"  [PIPELINE] ❌ {erro}")
                     self.send_json({'ok': False, 'erro': erro})
                     return
-
-                print(f"  [PIPELINE] ✅ tratamento_dados.py concluído")
+                print(f"  [PIPELINE] ✅ Passos 1+2 concluídos")
                 if result.stdout:
                     print(result.stdout)
 
+                # ── Passo 3: validação HERE (coordenadas) ───────────────────
+                # Remove arquivo validado anterior para não misturar resultado novo
+                arq_validado = Path(ARQ_VALIDADO)
+                if arq_validado.exists():
+                    arq_validado.unlink()
+
+                print(f"  [PIPELINE] Rodando passo 3 (validação HERE)...")
+                result3 = subprocess.run(
+                    [sys.executable, TRATAMENTO_PY, "--passo", "3"],
+                    capture_output=True, text=True, timeout=600
+                )
+                if result3.returncode != 0:
+                    # Passo 3 falhou (ex: HERE_API_KEY ausente) — continua sem validação
+                    print(f"  [PIPELINE] ⚠️ Passo 3 falhou — usando rota sem validação HERE")
+                    print(result3.stderr or result3.stdout or "")
+                else:
+                    print(f"  [PIPELINE] ✅ Passo 3 (HERE) concluído")
+                    if result3.stdout:
+                        print(result3.stdout)
+
                 rows, headers = ler_processado()
                 sess['dados'] = (rows, headers)
-                nome_arq = Path(ARQ_PROCESSADO).name
+                arq_final = ARQ_VALIDADO if Path(ARQ_VALIDADO).exists() else ARQ_PROCESSADO
+                nome_arq = Path(arq_final).name
                 adicionar_ao_historico(nome_arq, rows, headers, sess['user_id'])
                 if not sess.get('is_admin'):
                     usuario_consumir_credito_avulso_se_necessario(sess['usuario'])
@@ -1714,7 +1737,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
             except subprocess.TimeoutExpired:
                 self.send_json({'ok': False,
-                                'erro': 'Timeout: tratamento_dados.py demorou mais de 120s.'})
+                                'erro': 'Timeout: o pipeline demorou mais que o esperado.'})
             except Exception as e:
                 print(f"  [PIPELINE] ❌ {e}")
                 self.send_json({'ok': False, 'erro': str(e)})
