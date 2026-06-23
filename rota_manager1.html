@@ -71,6 +71,87 @@ header .badge.show { display: block; }
 header .badge b { color: var(--accent2); }
 
   /* ── Toolbar ── */
+  /* ── Badge banco de coords ── */
+  .banco-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(99,102,241,.18);
+    color: #818cf8;
+    border: 1px solid rgba(99,102,241,.35);
+    margin-left: 5px;
+    vertical-align: middle;
+    cursor: default;
+  }
+
+  /* ── Painel Banco de Coordenadas ── */
+  #banco-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 500;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+  #banco-overlay.show { display: flex; }
+  #banco-panel {
+    background: var(--surface);
+    border-left: 2px solid var(--border);
+    width: 380px;
+    max-width: 95vw;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    animation: slideIn .18s ease;
+  }
+  #banco-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  #banco-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
+  #banco-header .close-btn {
+    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
+  }
+  #banco-header .close-btn:hover { color: var(--text); }
+  #banco-list { flex: 1; overflow-y: auto; padding: 10px; }
+  #banco-search {
+    margin: 10px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 13px;
+    width: calc(100% - 20px);
+    box-sizing: border-box;
+  }
+  .banco-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .banco-item-end { font-size: 12px; font-weight: 600; color: var(--text); word-break: break-all; padding-right: 24px; }
+  .banco-item-coord { font-size: 11px; color: var(--accent2); margin-top: 2px; }
+  .banco-item-data { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .banco-del {
+    position: absolute; top: 8px; right: 8px;
+    background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; line-height: 1;
+    opacity: .5; transition: opacity .15s;
+  }
+  .banco-del:hover { opacity: 1; color: var(--danger); }
+  #banco-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 20px; }
+  #banco-count { font-size: 11px; color: var(--muted); text-align: right; padding: 4px 10px 0; }
+
   /* ── Painel Histórico ── */
   #hist-overlay {
     display: none;
@@ -1321,6 +1402,22 @@ transition: .15s;
   </div>
 </div>
 
+<!-- ══ PAINEL BANCO DE COORDENADAS ══ -->
+<div id="banco-overlay" onclick="fecharBanco(event)">
+  <div id="banco-panel">
+    <div id="banco-header">
+      <span>📌</span>
+      <span class="title">Banco de Coordenadas</span>
+      <button class="close-btn" onclick="fecharBanco()">✕</button>
+    </div>
+    <input id="banco-search" type="text" placeholder="Filtrar endereço..." oninput="renderBancoList()" autocomplete="off">
+    <div id="banco-count"></div>
+    <div id="banco-list">
+      <div id="banco-empty">Nenhuma coordenada salva ainda.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ PAINEL ADMIN ══ -->
 <div id="admin-overlay" onclick="fecharAdmin(event)">
   <div id="admin-panel">
@@ -1397,6 +1494,9 @@ transition: .15s;
 <div class="badge" id="file-badge"></div>
   <button class="btn-hist" id="btn-hist" onclick="abrirHistorico()" style="display:none">
     🗂 <span class="label">Histórico</span>
+  </button>
+  <button class="btn-hist" id="btn-banco" onclick="abrirBanco()" style="display:none">
+    📌 <span class="label">Banco</span>
   </button>
   <button class="btn-hist" id="btn-admin" onclick="abrirAdmin()" style="display:none">
     🛠 <span class="label">Admin</span>
@@ -1920,12 +2020,16 @@ if (validacao.startsWith('✅')) {
   const label    = ruaHere ? `⚠️ ${escHtml(ruaHere)}` : '⚠️ Parcial';
   hereBadgeHtml  = `<span class="here-badge here-badge-parcial" title="${escHtml(validacao)}">${label}</span>`;
 }
+// Badge banco de coordenadas
+const bancoBadgeHtml = row.do_banco
+  ? '<span class="banco-badge" title="Coordenada do banco manual">📌 banco</span>'
+  : '';
 
 tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr${row._editado ? ' coord-editada' : ''}">
          <div class="td-addr-reformado">${escHtml(endReformado)}</div>
-         ${hereBadgeHtml}
+         ${hereBadgeHtml}${bancoBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
@@ -2155,18 +2259,31 @@ const coord = parseFloat(lat).toFixed(6) + ',' + parseFloat(lng).toFixed(6);
 // Atualiza o row pelo idx e todos os membros do mesmo grupo
 const targetRow = _allRows[idx];
 const gid = targetRow ? targetRow.group_id : null;
+const enderecoParaBanco = targetRow ? (targetRow.address || '') : '';
 for (let i = 0; i < _allRows.length; i++) {
 const r = _allRows[i];
 if (i === idx || (gid !== undefined && gid !== null && r.group_id === gid)) {
-r.coord = coord;
-r.lat   = parseFloat(lat).toFixed(6);
-r.lon   = parseFloat(lng).toFixed(6);
-r._editado = true;  // ← marca destaque visual
+r.coord    = coord;
+r.lat      = parseFloat(lat).toFixed(6);
+r.lon      = parseFloat(lng).toFixed(6);
+r._editado = true;
+r.do_banco = true;  // ← marca badge visual
 }
 }
 const q = document.getElementById('filter-input').value.trim();
 if (q) filtrarTabela(); else renderTable(_allRows);
 updateStats(_allRows);
+// Salva no banco de coordenadas do servidor
+if (enderecoParaBanco) {
+  fetch(SERVER + '/coords/salvar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ endereco: enderecoParaBanco, lat: parseFloat(lat), lon: parseFloat(lng) })
+  }).then(r => r.json()).then(r => {
+    if (r.ok) console.log('[BANCO] Coord salva:', enderecoParaBanco);
+    else console.warn('[BANCO] Falha ao salvar:', r.erro);
+  }).catch(err => console.warn('[BANCO] Erro:', err));
+}
 });
 
 function abrirMapa(coord, endReformado, endOriginal, rowIdx) {
@@ -2921,8 +3038,11 @@ if (el) {
   }
 }
 
-  // Mostra botão histórico assim que servidor conectar
-  if (_serverOnline) document.getElementById('btn-hist').style.display = '';
+  // Mostra botão histórico e banco assim que servidor conectar
+  if (_serverOnline) {
+    document.getElementById('btn-hist').style.display = '';
+    document.getElementById('btn-banco').style.display = '';
+  }
 
   // Só troca a tela se a tabela de resultados não estiver visível
   if (!_allRows.length) aplicarVisibilidadeDropZone();
@@ -3075,6 +3195,7 @@ function mostrarRotaNoApp(rows, headers, nomeArquivo) {
   document.getElementById('drop-zone').style.display = 'none';
   document.getElementById('toolbar').style.display = 'flex';
   document.getElementById('btn-hist').style.display = '';
+  document.getElementById('btn-banco').style.display = '';
 
   _nomeAtual = nomeArquivo;
   renderHistoricoPanel();
@@ -3150,6 +3271,89 @@ async function apagarDoHistorico(nome) {
 }
 
 function renderHistoricoPanel() { /* chamado ao carregar rota — já atualiza badge ativo */ }
+
+
+// ══════════════════════════════════════════════════════════════
+//  PAINEL BANCO DE COORDENADAS
+// ══════════════════════════════════════════════════════════════
+
+let _bancoCache = [];   // cache local para filtro sem nova request
+
+async function abrirBanco() {
+  document.getElementById('banco-overlay').classList.add('show');
+  document.getElementById('banco-search').value = '';
+  await carregarBanco();
+}
+
+function fecharBanco(e) {
+  if (e && e.target !== document.getElementById('banco-overlay')) return;
+  document.getElementById('banco-overlay').classList.remove('show');
+}
+
+async function carregarBanco() {
+  try {
+    const r = await fetch(SERVER + '/coords/listar', { headers: authHeaders() });
+    const d = await r.json();
+    if (!d.ok) return;
+    _bancoCache = d.entradas || [];
+    renderBancoList();
+  } catch(e) { console.warn('[BANCO] Erro ao carregar:', e); }
+}
+
+function renderBancoList() {
+  const list  = document.getElementById('banco-list');
+  const empty = document.getElementById('banco-empty');
+  const count = document.getElementById('banco-count');
+  const q     = (document.getElementById('banco-search').value || '').trim().toLowerCase();
+  const itens = q
+    ? _bancoCache.filter(e => e.chave.includes(q) || (e.endereco_original || '').toLowerCase().includes(q))
+    : _bancoCache;
+
+  count.textContent = itens.length + ' entrada' + (itens.length !== 1 ? 's' : '');
+
+  if (!itens.length) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    list.appendChild(empty);
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = '';
+  itens.forEach(entry => {
+    const div = document.createElement('div');
+    div.className = 'banco-item';
+    div.innerHTML =
+      '<div class="banco-item-end">' + escHtml(entry.endereco_original || entry.chave) + '</div>' +
+      '<div class="banco-item-coord">📍 ' + entry.lat + ', ' + entry.lon + '</div>' +
+      '<div class="banco-item-data">salvo em ' + escHtml(entry.salvo_em || '—') + '</div>' +
+      '<button class="banco-del" title="Remover do banco" onclick="apagarDoBanco(' + JSON.stringify(entry.chave) + ', this)">✕</button>';
+    list.appendChild(div);
+  });
+}
+
+async function apagarDoBanco(chave, btn) {
+  if (!confirm('Remover "' + chave + '" do banco de coordenadas?')) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch(SERVER + '/coords/apagar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ endereco: chave })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      _bancoCache = _bancoCache.filter(e => e.chave !== chave);
+      renderBancoList();
+    } else {
+      alert('Erro: ' + (d.erro || d.msg));
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Erro ao comunicar com o servidor.');
+    btn.disabled = false;
+  }
+}
+
 
 // ── Auto-restaurar última rota ao dar F5 ─────────────────────────────
 async function tentarRestaurarUltimaRota() {
@@ -4037,7 +4241,9 @@ _temAcesso = true;
 document.getElementById('login-screen').classList.remove('hidden');
 document.getElementById('header-user').style.display = 'none';
 document.getElementById('btn-admin').style.display = 'none';
+document.getElementById('btn-banco').style.display = 'none';
 fecharAdmin();
+fecharBanco();
 clearMsgs();
 switchTab('entrar');
 document.getElementById('in-user').value = '';

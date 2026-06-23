@@ -60,8 +60,9 @@ EMAIL_TTL_MINUTOS = 10   # tempo de validade do código de verificação
 DATA_DIR = Path(os.environ.get('DATA_DIR', '/data' if Path('/data').is_dir() else '.'))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-USERS_FILE     = str(DATA_DIR / "usuarios.json")
-HISTORICO_FILE = str(DATA_DIR / "historico_rotas.json")
+USERS_FILE      = str(DATA_DIR / "usuarios.json")
+HISTORICO_FILE  = str(DATA_DIR / "historico_rotas.json")
+BANCO_COORDS_FILE = str(DATA_DIR / "banco_coords.json")
 
 # ── Planos de assinatura ──────────────────────────────────────────────────
 # Fonte única de verdade dos planos (preço, tipo, benefício). O frontend
@@ -129,7 +130,7 @@ PAGAMENTO_LINK_REUSE_MINUTOS  = 30   # reaproveita o mesmo link se gerado há po
 def _migrar_para_volume():
     if str(DATA_DIR) == '.':
         return  # sem volume configurado, nada a migrar
-    for nome in ("usuarios.json", "historico_rotas.json"):
+    for nome in ("usuarios.json", "historico_rotas.json", "banco_coords.json"):
         destino = DATA_DIR / nome
         origem  = Path(nome)
         if not destino.exists() and origem.exists():
@@ -463,6 +464,84 @@ def adicionar_ao_historico(nome_arquivo: str, rows: list, headers: list, user_id
     historico = historico[:50]   # aumentado de 20 para 50 (agora há vários usuários)
     salvar_historico(historico)
     return entrada
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  BANCO DE COORDENADAS MANUAIS
+#  Persistido em banco_coords.json como { endereco_normalizado: {lat, lon, salvo_em} }
+#  Aplicado automaticamente em ler_processado() nos endereços que baterem.
+# ════════════════════════════════════════════════════════════════════════
+
+def _normalizar_endereco(end: str) -> str:
+    """Normaliza o endereço para busca no banco: minúsculas + sem espaços duplos."""
+    return re.sub(r'\s+', ' ', (end or '').strip().lower())
+
+
+def banco_coords_carregar() -> dict:
+    p = Path(BANCO_COORDS_FILE)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text('utf-8'))
+    except Exception:
+        return {}
+
+
+def banco_coords_salvar(banco: dict):
+    Path(BANCO_COORDS_FILE).write_text(
+        json.dumps(banco, ensure_ascii=False, indent=2), 'utf-8'
+    )
+
+
+def banco_coords_adicionar(endereco: str, lat: float, lon: float) -> tuple[bool, str]:
+    """Salva ou atualiza um endereço no banco. Retorna (ok, msg)."""
+    chave = _normalizar_endereco(endereco)
+    if not chave:
+        return False, "Endereço vazio."
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (TypeError, ValueError):
+        return False, "Coordenadas inválidas."
+    banco = banco_coords_carregar()
+    banco[chave] = {
+        "endereco_original": endereco.strip(),
+        "lat": round(lat, 6),
+        "lon": round(lon, 6),
+        "salvo_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
+    }
+    banco_coords_salvar(banco)
+    print(f"  [BANCO_COORDS] Salvo: {chave!r} → ({lat:.6f}, {lon:.6f})")
+    return True, "Coordenada salva no banco."
+
+
+def banco_coords_apagar(endereco: str) -> tuple[bool, str]:
+    chave = _normalizar_endereco(endereco)
+    banco = banco_coords_carregar()
+    if chave not in banco:
+        return False, "Endereço não encontrado no banco."
+    del banco[chave]
+    banco_coords_salvar(banco)
+    return True, "Entrada removida do banco."
+
+
+def banco_coords_aplicar(rows: list) -> list:
+    """Aplica as coordenadas do banco nos rows cujo 'address' bater.
+    Marca rows alterados com do_banco=True."""
+    banco = banco_coords_carregar()
+    if not banco:
+        return rows
+    for row in rows:
+        chave = _normalizar_endereco(row.get('address', ''))
+        if chave in banco:
+            entrada = banco[chave]
+            lat = str(entrada['lat'])
+            lon = str(entrada['lon'])
+            row['lat']      = lat
+            row['lon']      = lon
+            row['coord']    = lat + ',' + lon
+            row['do_banco'] = True
+    return rows
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1070,6 +1149,7 @@ def ler_processado():
             'validacao_here':    g(col_validacao_here),
         })
 
+    rows = banco_coords_aplicar(rows)
     return rows, headers
 
 
@@ -1333,6 +1413,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': True, **entrada})
             else:
                 self.send_json({'ok': False, 'erro': 'Rota não encontrada no histórico.'}, 404)
+
+        # /coords/listar — lista todas as entradas do banco de coordenadas manuais
+        elif self.path == '/coords/listar':
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
+            banco = banco_coords_carregar()
+            entradas = [
+                {"chave": k, **v}
+                for k, v in sorted(banco.items())
+            ]
+            self.send_json({'ok': True, 'total': len(entradas), 'entradas': entradas})
 
         # /admin/usuarios — lista todos os usuários cadastrados (somente admin)
         elif self.path == '/admin/usuarios':
@@ -1616,6 +1708,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': False, 'erro': 'JSON inválido.'})
                 return
             ok, msg = admin_rejeitar_plano(data.get('usuario', ''))
+            self.send_json({'ok': ok, 'msg': msg})
+            return
+
+        # /coords/salvar — salva/atualiza endereço no banco de coordenadas manuais
+        if self.path == '/coords/salvar':
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                data = json.loads(self.rfile.read(length))
+            except Exception:
+                self.send_json({'ok': False, 'erro': 'JSON inválido.'})
+                return
+            ok, msg = banco_coords_adicionar(
+                data.get('endereco', ''),
+                data.get('lat', 0),
+                data.get('lon', 0),
+            )
+            self.send_json({'ok': ok, 'msg': msg})
+            return
+
+        # /coords/apagar — remove endereço do banco de coordenadas manuais
+        if self.path == '/coords/apagar':
+            sess = self._sessao_ou_401()
+            if sess is None:
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                data = json.loads(self.rfile.read(length))
+            except Exception:
+                self.send_json({'ok': False, 'erro': 'JSON inválido.'})
+                return
+            ok, msg = banco_coords_apagar(data.get('endereco', ''))
             self.send_json({'ok': ok, 'msg': msg})
             return
 
