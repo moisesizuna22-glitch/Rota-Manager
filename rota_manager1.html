@@ -716,20 +716,37 @@ color: var(--accent);
 border: 1px solid rgba(245,158,11,.35);
 }
 
-/* ── Endereço com coordenada editada manualmente ── */
-.td-addr.coord-editada .td-addr-reformado {
-color: var(--accent);
+/* ── Endereço com coordenada editada/confirmada manualmente ── */
+tbody tr.linha-editada {
+border-left: 4px solid var(--green);
+background: rgba(34,197,94,.05);
 }
-.td-addr.coord-editada::after {
-content: '✎ coord editada';
-display: block;
-font-size: 9px;
+tbody tr.linha-editada:hover { background: rgba(34,197,94,.08); }
+
+.td-addr.coord-editada .td-addr-reformado {
+color: var(--text);
+}
+.badge-editada {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+margin-top: 4px;
+font-size: 10px;
 font-weight: 800;
-letter-spacing: .05em;
-color: var(--accent);
-opacity: .75;
-margin-top: 3px;
+letter-spacing: .04em;
 text-transform: uppercase;
+padding: 2px 8px;
+border-radius: 999px;
+background: rgba(34,197,94,.15);
+color: var(--green);
+border: 1px solid rgba(34,197,94,.4);
+}
+.td-coord.coord-confirmada {
+color: var(--green);
+font-weight: 700;
+}
+.td-coord.coord-confirmada::before {
+content: '✔ ';
 }
 .td-coord {
 font-family: var(--mono);
@@ -1011,9 +1028,15 @@ border-color: rgba(245,158,11,.4);
 border-left: 4px solid var(--accent);
 background: rgba(245,158,11,.06);
 }
+tbody tr.linha-editada {
+border-color: rgba(34,197,94,.4);
+border-left: 4px solid var(--green);
+background: rgba(34,197,94,.06);
+}
 tbody tr.tr-selecionada { border-color: var(--accent); }
 tbody tr:hover { background: var(--surface); }
 tbody tr.grouped:hover { background: rgba(245,158,11,.09); }
+tbody tr.linha-editada:hover { background: rgba(34,197,94,.09); }
 
 /* Checkbox: ancorado no canto superior esquerdo do card */
 td.td-check {
@@ -1964,6 +1987,7 @@ tbody.innerHTML = '<tr><td colspan="6" class="empty-filter">Nenhum endereço enc
 for (const row of rows) {
 const tr = document.createElement('tr');
 if (row.group_size > 1) tr.classList.add('grouped');
+if (row._editado) tr.classList.add('linha-editada');
 if (_selecionados.has(row._cid)) tr.classList.add('tr-selecionada');
 
 const hasCoord   = !!row.coord;
@@ -2058,15 +2082,20 @@ if (row.do_banco) {
   bancoBadgeHtml = '<span class="banco-badge conf-' + conf + '" title="' + title + '">' + icone + ' ' + label + '</span>';
 }
 
+// Badge de coordenada editada/confirmada manualmente no mapa
+const editadaBadgeHtml = row._editado
+  ? '<span class="badge-editada" title="Esta coordenada foi confirmada manualmente no mapa">✔ Coord confirmada</span>'
+  : '';
+
 tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr${row._editado ? ' coord-editada' : ''}">
          <div class="td-addr-reformado">${escHtml(endReformado)}</div>
-         ${hereBadgeHtml}${bancoBadgeHtml}
+         ${hereBadgeHtml}${bancoBadgeHtml}${editadaBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
-       <td class="td-coord ${hasCoord ? '' : 'no-coord'}">${escHtml(coordText)}</td>
+       <td class="td-coord ${hasCoord ? '' : 'no-coord'}${row._editado ? ' coord-confirmada' : ''}">${escHtml(coordText)}</td>
      `);
 tbody.appendChild(tr);
 }
