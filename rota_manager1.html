@@ -2899,6 +2899,36 @@ let _arcgisInicializado = false;
 let _arcgisFetchTimer = null;
 let arcgisMarker = null;
 
+// Buffer de pré-carregamento: guarda o envelope já carregado (em graus WGS84).
+// Só dispara novo fetch quando o mapa sair dessa área — arrastos pequenos são instantâneos.
+let _envelopeCarregado = null;   // { xmin, ymin, xmax, ymax }
+
+// Fator de expansão: busca uma área FATOR vezes maior que a tela visível em cada direção.
+// Com zoom 18 a tela tem ~0.004° de lado → margem de ~0.005° extra em cada lado ≈ 500m.
+const _BUFFER_FATOR = 2.5;
+
+/** Retorna true se o mapa saiu da área já carregada (precisa de novo fetch). */
+function _precisaRecarregarLotes() {
+  if (!_envelopeCarregado) return true;
+  const b = arcgisMap.getBounds();
+  return (
+    b.getWest()  < _envelopeCarregado.xmin ||
+    b.getSouth() < _envelopeCarregado.ymin ||
+    b.getEast()  > _envelopeCarregado.xmax ||
+    b.getNorth() > _envelopeCarregado.ymax
+  );
+}
+
+/** Calcula o envelope expandido (área a buscar) com base nos bounds visíveis atuais. */
+function _envelopeExpandido() {
+  const b = arcgisMap.getBounds();
+  const dLng = (b.getEast()  - b.getWest())  * _BUFFER_FATOR;
+  const dLat = (b.getNorth() - b.getSouth()) * _BUFFER_FATOR;
+  const cLng = (b.getEast()  + b.getWest())  / 2;
+  const cLat = (b.getNorth() + b.getSouth()) / 2;
+  return { xmin: cLng - dLng/2, ymin: cLat - dLat/2, xmax: cLng + dLng/2, ymax: cLat + dLat/2 };
+}
+
 function initArcgisMap() {
  if (_arcgisInicializado) return;
  _arcgisInicializado = true;
@@ -2960,8 +2990,9 @@ function initArcgisMap() {
 
    carregarLotesVisiveis();
    arcgisMap.on('moveend', () => {
+     if (!_precisaRecarregarLotes()) return;   // ainda dentro do buffer → sem fetch
      clearTimeout(_arcgisFetchTimer);
-     _arcgisFetchTimer = setTimeout(carregarLotesVisiveis, 400);
+     _arcgisFetchTimer = setTimeout(carregarLotesVisiveis, 150);  // debounce reduzido
    });
 
    // Clique num lote mostra popup com quadra/lote/IPTU
@@ -2998,11 +3029,10 @@ function initArcgisMap() {
 // reconstruindo o rótulo completo "quadra-lote" (ex: 343-22), igual aparece no site da prefeitura.
 async function carregarLotesVisiveis() {
  if (!arcgisMap) return;
- const b = arcgisMap.getBounds();
- const envelope = {
-   xmin: b.getWest(), ymin: b.getSouth(), xmax: b.getEast(), ymax: b.getNorth(),
-   spatialReference: { wkid: 4326 },
- };
+ // Busca uma área expandida ao redor da posição atual (buffer de pré-carregamento).
+ // Assim, arrastos pequenos não precisam de novo fetch — os lotes já estão carregados.
+ const exp = _envelopeExpandido();
+ const envelope = { ...exp, spatialReference: { wkid: 4326 } };
  const envelopeStr = JSON.stringify(envelope);
 
  const paramsLote = new URLSearchParams({
@@ -3050,6 +3080,8 @@ async function carregarLotesVisiveis() {
        console.warn('[PMG] ' + semQuadra + ' de ' + geoLote.features.length + ' lote(s) sem número de quadra resolvido — verifique os nomes dos campos de junção (id_qdr / id).');
      }
      arcgisMap.getSource('pmg-lotes').setData(geoLote);
+     // Registra a área efetivamente carregada para evitar fetches redundantes
+     _envelopeCarregado = exp;
    }
  } catch (e) {
    console.warn('Falha ao carregar lotes/quadras do Portal Mapa de Goiânia:', e);
