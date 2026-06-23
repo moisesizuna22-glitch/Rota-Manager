@@ -9,26 +9,38 @@
 <!-- xlsx-js-style: SheetJS com suporte a estilos de célula (cores, fontes, bordas) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
+<!-- Fontes industriais: Oswald (display condensado) + Inter (corpo) + JetBrains Mono (técnico) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
 <style>
 :root {
---bg:        #0b1120;
---surface:   #111827;
---surface2:  #1e2d3d;
---border:    #1e3a5f;
---accent:    #f59e0b;
---accent2:   #3b82f6;
---green:     #22c55e;
---text:      #e2e8f0;
---muted:     #64748b;
---danger:    #ef4444;
---font:      'Segoe UI', system-ui, sans-serif;
---mono:      'Consolas', 'Courier New', monospace;
+--bg:        #131619;
+--surface:   #1b1f24;
+--surface2:  #242931;
+--border:    #383e47;
+--accent:    #f5a623;
+--accent2:   #5b9bd5;
+--green:     #5fa83f;
+--text:      #e7eaee;
+--muted:     #889099;
+--danger:    #e5484d;
+--font:      'Inter', 'Segoe UI', system-ui, sans-serif;
+--display:   'Oswald', 'Arial Narrow', system-ui, sans-serif;
+--mono:      'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+--steel:     linear-gradient(180deg, #2c323b 0%, #1f242b 100%);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-background: var(--bg);
+background-color: var(--bg);
+background-image:
+  linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+  linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px),
+  radial-gradient(circle at 50% 0%, rgba(245,166,35,.05), transparent 55%);
+background-size: 38px 38px, 38px 38px, 100% 600px;
 color: var(--text);
 font-family: var(--font);
 min-height: 100vh;
@@ -38,10 +50,10 @@ flex-direction: column;
 
 /* ── Header ── */
 header {
-background: var(--surface);
-border-bottom: 2px solid var(--accent);
+background: var(--steel);
+border-bottom: 1px solid var(--border);
 padding: 0 24px;
-height: 56px;
+height: 58px;
 display: flex;
 align-items: center;
 gap: 16px;
@@ -50,11 +62,33 @@ top: 0;
 z-index: 100;
 box-shadow: 0 2px 16px rgba(0,0,0,.6);
 }
+/* Faixa de alerta industrial (hazard stripes) na base do header */
+header::after {
+content: '';
+position: absolute;
+left: 0;
+right: 0;
+bottom: -4px;
+height: 4px;
+background-image: repeating-linear-gradient(
+  -45deg,
+  var(--accent) 0,
+  var(--accent) 12px,
+  #14171b 12px,
+  #14171b 24px
+);
+opacity: .9;
+}
 header .logo {
-font-size: 18px;
-font-weight: 800;
-letter-spacing: .06em;
+font-family: var(--display);
+font-size: 22px;
+font-weight: 700;
+letter-spacing: .12em;
+text-transform: uppercase;
 color: var(--accent);
+display: flex;
+align-items: center;
+gap: 8px;
 }
 header .logo span { color: var(--text); }
 header .spacer { flex: 1; }
@@ -585,17 +619,20 @@ header .badge b { color: var(--accent2); }
   .btn-hist {
     background: var(--surface2);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 600;
+    border-radius: 3px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
     padding: 5px 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 5px;
-    transition: border-color .15s;
+    transition: border-color .15s, color .15s;
     white-space: nowrap;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
   }
   .btn-hist:hover { border-color: var(--accent2); color: var(--accent2); }
 
@@ -604,7 +641,7 @@ header .badge b { color: var(--accent2); }
     .btn-hist span.label { display: none; }
   }
 .toolbar {
-background: var(--surface2);
+background: var(--steel);
 border-bottom: 1px solid var(--border);
 padding: 10px 24px;
 display: flex;
@@ -616,15 +653,19 @@ flex-wrap: wrap;
 .btn {
 padding: 8px 18px;
 border: none;
-border-radius: 6px;
-font-size: 13px;
+border-radius: 3px;
+font-size: 12px;
 font-weight: 700;
+letter-spacing: .04em;
+text-transform: uppercase;
 cursor: pointer;
 transition: .15s;
 display: inline-flex;
 align-items: center;
 gap: 6px;
+box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(0,0,0,.4);
 }
+.btn:active { transform: translateY(1px); }
 .btn-primary  { background: var(--accent);  color: #000; }
 .btn-primary:hover { filter: brightness(1.12); }
 .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
@@ -706,23 +747,29 @@ cursor: pointer;
 #drop-zone.drag-over { background: rgba(59, 130, 246, .07); }
 .drop-icon { font-size: 56px; opacity: .4; }
 .drop-title {
-font-size: 22px;
-font-weight: 700;
+font-family: var(--display);
+font-size: 26px;
+font-weight: 600;
+letter-spacing: .06em;
+text-transform: uppercase;
 color: var(--text);
-opacity: .7;
+opacity: .8;
 }
 .drop-sub { font-size: 14px; color: var(--muted); }
 .drop-btn {
-padding: 12px 32px;
+padding: 13px 34px;
 background: var(--accent);
-color: #000;
+color: #1a1205;
 font-weight: 800;
-font-size: 15px;
+font-size: 14px;
+letter-spacing: .06em;
+text-transform: uppercase;
 border: none;
-border-radius: 8px;
+border-radius: 3px;
 cursor: pointer;
 transition: .15s;
 margin-top: 8px;
+box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 2px 4px rgba(0,0,0,.4);
 }
 .drop-btn:hover { filter: brightness(1.1); }
 #file-input { display: none; }
@@ -742,21 +789,22 @@ top: 0;
 z-index: 10;
 }
 thead th {
-background: var(--surface);
-color: var(--muted);
-font-size: 11px;
-font-weight: 700;
-letter-spacing: .07em;
+background: var(--steel);
+color: #c5ccd4;
+font-family: var(--display);
+font-size: 12px;
+font-weight: 600;
+letter-spacing: .12em;
 text-transform: uppercase;
-padding: 10px 14px;
+padding: 11px 14px;
 text-align: left;
-border-bottom: 2px solid var(--border);
+border-bottom: 2px solid var(--accent);
 white-space: nowrap;
 }
 thead th:first-child { width: 52px; text-align: center; }
 
 tbody tr {
-border-bottom: 1px solid rgba(30, 58, 95, .5);
+border-bottom: 1px solid rgba(56, 62, 71, .5);
 border-left: 4px solid transparent;
 transition: background .1s, border-color .1s;
 }
@@ -1184,7 +1232,12 @@ header .logo { font-size: 13px; }
 #login-screen {
 position: fixed;
 inset: 0;
-background: var(--bg);
+background-color: var(--bg);
+background-image:
+  linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+  linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px),
+  radial-gradient(circle at 50% 40%, rgba(245,166,35,.06), transparent 60%);
+background-size: 38px 38px, 38px 38px, 100% 100%;
 z-index: 9999;
 display: flex;
 flex-direction: column;
@@ -1197,17 +1250,33 @@ padding: 20px;
 .login-card {
 background: var(--surface);
 border: 1px solid var(--border);
-border-radius: 16px;
+border-radius: 12px;
 padding: 36px 32px;
 width: 100%;
 max-width: 380px;
 box-shadow: 0 8px 40px rgba(0,0,0,.6);
+position: relative;
+overflow: hidden;
+}
+/* Faixa industrial decorativa no topo do card */
+.login-card::before {
+content: '';
+position: absolute;
+top: 0; left: 0; right: 0;
+height: 3px;
+background-image: repeating-linear-gradient(
+  -45deg,
+  var(--accent) 0, var(--accent) 8px,
+  transparent 8px, transparent 16px
+);
 }
 .login-logo {
 text-align: center;
-font-size: 26px;
-font-weight: 800;
-letter-spacing: .06em;
+font-family: var(--display);
+font-size: 28px;
+font-weight: 700;
+letter-spacing: .12em;
+text-transform: uppercase;
 color: var(--accent);
 margin-bottom: 4px;
 }
@@ -1232,9 +1301,11 @@ gap: 3px;
 flex: 1;
 padding: 8px;
 border: none;
-border-radius: 6px;
-font-size: 13px;
+border-radius: 4px;
+font-size: 12px;
 font-weight: 700;
+letter-spacing: .05em;
+text-transform: uppercase;
 cursor: pointer;
 background: transparent;
 color: var(--muted);
@@ -1264,7 +1335,7 @@ display: flex;
 align-items: center;
 background: var(--surface2);
 border: 1px solid var(--border);
-border-radius: 8px;
+border-radius: 4px;
 padding: 0 12px;
 height: 44px;
 gap: 8px;
@@ -1299,15 +1370,17 @@ flex-shrink: 0;
 width: 100%;
 padding: 12px;
 border: none;
-border-radius: 8px;
+border-radius: 3px;
 background: var(--accent);
-color: #000;
-font-size: 14px;
+color: #1a1205;
+font-size: 13px;
 font-weight: 800;
 cursor: pointer;
 transition: .15s;
 margin-top: 6px;
-letter-spacing: .04em;
+letter-spacing: .07em;
+text-transform: uppercase;
+box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 4px rgba(0,0,0,.4);
 }
 .btn-login:hover { filter: brightness(1.1); }
 .btn-login:disabled { opacity: .5; cursor: default; filter: none; }
@@ -1353,9 +1426,12 @@ font-weight: 600;
 .btn-logout {
 background: none;
 border: 1px solid var(--border);
-border-radius: 6px;
+border-radius: 3px;
 color: var(--muted);
-font-size: 11px;
+font-size: 10px;
+font-weight: 700;
+letter-spacing: .05em;
+text-transform: uppercase;
 padding: 4px 10px;
 cursor: pointer;
 transition: .15s;
