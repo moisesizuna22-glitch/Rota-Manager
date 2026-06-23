@@ -52,8 +52,8 @@ flex-direction: column;
 header {
 background: var(--steel);
 border-bottom: 1px solid var(--border);
-padding: 0 24px;
-height: 58px;
+padding: env(safe-area-inset-top) max(24px, env(safe-area-inset-right)) 0 max(24px, env(safe-area-inset-left));
+height: calc(58px + env(safe-area-inset-top));
 display: flex;
 align-items: center;
 gap: 16px;
@@ -703,7 +703,13 @@ header .badge b { color: var(--accent2); }
     #assinatura-panel { width: 100vw; }
   }
 
-  /* botão histórico no header */
+  /* ── Espaço de segurança para notch/câmera em iPhones (principalmente no modo paisagem) ── */
+#banco-header, #hist-header, #admin-header, #assinatura-header {
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-left: calc(18px + env(safe-area-inset-left));
+}
+
+/* botão histórico no header */
   .btn-hist {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -1050,8 +1056,8 @@ background: rgba(245, 158, 11, .10) !important;
 /* ── Botão flutuante: Agrupar selecionados ── */
 .fab-agrupar {
 position: fixed;
-right: 24px;
-bottom: 24px;
+right: max(24px, env(safe-area-inset-right));
+bottom: calc(24px + env(safe-area-inset-bottom));
 z-index: 400;
 display: flex;
 align-items: center;
@@ -1095,7 +1101,7 @@ font-size: 12px;
 .fab-agrupar.vazio .fab-count { background: rgba(255,255,255,.08); }
 
 @media (max-width: 640px) {
-.fab-agrupar { right: 16px; bottom: 16px; padding: 12px 18px; font-size: 13px; }
+.fab-agrupar { right: max(16px, env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); padding: 12px 18px; font-size: 13px; }
 }
 
 /* Botão de mapa */
@@ -1169,8 +1175,8 @@ font-size: 14px;
 @media (max-width: 640px) {
 /* Header compacto */
 header {
-padding: 0 14px;
-height: 48px;
+padding: env(safe-area-inset-top) max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+height: calc(48px + env(safe-area-inset-top));
 gap: 10px;
 }
 header .logo { font-size: 15px; }
@@ -1310,6 +1316,61 @@ td.td-coord::before { content: '📍 '; }
 .btn-map { width: 32px; height: 32px; font-size: 15px; }
 }
 
+/* ══ ALVOS DE TOQUE: aumenta a área clicável de botões/ícones pequenos no celular ══ */
+@media (max-width: 640px) {
+  /* Evita o zoom automático do iOS ao focar em campos de texto (precisa de 16px) */
+  .filter-input, .login-input, #banco-search {
+    font-size: 16px;
+  }
+
+  /* Checkboxes maiores e mais fáceis de tocar com o dedo */
+  .td-check input, .check-all-mobile input { width: 22px; height: 22px; }
+  .check-all-mobile { font-size: 13px; }
+
+  /* Botão do mapa com área de toque mais confortável */
+  .btn-map { width: 40px; height: 40px; font-size: 17px; }
+  td.td-action { top: 8px; right: 8px; }
+
+  /* Botões "Histórico / Banco / Admin" no header: quadrados e com toque confortável */
+  .btn-hist { min-width: 38px; min-height: 38px; justify-content: center; padding: 8px 10px; }
+
+  /* Botões da barra de ferramentas: altura mínima confortável para o dedo */
+  .toolbar .btn { min-height: 42px; }
+
+  /* Botões de fechar painéis laterais (histórico, banco, admin, assinatura) */
+  #hist-header .close-btn,
+  #banco-header .close-btn,
+  #admin-header .close-btn,
+  #assinatura-header .close-btn {
+    min-width: 40px; min-height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  #export-modal-header .close-btn { width: 38px; height: 38px; }
+
+  /* Botões de remover (banco/histórico): área de toque maior, visual igual */
+  .banco-del, .hist-del {
+    top: 2px; right: 2px;
+    width: 34px; height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    opacity: .7;
+  }
+
+  /* Toggle de mostrar/ocultar senha: área de toque maior sem mudar o visual */
+  .toggle-pass { padding: 12px; margin: -12px; }
+
+  /* Ações dentro do painel de admin: botões mais altos */
+  .admin-item-actions button { padding: 10px 8px; min-height: 38px; }
+  .admin-novo-toggle { padding: 10px 2px; }
+
+  /* Botão de sair (logout) com mais espaço para o toque */
+  .btn-logout { padding: 7px 12px; }
+
+  /* Abas de login um pouco mais altas */
+  .login-tab { padding: 11px 8px; }
+}
+
 @media (max-width: 400px) {
 header .logo { font-size: 13px; }
 .drop-title { font-size: 15px; }
@@ -1331,7 +1392,7 @@ display: flex;
 flex-direction: column;
 align-items: center;
 justify-content: center;
-padding: 20px;
+padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 #login-screen.hidden { display: none; }
 
@@ -1535,8 +1596,8 @@ transition: .15s;
 /* ── Toast de feedback de voto ── */
 #voto-toast {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  right: max(24px, env(safe-area-inset-right));
   z-index: 9000;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1583,7 +1644,7 @@ transition: .15s;
 .voto-bar.conf-alta    { background: #4ade80; }
 .voto-bar.conf-disputa { background: #f87171; }
 @media (max-width: 640px) {
-  #voto-toast { right: 12px; bottom: 80px; width: calc(100vw - 24px); }
+  #voto-toast { right: max(12px, env(safe-area-inset-right)); bottom: calc(80px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
 }
 </style>
 </head>
