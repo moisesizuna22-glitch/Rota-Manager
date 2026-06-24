@@ -1738,11 +1738,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': False, 'erro': 'Usuário não encontrado.'})
                 return
             # só atualiza se veio valor; senão mantém o anterior
+            print(f"[PERFIL] usuario={chave!r} telefone_raw={telefone_raw!r} telefone={telefone!r} email_novo={email_novo!r}")
             if telefone:
                 users[chave]['telefone'] = telefone
+                print(f"[PERFIL] salvando telefone={telefone!r}")
+            else:
+                print(f"[PERFIL] telefone vazio, mantendo anterior={u.get('telefone','')!r}")
             if email_novo:
                 users[chave]['email'] = email_novo
             salvar_usuarios(users)
+            print(f"[PERFIL] salvo. users[{chave!r}]={users[chave]}")
             self.send_json({'ok': True, 'msg': 'Perfil atualizado com sucesso.'})
             return
 
