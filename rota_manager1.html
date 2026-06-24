@@ -4900,6 +4900,8 @@ function toggleProfileDropdown() {
     // limpar msgs ao abrir
     document.getElementById('profile-tel-msg').textContent = '';
     document.getElementById('profile-email-msg').textContent = '';
+    // sempre recarrega dados frescos do servidor ao abrir
+    carregarPerfilUsuario();
   }
 }
 function fecharProfileDropdown() {

@@ -1739,7 +1739,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if u is None:
                 self.send_json({'ok': False, 'erro': 'Usuário não encontrado.'})
                 return
-            users[chave]['telefone'] = telefone
+            users[chave]['telefone'] = telefone if telefone else users[chave].get('telefone', '')
             if email_novo:
                 users[chave]['email'] = email_novo
             salvar_usuarios(users)
