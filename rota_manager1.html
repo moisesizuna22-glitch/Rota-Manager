@@ -1589,7 +1589,10 @@ display: flex; align-items: center;
 .profile-chevron svg { width: 14px; height: 14px; }
 .profile-trigger[aria-expanded="true"] .profile-chevron { transform: rotate(180deg); }
 
-/* ── Profile modal overlay (fullscreen) ── */
+/* dropdown */
+.profile-dropdown { display: none !important; }
+
+/* ── Modal de Perfil (fullscreen) ── */
 .profile-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1646,7 +1649,7 @@ display: flex; align-items: center;
   display: flex; align-items: center; justify-content: center;
   transition: .15s;
 }
-.profile-modal-close:hover { color: var(--text); border-color: var(--border); background: var(--surface2); }
+.profile-modal-close:hover { color: var(--text); background: var(--surface2); }
 .profile-modal-close svg { width: 16px; height: 16px; }
 .profile-modal-hero {
   display: flex;
@@ -1756,8 +1759,6 @@ display: flex; align-items: center;
   text-align: center;
 }
 .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
-/* keep profile-dropdown class for compat but unused visually */
-.profile-dropdown { display: none !important; }
 
 @media (max-width: 640px) {
 .login-card { padding: 28px 20px; border-radius: 12px; }
@@ -2107,13 +2108,12 @@ display: flex; align-items: center;
       </svg>
     </div>
   </button>
-  <!-- dropdown vazio mantido para compatibilidade -->
   <div class="profile-dropdown" id="profile-dropdown"></div>
 </div>
 
-<!-- ── Modal de Perfil (fullscreen) ── -->
+<!-- Modal de Perfil -->
 <div class="profile-modal-overlay" id="profile-modal-overlay" onclick="fecharProfileModal(event)">
-  <div class="profile-modal" role="dialog" aria-modal="true" aria-label="Perfil do usuário">
+  <div class="profile-modal" role="dialog" aria-modal="true">
     <div class="profile-modal-topbar">
       <span class="profile-modal-title">Meu Perfil</span>
       <button class="profile-modal-close" onclick="fecharProfileDropdown()" aria-label="Fechar">
@@ -4889,7 +4889,7 @@ document.getElementById('profile-tel-msg').textContent = '';
 }
 function telPerfilKeydown(e) { if (e.key === 'Enter') salvarPerfil(); }
 
-// ── Profile modal ───────────────────────────────────────────────────
+// ── Profile dropdown ───────────────────────────────────────────────────
 function toggleProfileDropdown() {
   const overlay = document.getElementById('profile-modal-overlay');
   const isOpen = overlay.classList.contains('open');
@@ -4897,11 +4897,9 @@ function toggleProfileDropdown() {
   else {
     overlay.classList.add('open');
     document.getElementById('profile-trigger').setAttribute('aria-expanded', 'true');
-    // limpar msgs ao abrir
     document.getElementById('profile-tel-msg').textContent = '';
     document.getElementById('profile-email-msg').textContent = '';
-    // sempre recarrega dados frescos do servidor ao abrir
-    carregarPerfilUsuario();
+    carregarPerfilUsuario(); // recarrega dados frescos toda vez que abre
   }
 }
 function fecharProfileDropdown() {
@@ -4909,10 +4907,8 @@ function fecharProfileDropdown() {
   document.getElementById('profile-trigger').setAttribute('aria-expanded', 'false');
 }
 function fecharProfileModal(e) {
-  // fecha ao clicar no overlay (fora do card)
   if (e.target === document.getElementById('profile-modal-overlay')) fecharProfileDropdown();
 }
-// Fechar com ESC
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') fecharProfileDropdown();
 });
@@ -4926,7 +4922,7 @@ if (d.ok) {
   const emailInput = document.getElementById('profile-email-input');
   if (emailInput) emailInput.value = d.email || '';
   const telInput = document.getElementById('profile-tel-input');
-  telInput.value = d.telefone ? _formatarTelBR(d.telefone) : '';
+  if (telInput) telInput.value = d.telefone ? _formatarTelBR(d.telefone) : '';
 }
 } catch(e) { /* silencioso */ }
 }
@@ -4938,7 +4934,6 @@ const emailInput = document.getElementById('profile-email-input');
 const emailMsg   = document.getElementById('profile-email-msg');
 const btn        = document.getElementById('btn-profile-save');
 
-// Validar telefone
 const digits = _apenasDigitos(telInput.value);
 if (digits && !/^\d{2}9\d{8}$/.test(digits)) {
   telInput.classList.add('error');
@@ -4946,7 +4941,6 @@ if (digits && !/^\d{2}9\d{8}$/.test(digits)) {
   telMsg.className = 'profile-field-msg err';
   return;
 }
-// Validar email
 const email = emailInput.value.trim();
 if (email && !email.includes('@')) {
   emailInput.classList.add('error');
