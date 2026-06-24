@@ -4920,11 +4920,11 @@ if (!r.ok) return;
 const d = await r.json();
 if (d.ok) {
   const emailInput = document.getElementById('profile-email-input');
-  if (emailInput) emailInput.value = d.email || '';
+  if (emailInput && d.email) emailInput.value = d.email;
   const telInput = document.getElementById('profile-tel-input');
-  if (telInput) telInput.value = d.telefone ? _formatarTelBR(d.telefone) : '';
+  if (telInput && d.telefone) telInput.value = _formatarTelBR(d.telefone);
 }
-} catch(e) { /* silencioso */ }
+} catch(e) { console.warn('[perfil] falha ao carregar:', e); }
 }
 
 async function salvarPerfil() {
