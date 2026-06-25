@@ -109,13 +109,7 @@ header .badge.show { display: block; }
 header .badge b { color: var(--accent2); }
 
   /* ── Toolbar ── */
-  /* ════════════════════════════════════════════════════════════════
-     SISTEMA UNIFICADO DE CONFIANÇA — endereço confirmado por votação
-     Toda linha com coordenada vinda do banco (do_banco=true) usa a
-     MESMA cor em tudo: faixa lateral, fundo, badge e coordenada.
-     A cor/intensidade muda só conforme o nível de confiança.
-     ════════════════════════════════════════════════════════════════ */
-
+  /* ── Badge de coordenada confirmada via banco ── */
   .badge-confianca {
     display: inline-flex;
     align-items: center;
@@ -135,24 +129,6 @@ header .badge b { color: var(--accent2); }
     border-radius: 50%;
     flex-shrink: 0;
   }
-
-  /* baixa (1 voto) — azul discreto, "primeira confirmação" */
-  .badge-confianca.conf-baixa {
-    background: rgba(96,165,250,.12);
-    color: #60a5fa;
-    border-color: rgba(96,165,250,.35);
-  }
-  .badge-confianca.conf-baixa .bc-dot { background: #60a5fa; }
-
-  /* média (2-4 votos) — dourado, "ganhando confiança" */
-  .badge-confianca.conf-media {
-    background: rgba(234,179,8,.13);
-    color: #facc15;
-    border-color: rgba(234,179,8,.4);
-  }
-  .badge-confianca.conf-media .bc-dot { background: #facc15; }
-
-  /* alta (5+ votos) — verde forte, "confirmado pela comunidade" */
   .badge-confianca.conf-alta {
     background: rgba(34,197,94,.15);
     color: #4ade80;
@@ -161,20 +137,13 @@ header .badge b { color: var(--accent2); }
   }
   .badge-confianca.conf-alta .bc-dot { background: #4ade80; }
 
-  /* disputa — vermelho de alerta, "pessoas divergem sobre o local" */
-  .badge-confianca.conf-disputa {
-    background: rgba(239,68,68,.14);
-    color: #f87171;
-    border-color: rgba(239,68,68,.45);
-  }
-  .badge-confianca.conf-disputa .bc-dot { background: #f87171; animation: pulso-disputa 1.6s ease-in-out infinite; }
-  @keyframes pulso-disputa { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  /* ── Linha confirmada via banco de coords ── */
+  tbody tr.linha-confirmada,
+  tbody tr.grouped.linha-confirmada { border-left: 4px solid #4ade80; background: rgba(34,197,94,.06); }
+  tbody tr.linha-confirmada:hover,
+  tbody tr.grouped.linha-confirmada:hover { background: rgba(34,197,94,.09); }
 
-  /* ── "Você editou agora" — marcador extra, permanente enquanto a página
-     estiver aberta (só some se recarregar). Aparece JUNTO com o badge de
-     confiança, não substitui — é sobre "foi você, nesta sessão", não sobre
-     quantas pessoas confirmaram. Cor própria (magenta) pra não se confundir
-     com nenhum nível de confiança. ── */
+  /* ── "Você editou agora" — marcador extra ── */
   .badge-voce-editou {
     display: inline-flex;
     align-items: center;
@@ -201,19 +170,10 @@ header .badge b { color: var(--accent2); }
     50%      { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 14px 3px rgba(245,166,35,.75); transform: scale(1.04); }
   }
 
-  /* LINHA INTEIRA EDITADA AGORA: destaque máximo, vence o estilo de confiança.
-     Faixa lateral âmbar grossa + fundo âmbar + brilho pulsante na borda. */
+  /* LINHA INTEIRA EDITADA AGORA */
   tbody tr.voce-editou,
   tbody tr.linha-confirmada.voce-editou,
-  tbody tr.grouped.linha-confirmada.voce-editou,
-  tbody tr.linha-confirmada.conf-baixa.voce-editou,
-  tbody tr.linha-confirmada.conf-media.voce-editou,
-  tbody tr.linha-confirmada.conf-alta.voce-editou,
-  tbody tr.linha-confirmada.conf-disputa.voce-editou,
-  tbody tr.grouped.linha-confirmada.conf-baixa.voce-editou,
-  tbody tr.grouped.linha-confirmada.conf-media.voce-editou,
-  tbody tr.grouped.linha-confirmada.conf-alta.voce-editou,
-  tbody tr.grouped.linha-confirmada.conf-disputa.voce-editou {
+  tbody tr.grouped.linha-confirmada.voce-editou {
     border-left: 6px solid var(--accent) !important;
     background: rgba(245,166,35,.13) !important;
     outline: 1px solid rgba(245,166,35,.6);
@@ -230,33 +190,9 @@ header .badge b { color: var(--accent2); }
     0%, 100% { box-shadow: inset 4px 0 0 0 rgba(245,166,35,.35); }
     50%      { box-shadow: inset 4px 0 0 0 rgba(245,166,35,.9), 0 0 12px 0 rgba(245,166,35,.25); }
   }
-  /* Reformado em destaque quando a linha foi editada agora */
-  tbody tr.voce-editou .td-addr-reformado {
-    color: var(--accent);
-  }
+  tbody tr.voce-editou .td-addr-reformado { color: var(--accent); }
 
-  /* Linha inteira (tr) ganha a mesma cor do nível de confiança —
-     faixa lateral + fundo sutil, consistente em desktop e mobile.
-     Seletores .grouped.linha-confirmada.conf-* têm especificidade extra
-     de propósito, pra garantir que "confirmado" sempre vença visualmente
-     sobre "agrupado" quando os dois estados coexistem, sem depender da
-     ordem das regras no arquivo (robusto mesmo dentro de media queries). */
-  tbody tr.linha-confirmada.conf-baixa,   tbody tr.grouped.linha-confirmada.conf-baixa   { border-left: 4px solid #60a5fa; background: rgba(96,165,250,.045); }
-  tbody tr.linha-confirmada.conf-media,   tbody tr.grouped.linha-confirmada.conf-media   { border-left: 4px solid #facc15; background: rgba(234,179,8,.05); }
-  tbody tr.linha-confirmada.conf-alta,    tbody tr.grouped.linha-confirmada.conf-alta    { border-left: 4px solid #4ade80; background: rgba(34,197,94,.06); }
-  tbody tr.linha-confirmada.conf-disputa, tbody tr.grouped.linha-confirmada.conf-disputa { border-left: 4px solid #f87171; background: rgba(239,68,68,.05); }
-  tbody tr.linha-confirmada.conf-baixa:hover,   tbody tr.grouped.linha-confirmada.conf-baixa:hover   { background: rgba(96,165,250,.08); }
-  tbody tr.linha-confirmada.conf-media:hover,   tbody tr.grouped.linha-confirmada.conf-media:hover   { background: rgba(234,179,8,.08); }
-  tbody tr.linha-confirmada.conf-alta:hover,    tbody tr.grouped.linha-confirmada.conf-alta:hover    { background: rgba(34,197,94,.09); }
-  tbody tr.linha-confirmada.conf-disputa:hover, tbody tr.grouped.linha-confirmada.conf-disputa:hover { background: rgba(239,68,68,.08); }
-
-  /* Coordenada na cor do nível de confiança, com check só quando alta */
-  .td-coord.conf-baixa   { color: #60a5fa; }
-  .td-coord.conf-media   { color: #facc15; }
-  .td-coord.conf-alta    { color: #4ade80; font-weight: 700; }
-  .td-coord.conf-alta::before    { content: '✔ '; }
-  .td-coord.conf-disputa { color: #f87171; }
-  .td-coord.conf-disputa::before { content: '⚠ '; }
+  .td-coord.do-banco { color: #4ade80; font-weight: 700; }
 
   /* ── Painel Banco de Coordenadas ── */
   #banco-overlay {
@@ -1303,21 +1239,9 @@ border-color: rgba(245,158,11,.4);
 border-left: 4px solid var(--accent);
 background: rgba(245,158,11,.06);
 }
-/* Sistema de confiança tem prioridade sobre "agrupado" — repetido aqui
-   para vencer a cascata dentro do media query mobile, com seletor
-   .grouped.linha-confirmada de especificidade extra garantindo a
-   prioridade mesmo se a ordem das regras mudar no futuro. */
-tbody tr.linha-confirmada.conf-baixa,   tbody tr.grouped.linha-confirmada.conf-baixa   { border-left: 4px solid #60a5fa; background: rgba(96,165,250,.05); }
-tbody tr.linha-confirmada.conf-media,   tbody tr.grouped.linha-confirmada.conf-media   { border-left: 4px solid #facc15; background: rgba(234,179,8,.06); }
-tbody tr.linha-confirmada.conf-alta,    tbody tr.grouped.linha-confirmada.conf-alta    { border-left: 4px solid #4ade80; background: rgba(34,197,94,.07); }
-tbody tr.linha-confirmada.conf-disputa, tbody tr.grouped.linha-confirmada.conf-disputa { border-left: 4px solid #f87171; background: rgba(239,68,68,.06); }
 tbody tr.tr-selecionada { border-color: var(--accent); }
 tbody tr:hover { background: var(--surface); }
 tbody tr.grouped:hover { background: rgba(245,158,11,.09); }
-tbody tr.linha-confirmada.conf-baixa:hover,   tbody tr.grouped.linha-confirmada.conf-baixa:hover   { background: rgba(96,165,250,.085); }
-tbody tr.linha-confirmada.conf-media:hover,   tbody tr.grouped.linha-confirmada.conf-media:hover   { background: rgba(234,179,8,.095); }
-tbody tr.linha-confirmada.conf-alta:hover,    tbody tr.grouped.linha-confirmada.conf-alta:hover    { background: rgba(34,197,94,.1); }
-tbody tr.linha-confirmada.conf-disputa:hover, tbody tr.grouped.linha-confirmada.conf-disputa:hover { background: rgba(239,68,68,.095); }
 
 /* Checkbox: ancorado no canto superior esquerdo do card */
 td.td-check {
@@ -1835,58 +1759,6 @@ display: flex; align-items: center;
 .btn-login { padding: 11px; }
 }
 
-/* ── Toast de feedback de voto ── */
-#voto-toast {
-  position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  right: max(24px, env(safe-area-inset-right));
-  z-index: 9000;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: 4px;
-  padding: 12px 16px;
-  width: 280px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.5);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .15s, visibility .15s;
-  pointer-events: none;
-}
-#voto-toast.show {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-#voto-toast-msg {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.voto-conf {
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-.voto-bar-wrap {
-  height: 3px;
-  background: var(--surface2);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.voto-bar {
-  height: 100%;
-  border-radius: 999px;
-  transition: width .6s ease;
-}
-.voto-bar.conf-baixa   { background: #60a5fa; }
-.voto-bar.conf-media   { background: #facc15; }
-.voto-bar.conf-alta    { background: #4ade80; }
-.voto-bar.conf-disputa { background: #f87171; }
-@media (max-width: 640px) {
-  #voto-toast { right: max(12px, env(safe-area-inset-right)); bottom: calc(80px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
-}
 </style>
 </head>
 <body>
@@ -2038,11 +1910,7 @@ display: flex; align-items: center;
 
 
 <!-- ══ TOAST DE VOTAÇÃO ══ -->
-<div id="voto-toast">
-  <div id="voto-toast-msg"></div>
-  <div class="voto-conf" id="voto-toast-conf"></div>
-  <div class="voto-bar-wrap"><div class="voto-bar" id="voto-toast-bar"></div></div>
-</div>
+
 
 <!-- ══ PAINEL HISTÓRICO ══ -->
 <div id="hist-overlay" onclick="fecharHistorico(event)">
@@ -2686,8 +2554,7 @@ for (const row of rows) {
 const tr = document.createElement('tr');
 if (row.group_size > 1) tr.classList.add('grouped');
 if (row.do_banco) {
-  const conf = row.banco_conf || 'baixa';
-  tr.classList.add('linha-confirmada', 'conf-' + conf);
+  tr.classList.add('linha-confirmada');
 }
 if (row._editado) tr.classList.add('voce-editou');
 if (_selecionados.has(row._cid)) tr.classList.add('tr-selecionada');
@@ -2770,38 +2637,14 @@ if (validacao.startsWith('✅')) {
   const label    = ruaHere ? `⚠️ ${escHtml(ruaHere)}` : '⚠️ Parcial';
   hereBadgeHtml  = `<span class="here-badge here-badge-parcial" title="${escHtml(validacao)}">${label}</span>`;
 }
-// Badge único de confiança — aparece sempre que a coord vem do banco de
-// votos (do_banco=true), com cor/texto conforme quantas pessoas confirmaram.
+// Badge — coord vinda do banco de coordenadas
 let confiancaBadgeHtml = '';
 if (row.do_banco) {
-  const conf   = row.banco_conf   || 'baixa';
-  const votos  = row.banco_votos  || 1;
-  const eleita = row.banco_eleita || 1;
-
-  let texto, title;
-  if (conf === 'disputa') {
-    texto = 'Localização em disputa';
-    title = `${votos} pessoas divergem sobre este local — aguardando mais confirmações.`;
-  } else if (votos === 1) {
-    texto = 'Confirmado por 1 pessoa';
-    title = 'Primeira confirmação deste local. Mais confirmações aumentam a confiança.';
-  } else if (conf === 'alta') {
-    texto = `Confirmado por ${votos} pessoas`;
-    title = `${eleita} de ${votos} pessoas confirmam este local — alta confiança.`;
-  } else {
-    texto = `Confirmado por ${votos} pessoas`;
-    title = `${eleita} de ${votos} pessoas confirmam este local.`;
-  }
-
-  confiancaBadgeHtml =
-    `<span class="badge-confianca conf-${conf}" title="${escHtml(title)}">` +
-      `<span class="bc-dot"></span>${escHtml(texto)}` +
-    `</span>`;
+  confiancaBadgeHtml = `<span class="badge-confianca conf-alta" title="Coordenada salva manualmente."><span class="bc-dot"></span>Coordenada confirmada</span>`;
 }
 
 // Badge extra — marca que FOI VOCÊ quem confirmou/mudou essa coordenada
-// agora, nesta sessão. Some só se a página for recarregada (não é
-// persistido). Aparece junto com o badge de confiança, não no lugar dele.
+// agora, nesta sessão.
 const editouAgoraBadgeHtml = row._editado
   ? `<span class="badge-voce-editou" title="Você confirmou esta coordenada agora, nesta sessão.">✎ Você editou agora</span>`
   : '';
@@ -2814,7 +2657,7 @@ tr.insertAdjacentHTML('beforeend', `
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
-       <td class="td-coord ${hasCoord ? '' : 'no-coord'}${row.do_banco ? ' conf-' + (row.banco_conf || 'baixa') : ''}">${escHtml(coordText)}</td>
+       <td class="td-coord ${hasCoord ? '' : 'no-coord'}${row.do_banco ? ' do-banco' : ''}">${escHtml(coordText)}</td>
      `);
 tbody.appendChild(tr);
 }
@@ -3067,80 +2910,15 @@ r.do_banco = true;
 const q = document.getElementById('filter-input').value.trim();
 if (q) filtrarTabela(); else renderTable(_allRows);
 updateStats(_allRows);
-// Registra o voto no banco de coordenadas (servidor decide a coord vencedora)
+// Registra a coordenada no banco
 if (enderecoParaBanco) {
   fetch(SERVER + '/coords/salvar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ endereco: enderecoParaBanco, lat: parseFloat(lat), lon: parseFloat(lng) })
-  }).then(r => r.json()).then(r => {
-    if (r.ok) {
-      // O servidor é a fonte da verdade pra coord eleita — se a maioria
-      // apontar pra outra posição, corrige o que mostramos na tabela.
-      const coordEleita = (r.lat != null && r.lon != null)
-        ? Number(r.lat).toFixed(6) + ',' + Number(r.lon).toFixed(6)
-        : coord;
-      for (let i = 0; i < _allRows.length; i++) {
-        const row = _allRows[i];
-        if (i === idx || (gid !== undefined && gid !== null && row.group_id === gid)) {
-          row.coord        = coordEleita;
-          row.lat          = r.lat != null ? Number(r.lat).toFixed(6) : row.lat;
-          row.lon          = r.lon != null ? Number(r.lon).toFixed(6) : row.lon;
-          row.banco_conf   = r.confianca;
-          row.banco_votos  = r.total_votos;
-          row.banco_eleita = r.votos_eleita;
-        }
-      }
-      if (q) filtrarTabela(); else renderTable(_allRows);
-      updateStats(_allRows);
-      mostrarVotoToast(r.msg, r.confianca, r.votos_eleita, r.total_votos);
-    } else {
-      console.warn('[BANCO] Falha ao salvar:', r.erro);
-    }
   }).catch(err => console.warn('[BANCO] Erro:', err));
 }
 });
-
-// Toast de feedback após votar numa coordenada
-function mostrarVotoToast(msg, confianca, votosEleita, totalVotos) {
-  const toast   = document.getElementById('voto-toast');
-  const msgEl   = document.getElementById('voto-toast-msg');
-  const confEl  = document.getElementById('voto-toast-conf');
-  const barEl   = document.getElementById('voto-toast-bar');
-  if (!toast) return;
-
-  const conf = confianca || 'baixa';
-  const rotulos = {
-    alta:    '🟢 Alta confiança',
-    media:   '🟡 Confiança média',
-    baixa:   '🔵 Confiança baixa (1º voto)',
-    disputa: '⚠️ Disputa de localização',
-  };
-
-  msgEl.textContent  = msg || '';
-  confEl.textContent = rotulos[conf] || '';
-  confEl.className   = 'voto-conf';
-
-  const pct = totalVotos > 0 ? Math.round((votosEleita / totalVotos) * 100) : 100;
-  barEl.className = 'voto-bar conf-' + conf;
-  barEl.style.width = '0%';
-  requestAnimationFrame(() => { barEl.style.width = pct + '%'; });
-
-  toast.classList.add('show');
-  toast.classList.remove('animate__animated', 'animate__fadeOutRight');
-  toast.style.setProperty('--animate-duration', '.5s');
-  toast.classList.add('animate__animated', 'animate__bounceInRight');
-
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => {
-    toast.classList.remove('animate__bounceInRight');
-    toast.style.setProperty('--animate-duration', '.3s');
-    toast.classList.add('animate__fadeOutRight');
-    setTimeout(() => {
-      toast.classList.remove('show', 'animate__animated', 'animate__fadeOutRight');
-    }, 300);
-  }, 5000);
-}
 
 async function abrirMapa(coord, endReformado, endOriginal, rowIdx) {
 const lat = (() => {
@@ -3154,26 +2932,8 @@ const p = coord.split(',');
 return parseFloat(p[1]) || -49.2925;
 })();
 
-// Busca os votos já registrados para este endereço — usados para desenhar
-// pins extras (coordenadas que outras pessoas já votaram), além do pin
-// azul "meu voto" que o usuário arrasta livremente.
-const targetRow = _allRows[rowIdx];
-const enderecoParaBanco = targetRow ? (targetRow.address || '') : '';
-let votosExistentes = [];
-if (enderecoParaBanco) {
-try {
-const r = await fetch(SERVER + '/coords/votos?endereco=' + encodeURIComponent(enderecoParaBanco), {
-headers: { ...authHeaders() }
-});
-const j = await r.json();
-if (j.ok && Array.isArray(j.clusters)) votosExistentes = j.clusters;
-} catch (err) {
-console.warn('[BANCO] Não foi possível carregar votos existentes:', err);
-}
-}
-
 const HERE_KEY = 'P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M';
-const html = getMapHtml(HERE_KEY, lat, lng, endReformado, endOriginal, rowIdx, votosExistentes);
+const html = getMapHtml(HERE_KEY, lat, lng, endReformado, endOriginal, rowIdx);
 
 const win = window.open('', '_blank', 'width=1280,height=860');
 if (!win) { alert('Permita pop-ups para este site e tente novamente.'); return; }
@@ -3182,7 +2942,7 @@ win.document.write(html);
 win.document.close();
 }
 
-function getMapHtml(hereKey, initLat, initLng, endReformado, endOriginal, rowIdx, votosExistentes) {
+function getMapHtml(hereKey, initLat, initLng, endReformado, endOriginal, rowIdx) {
 return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -3374,11 +3134,6 @@ const ROW_IDX  = ${rowIdx};
 let currentLat = ${initLat};
 let currentLng = ${initLng};
 
-// Coordenadas já votadas por outras pessoas para este endereço (vindas do
-// banco de votos). Cada item: { lat, lon, votos, usuarios }. Usadas para
-// desenhar pins extras (laranja/roxo) ao lado do pin azul "meu voto".
-const VOTOS_EXISTENTES = ${JSON.stringify(votosExistentes || [])};
-
 // ── Atualiza display de coordenadas ────────────────────────────────────
 function updateDisplay(lat, lng) {
  document.getElementById('pin-lat').textContent = lat.toFixed(6);
@@ -3437,29 +3192,6 @@ const marker  = new H.map.Marker({ lat: currentLat, lng: currentLng }, { icon: p
 marker.draggable = true;
 hereMap.addObject(marker);
 
-// ── Pins das coordenadas já votadas por outras pessoas ─────────────────
-// Cada cluster de voto vira um pin colorido (laranja = 1º lugar, roxo = 2º
-// lugar em diante) e clicável: clicar nele move o pin azul "meu voto"
-// para aquela posição. O usuário ainda pode arrastar/clicar em qualquer
-// outro ponto do mapa para escolher um lugar novo.
-const CORES_VOTO = ['#f59e0b', '#a855f7', '#ec4899', '#06b6d4'];
-function svgPinVoto(cor) {
- return \`<svg xmlns="http://www.w3.org/2000/svg" width="34" height="46" viewBox="0 0 36 48">
-  <path d="M18 0 C8.06 0 0 8.06 0 18 C0 31.5 18 48 18 48 C18 48 36 31.5 36 18 C36 8.06 27.94 0 18 0 Z" fill="\${cor}" stroke="#0b1120" stroke-width="1.5"/>
-  <circle cx="18" cy="20" r="6.5" fill="white"/>
-  <circle cx="18" cy="20" r="3.5" fill="\${cor}"/>
- </svg>\`;
-}
-const votoMarkersHere = [];
-(VOTOS_EXISTENTES || []).slice(0, 4).forEach((v, i) => {
- const cor = CORES_VOTO[i % CORES_VOTO.length];
- const icon = new H.map.Icon('data:image/svg+xml;base64,' + btoa(svgPinVoto(cor)), { size:{w:34,h:46}, anchor:{x:17,y:46} });
- const m = new H.map.Marker({ lat: v.lat, lng: v.lon }, { icon, volatility: true });
- m._votoInfo = v;
- hereMap.addObject(m);
- votoMarkersHere.push(m);
-});
-
 hereMap.addEventListener('dragstart', e => { if (e.target instanceof H.map.Marker) behavior.disable(); });
 hereMap.addEventListener('drag', e => {
  if (e.target === marker) {
@@ -3477,19 +3209,6 @@ hereMap.addEventListener('dragend', e => {
  }
 });
 hereMap.addEventListener('tap', e => {
- if (e.target === marker) return;
- // Clique num pin de voto existente → move "meu voto" para essa posição.
- if (votoMarkersHere.includes(e.target)) {
-   const pos = e.target.getGeometry();
-   marker.setGeometry(pos);
-   updateDisplay(pos.lat, pos.lng);
-   updateGoogle(pos.lat, pos.lng);
-   updateArcgis(pos.lat, pos.lng);
-   const info = e.target._votoInfo;
-   document.getElementById('status-bar').textContent =
-     '📍 Você selecionou uma localização já votada por ' + info.votos + ' pessoa(s).';
-   return;
- }
  const pos = hereMap.screenToGeo(e.currentPointer.viewportX, e.currentPointer.viewportY);
  marker.setGeometry(pos);
  updateDisplay(pos.lat, pos.lng);
@@ -3529,34 +3248,6 @@ window.initGoogleMap = function() {
    map: googleMap,
    draggable: true,
    title: 'Seu voto',
- });
-
- // ── Pins das coordenadas já votadas por outras pessoas ───────────────
- // Ícone redondo colorido (laranja/roxo/...) — clicar nele move o pin
- // vermelho "meu voto" para essa posição, sincronizando com o HERE.
- const CORES_VOTO_G = ['#f59e0b', '#a855f7', '#ec4899', '#06b6d4'];
- (VOTOS_EXISTENTES || []).slice(0, 4).forEach((v, i) => {
-   const cor = CORES_VOTO_G[i % CORES_VOTO_G.length];
-   const m = new google.maps.Marker({
-     position: { lat: v.lat, lng: v.lon },
-     map: googleMap,
-     title: 'Votado por ' + v.votos + ' pessoa(s)',
-     icon: {
-       path: google.maps.SymbolPath.CIRCLE,
-       scale: 9,
-       fillColor: cor,
-       fillOpacity: 1,
-       strokeColor: '#0b1120',
-       strokeWeight: 2,
-     },
-     zIndex: 5,
-   });
-   m.addListener('click', () => {
-     googleMarker.setPosition({ lat: v.lat, lng: v.lon });
-     sincronizarParaHere(v.lat, v.lon);
-     document.getElementById('status-bar').textContent =
-       '📍 Você selecionou uma localização já votada por ' + v.votos + ' pessoa(s).';
-   });
  });
 
  // ── CLIQUE no mapa → move pin Google + atualiza HERE ────────────────
@@ -3676,36 +3367,6 @@ function initArcgisMap() {
  arcgisMarker.on('dragend', () => {
    const pos = arcgisMarker.getLngLat();
    moveMap(pos.lat, pos.lng, pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));
- });
-
- // ── Pins das coordenadas já votadas por outras pessoas ───────────────
- // Cada um vira um marker mapbox colorido (laranja/roxo/...); clicar nele
- // move o pin azul "meu voto" para essa posição. stopPropagation evita
- // que o clique também dispare o listener genérico de "clique no mapa".
- // OBS: ao usar elemento customizado (element), a opção color do Mapbox é
- // ignorada — por isso desenhamos o SVG do pin manualmente abaixo.
- const CORES_VOTO_A = ['#f59e0b', '#a855f7', '#ec4899', '#06b6d4'];
- (VOTOS_EXISTENTES || []).slice(0, 4).forEach((v, i) => {
-   const cor = CORES_VOTO_A[i % CORES_VOTO_A.length];
-   const el = document.createElement('div');
-   el.style.cursor = 'pointer';
-   el.style.width = '30px';
-   el.style.height = '40px';
-   el.title = 'Votado por ' + v.votos + ' pessoa(s)';
-   el.innerHTML = \`<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 36 48">
-     <path d="M18 0 C8.06 0 0 8.06 0 18 C0 31.5 18 48 18 48 C18 48 36 31.5 36 18 C36 8.06 27.94 0 18 0 Z" fill="\${cor}" stroke="#0b1120" stroke-width="1.5"/>
-     <circle cx="18" cy="20" r="6.5" fill="white"/>
-     <circle cx="18" cy="20" r="3.5" fill="\${cor}"/>
-   </svg>\`;
-   const m = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
-     .setLngLat([v.lon, v.lat])
-     .addTo(arcgisMap);
-   el.addEventListener('click', (ev) => {
-     ev.stopPropagation();
-     moveMap(v.lat, v.lon, v.lat.toFixed(6) + ', ' + v.lon.toFixed(6));
-     document.getElementById('status-bar').textContent =
-       '📍 Você selecionou uma localização já votada por ' + v.votos + ' pessoa(s).';
-   });
  });
 
  arcgisMap.on('load', () => {
@@ -4367,27 +4028,10 @@ function renderBancoList() {
     const div = document.createElement('div');
     div.className = 'banco-item';
 
-    const conf   = entry.confianca   || 'baixa';
-    const total  = entry.total_votos  || (Array.isArray(entry.votos) ? entry.votos.length : 1);
-    const eleita = entry.votos_eleita || total;
-    const pct    = total > 0 ? Math.round((eleita / total) * 100) : 100;
-    const rotulos = {
-      alta:    '🟢 Alta confiança',
-      media:   '🟡 Confiança média',
-      baixa:   '🔵 Baixa confiança',
-      disputa: '⚠️ Em disputa',
-    };
-    const confHtml =
-      '<div class="banco-item-conf banco-conf-' + conf + '">' +
-        '<span>' + (rotulos[conf] || conf) + ' · ' + eleita + '/' + total + ' votos</span>' +
-        '<span class="banco-votos-bar"><span class="banco-votos-fill conf-' + conf + '" style="width:' + pct + '%"></span></span>' +
-      '</div>';
-
     div.innerHTML =
       '<div class="banco-item-end">' + escHtml(entry.endereco_original || entry.chave) + '</div>' +
       '<div class="banco-item-coord">📍 ' + entry.lat + ', ' + entry.lon + '</div>' +
-      '<div class="banco-item-data">atualizado em ' + escHtml(entry.salvo_em || '—') + '</div>' +
-      confHtml +
+      '<div class="banco-item-data">atualizado em ' + escHtml(entry.salvo_em || '—') + ' por ' + escHtml(entry.usuario || '—') + '</div>' +
       '<button class="banco-del" title="Remover do banco" onclick="apagarDoBanco(' + JSON.stringify(entry.chave) + ', this)">✕</button>';
     list.appendChild(div);
   });
