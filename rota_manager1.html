@@ -2812,7 +2812,8 @@ if (m.original && !origsUnicos.includes(m.original)) origsUnicos.push(m.original
 }
 
 // Reaproveita coordenada/lat/lon do primeiro selecionado que já tiver
-const comCoord = escolhidos.find(r => r.coord);
+// Prioriza coordenada editada manualmente; se nenhuma, pega a primeira disponível
+const comCoord = escolhidos.find(r => r.coord && r._editado) || escolhidos.find(r => r.coord);
 
 const novoGrupo = {
 raw_row: escolhidos[0].raw_row,
