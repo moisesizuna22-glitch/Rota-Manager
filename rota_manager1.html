@@ -1060,46 +1060,109 @@ accent-color: var(--accent);
 cursor: pointer;
 }
 
-/* ── Drop zone ── */
-#drop-zone, #drop-zone-sem-acesso {
+/* ── Importação de planilha: card estilo painel ── */
+#import-page {
 flex: 1;
+padding: 24px;
+overflow-y: auto;
+}
+#import-card {
+background: var(--surface);
+border: 1px solid var(--border);
+border-radius: var(--radius-lg);
+box-shadow: var(--shadow-sm);
+max-width: 760px;
+padding: 24px 28px 28px;
+}
+.import-card-title {
+display: flex;
+align-items: center;
+gap: 10px;
+font-size: 17px;
+font-weight: 700;
+color: var(--text);
+margin-bottom: 18px;
+}
+.import-card-title .bar {
+width: 4px;
+height: 20px;
+border-radius: 2px;
+background: var(--accent2);
+flex-shrink: 0;
+}
+#drop-zone, #drop-zone-sem-acesso {
 display: flex;
 flex-direction: column;
 align-items: center;
 justify-content: center;
-gap: 16px;
-padding: 40px;
+gap: 10px;
+padding: 36px 24px;
 cursor: pointer;
+border: 1.5px dashed var(--border);
+border-radius: var(--radius-md);
+background: var(--surface2);
+text-align: center;
+transition: border-color .15s, background .15s;
 }
 #drop-zone-sem-acesso { cursor: default; }
-#drop-zone.drag-over { background: rgba(59, 130, 246, .07); }
-.drop-icon { font-size: 56px; opacity: .4; }
+#drop-zone:hover { border-color: var(--accent2); }
+#drop-zone.drag-over { border-color: var(--accent2); background: rgba(99,102,241,.07); }
+.drop-icon {
+width: 48px;
+height: 48px;
+border-radius: var(--radius-md);
+background: rgba(99,102,241,.12);
+color: var(--accent2);
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.drop-icon svg { width: 22px; height: 22px; }
 .drop-title {
 font-family: var(--display);
-font-size: 26px;
-font-weight: 600;
-letter-spacing: .06em;
-text-transform: uppercase;
+font-size: 17px;
+font-weight: 700;
 color: var(--text);
-opacity: .8;
 }
-.drop-sub { font-size: 14px; color: var(--muted); }
+.drop-sub { font-size: 13px; color: var(--muted); }
+#server-status { font-size: 12px; color: var(--muted); }
+.import-actions {
+display: flex;
+gap: 10px;
+margin-top: 18px;
+flex-wrap: wrap;
+}
 .drop-btn {
-padding: 13px 34px;
-background: var(--accent);
-color: #1a1205;
-font-weight: 800;
+display: inline-flex;
+align-items: center;
+gap: 8px;
+padding: 11px 22px;
+background: var(--accent2);
+color: #fff;
+font-weight: 700;
 font-size: 14px;
-letter-spacing: .06em;
-text-transform: uppercase;
 border: none;
-border-radius: 3px;
+border-radius: var(--radius-md);
 cursor: pointer;
-transition: .15s;
-margin-top: 8px;
-box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 2px 4px rgba(0,0,0,.4);
+transition: filter .15s, opacity .15s;
+opacity: .85;
 }
-.drop-btn:hover { filter: brightness(1.1); }
+.drop-btn:hover { filter: brightness(1.08); }
+.btn-clear-import {
+display: inline-flex;
+align-items: center;
+gap: 8px;
+padding: 11px 22px;
+background: var(--surface2);
+color: var(--text);
+font-weight: 700;
+font-size: 14px;
+border: 1px solid var(--border);
+border-radius: var(--radius-md);
+cursor: pointer;
+transition: background .15s;
+}
+.btn-clear-import:hover { background: var(--border); }
 #file-input { display: none; }
 
 /* ── Tabela ── */
@@ -1463,12 +1526,16 @@ order: 3;
 #count-badge { order: 4; width: 100%; text-align: center; }
 
 /* Drop zone menor */
-#drop-zone { padding: 24px 16px; gap: 12px; }
-.drop-icon { font-size: 40px; }
-.drop-title { font-size: 17px; }
-.drop-sub { font-size: 13px; text-align: center; }
-#server-status { font-size: 12px; text-align: center; }
-.drop-btn { padding: 10px 24px; font-size: 14px; }
+#import-page { padding: 16px; }
+#import-card { padding: 18px 16px 20px; max-width: 100%; }
+#drop-zone { padding: 28px 16px; gap: 8px; }
+.drop-icon { width: 40px; height: 40px; }
+.drop-icon svg { width: 18px; height: 18px; }
+.drop-title { font-size: 15px; }
+.drop-sub { font-size: 12px; text-align: center; }
+#server-status { font-size: 11px; text-align: center; }
+.import-actions { flex-direction: column; }
+.drop-btn, .btn-clear-import { width: 100%; justify-content: center; padding: 12px 20px; }
 
 /* Stats bar: quebra linha no mobile em vez de criar scroll horizontal que vaza */
 .stats-bar {
@@ -2068,10 +2135,6 @@ display: flex; align-items: center;
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
       <span class="nav-label">Histórico</span>
     </button>
-    <button class="nav-item" id="snav-banco" onclick="sidebarNav('banco')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-      <span class="nav-label">Banco de Coords</span>
-    </button>
     <p class="nav-section-label" style="margin-top:6px">Conta</p>
     <button class="nav-item" id="snav-assinatura" onclick="sidebarNav('assinatura')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -2463,17 +2526,21 @@ display: flex; align-items: center;
 <span id="count-badge" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
 </div>
 
+<!-- Página de importação: card estilo painel -->
+<div id="import-page">
+<div id="import-card">
+<div class="import-card-title"><span class="bar"></span>Importar Planilha de Endereços</div>
+
 <!-- Drop zone inicial (começa oculta — JS decide qual exibir após checar acesso, evitando flash) -->
 <div id="drop-zone" onclick="document.getElementById('file-input').click()" style="display:none">
-<div class="drop-icon">📋</div>
-<div class="drop-title">Importe sua planilha de rotas</div>
-<div class="drop-sub">Arraste o arquivo <b>rota.xlsx</b> ou clique para selecionar</div>
-<div id="server-status" style="font-size:13px;margin-top:6px;color:var(--muted)">
+<div class="drop-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-5 5M12 4l5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+</div>
+<div class="drop-title">Selecionar Planilha</div>
+<div class="drop-sub">Arraste e solte ou clique — .xlsx, .xls, .csv</div>
+<div id="server-status">
 ⚠️ Rode <b>servidor.py</b> na mesma pasta para ativar o pipeline Python
 </div>
-<button class="drop-btn" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
-Escolher arquivo .xlsx
-</button>
 </div>
 
 <!-- Drop zone alternativa: acesso/assinatura vencida OU limite diário atingido (sem clique, sem botão de upload) -->
@@ -2483,6 +2550,20 @@ Escolher arquivo .xlsx
 <div class="drop-sub" id="drop-sub-sem-acesso">Nenhuma rota ativa</div>
 <button class="drop-btn" id="drop-btn-sem-acesso" onclick="abrirAssinatura()">🔓 Realizar nova assinatura</button>
 </div>
+
+<div class="import-actions">
+<button class="drop-btn" onclick="document.getElementById('file-input').click()">
+<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+Buscar &amp; Processar
+</button>
+<button class="btn-clear-import" onclick="limparImportacao()">
+<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
+Limpar
+</button>
+</div>
+</div>
+</div>
+
 
 <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(event)">
 
@@ -4109,10 +4190,9 @@ if (el) {
   }
 }
 
-  // Mostra botão histórico assim que servidor conectar; banco só para admin
+  // Mostra botão histórico assim que servidor conectar (banco de coords é interno, não exibido)
   if (_serverOnline) {
     document.getElementById('btn-hist').style.display = '';
-    if (isAdminUser()) document.getElementById('btn-banco').style.display = '';
   }
 
   // Só troca a tela se a tabela de resultados não estiver visível
@@ -4145,6 +4225,11 @@ return;
 }
 
 processarComServidor(file);
+}
+
+// Botão "Limpar" do card de importação: só reseta a seleção de arquivo atual
+function limparImportacao() {
+document.getElementById('file-input').value = '';
 }
 
 async function processarComServidor(file) {
@@ -4272,7 +4357,6 @@ function mostrarRotaNoApp(rows, headers, nomeArquivo) {
   document.getElementById('bottom-nav').classList.add('show');
   document.body.classList.add('has-bottom-nav');
   document.getElementById('btn-hist').style.display = '';
-  if (isAdminUser()) document.getElementById('btn-banco').style.display = '';
 
   _nomeAtual = nomeArquivo;
   renderHistoricoPanel();
