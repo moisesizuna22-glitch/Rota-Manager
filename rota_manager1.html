@@ -153,6 +153,27 @@ input, select, textarea { font: inherit; color: inherit; }
 .sidebar-collapse-btn:hover { background: var(--accent2); color: #fff; border-color: var(--accent2); }
 .sidebar-collapse-btn svg { width: 13px; height: 13px; }
 
+#sidebar .badge {
+  display: none;
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.55);
+  word-break: break-word;
+}
+#sidebar .badge.show { display: block; }
+#sidebar .badge b { color: var(--accent2); }
+#sidebar.collapsed .badge { display: none; }
+[data-theme="light"] #sidebar .badge {
+  background: rgba(0,0,0,0.04);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
 .sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; }
 
 .nav-section-label {
@@ -2355,6 +2376,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" onclick="toggleSidebar()" title="Recolher menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 19l-7-7 7-7"/></svg>
   </button>
+  <div class="badge" id="file-badge"></div>
   <nav class="sidebar-nav">
     <p class="nav-section-label">Principal</p>
     <button class="nav-item active" id="snav-lista" onclick="sidebarNav('lista')">
@@ -2677,10 +2699,6 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 </button>
 <div class="logo"><span class="logo-emoji">🗺</span> ROTA<span>MANAGER</span></div>
 <div class="spacer"></div>
-<div class="badge" id="file-badge"></div>
-  <button class="btn-hist" id="btn-hist" onclick="abrirHistorico()" style="display:none">
-    🗂 <span class="label">Histórico</span>
-  </button>
   <button class="btn-hist" id="btn-banco" onclick="abrirBanco()" style="display:none">
     📌 <span class="label">Banco</span>
   </button>
@@ -4429,7 +4447,7 @@ if (el) {
 
   // Mostra botão histórico assim que servidor conectar (banco de coords é interno, não exibido)
   if (_serverOnline) {
-    document.getElementById('btn-hist').style.display = '';
+    document.getElementById('btn-hist')?.style && (document.getElementById('btn-hist').style.display = '');
   }
 
   // Só troca a tela se a tabela de resultados não estiver visível
@@ -4601,7 +4619,7 @@ function mostrarRotaNoApp(rows, headers, nomeArquivo) {
   document.getElementById('toolbar').style.display = 'flex';
   document.getElementById('bottom-nav').classList.add('show');
   document.body.classList.add('has-bottom-nav');
-  document.getElementById('btn-hist').style.display = '';
+  document.getElementById('btn-hist')?.style && (document.getElementById('btn-hist').style.display = '');
 
   _nomeAtual = nomeArquivo;
   renderHistoricoPanel();
