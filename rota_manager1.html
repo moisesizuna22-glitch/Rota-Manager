@@ -2686,6 +2686,10 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   <button class="btn-hist" id="btn-admin" onclick="abrirAdmin()" style="display:none">
     🛠 <span class="label">Admin</span>
   </button>
+  <button class="btn-hist" id="btn-theme-toggle-header" onclick="toggleTheme()" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+    <svg id="theme-icon-header" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <span class="label" id="theme-toggle-header-label">Claro</span>
+  </button>
 <div class="header-user" id="header-user" style="display:none">
   <button class="profile-trigger" id="profile-trigger" onclick="toggleProfileDropdown()" aria-expanded="false" aria-label="Menu do usuário">
     <div class="profile-avatar" id="profile-avatar">?</div>
@@ -5956,13 +5960,26 @@ function closeMobileSidebar() {
   document.getElementById('sidebar-overlay').style.display = 'none';
 }
 
+const ICON_SUN = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+const ICON_MOON = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+
+function _applyThemeUI(theme) {
+  const isDark = theme === 'dark';
+  const sideLabel = document.getElementById('theme-toggle-label');
+  const headerLabel = document.getElementById('theme-toggle-header-label');
+  const headerIcon = document.getElementById('theme-icon-header');
+  if (sideLabel) sideLabel.textContent = isDark ? 'Claro' : 'Escuro';
+  if (headerLabel) headerLabel.textContent = isDark ? 'Claro' : 'Escuro';
+  if (headerIcon) headerIcon.innerHTML = isDark ? ICON_SUN : ICON_MOON;
+}
+
 function toggleTheme() {
   const html = document.documentElement;
   const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  const label = document.getElementById('theme-toggle-label');
-  if (label) label.textContent = isDark ? 'Escuro' : 'Claro';
-  localStorage.setItem('_rm_theme', isDark ? 'light' : 'dark');
+  const newTheme = isDark ? 'light' : 'dark';
+  html.setAttribute('data-theme', newTheme);
+  _applyThemeUI(newTheme);
+  localStorage.setItem('_rm_theme', newTheme);
 }
 
 // Sidebar navigation: map to existing panel open functions
@@ -6001,9 +6018,8 @@ function _updateSidebarUser(user, plan) {
   const savedTheme = localStorage.getItem('_rm_theme');
   if (savedTheme) {
     document.documentElement.setAttribute('data-theme', savedTheme);
-    const label = document.getElementById('theme-toggle-label');
-    if (label) label.textContent = savedTheme === 'dark' ? 'Claro' : 'Escuro';
   }
+  _applyThemeUI(document.documentElement.getAttribute('data-theme'));
 })();
 
 </script>
