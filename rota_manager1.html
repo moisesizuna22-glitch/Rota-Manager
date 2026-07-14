@@ -829,8 +829,7 @@ header .badge b { color: var(--accent2); }
     padding: 2px 0;
   }
   .scan-lista-item input:focus { outline: none; border-bottom: 1px solid var(--accent2); }
-  .scan-lista-item input.nome { font-weight: 700; }
-  .scan-lista-item input.endereco { color: var(--muted); }
+  .scan-lista-item input.endereco { color: var(--text); font-weight: 600; }
   .scan-lista-item-fonte { font-size: 10px; color: var(--accent2); white-space: nowrap; }
   .scan-lista-item-del {
     background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; line-height: 1; flex-shrink: 0;
@@ -3364,10 +3363,6 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
       <span class="nav-label">Rota Scan</span>
     </button>
-    <button class="nav-item" id="snav-extracao" onclick="sidebarNav('extracao')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-      <span class="nav-label">Extrair de Prints</span>
-    </button>
     <p class="nav-section-label" style="margin-top:6px">Conta</p>
     <button class="nav-item" id="snav-assinatura" onclick="sidebarNav('assinatura')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -3636,8 +3631,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           <div id="scan-cam-guide"></div>
           <div id="scan-cam-hint">Encaixe a linha aqui dentro</div>
           <div id="scan-cam-topbar">
-            <button type="button" class="scan-cam-pill active" id="scan-cam-pill-nome" onclick="scanSetModoCaptura('nome')">👤 Nome<span class="val" id="scan-cam-nome-val">—</span></button>
-            <button type="button" class="scan-cam-pill" id="scan-cam-pill-end" onclick="scanSetModoCaptura('endereco')">📍 Endereço<span class="val" id="scan-cam-end-val">—</span></button>
+            <span class="scan-cam-pill active" style="flex:none; padding-left:14px; padding-right:14px;">📍 Endereço</span>
           </div>
           <div id="scan-cam-badge">📋 0 itens</div>
           <div id="scan-cam-toast"></div>
@@ -7437,14 +7431,6 @@ function scanPararStream() {
 function scanFecharCameraViva() {
   scanPararStream();
   document.getElementById('scan-cam-overlay').classList.remove('show');
-  // Descarta rascunho incompleto (nome capturado sem endereço, se houver)
-  _scanDraftNome = '';
-  _scanDraftEndereco = '';
-  const nomeVal = document.getElementById('scan-cam-nome-val');
-  const endVal = document.getElementById('scan-cam-end-val');
-  if (nomeVal) nomeVal.textContent = '—';
-  if (endVal) endVal.textContent = '—';
-  scanSetModoCaptura('nome');
 }
 
 function scanAlternarCamera() {
@@ -7453,17 +7439,8 @@ function scanAlternarCamera() {
 }
 
 // ── Modos de captura (Nome / Endereço) e lista acumulada ────────────
-let _scanCapturaModo = 'nome'; // 'nome' | 'endereco'
-let _scanDraftNome = '';
-let _scanDraftEndereco = '';
-let _scanListaItens = []; // [{id, nome, endereco, lat, lng, fonte}]
+let _scanListaItens = []; // [{id, endereco, lat, lng, fonte}]
 let _scanListaSeq = 0;
-
-function scanSetModoCaptura(modo) {
-  _scanCapturaModo = modo;
-  document.getElementById('scan-cam-pill-nome').classList.toggle('active', modo === 'nome');
-  document.getElementById('scan-cam-pill-end').classList.toggle('active', modo === 'endereco');
-}
 
 function scanMostrarToast(msg) {
   const toast = document.getElementById('scan-cam-toast');
@@ -7553,32 +7530,14 @@ async function scanCapturarFotoViva() {
     }
     scanFlashCaptura(true); // leitura boa: flash verde de confirmação
 
-    if (_scanCapturaModo === 'nome') {
-      _scanDraftNome = texto;
-      document.getElementById('scan-cam-nome-val').textContent = texto;
-      scanMostrarToast('✅ Nome capturado');
-      scanSetModoCaptura('endereco');
-    } else {
-      _scanDraftEndereco = texto;
-      document.getElementById('scan-cam-end-val').textContent = texto;
-
-      _scanListaItens.push({
-        id: ++_scanListaSeq,
-        nome: _scanDraftNome,
-        endereco: _scanDraftEndereco,
-        lat: null, lng: null, fonte: ''
-      });
-      scanAtualizarBadgeCam();
-      scanRenderLista();
-      scanMostrarToast(`✅ Item adicionado (${_scanListaItens.length})`);
-
-      // reseta o rascunho pro próximo item
-      _scanDraftNome = '';
-      _scanDraftEndereco = '';
-      document.getElementById('scan-cam-nome-val').textContent = '—';
-      document.getElementById('scan-cam-end-val').textContent = '—';
-      scanSetModoCaptura('nome');
-    }
+    _scanListaItens.push({
+      id: ++_scanListaSeq,
+      endereco: texto,
+      lat: null, lng: null, fonte: ''
+    });
+    scanAtualizarBadgeCam();
+    scanRenderLista();
+    scanMostrarToast(`✅ Item adicionado (${_scanListaItens.length})`);
   } catch (e) {
     scanMostrarToast('❌ Erro no OCR');
   } finally {
@@ -7726,14 +7685,13 @@ function scanRenderLista() {
   count.textContent = `${_scanListaItens.length} item(ns)`;
 
   if (!_scanListaItens.length) {
-    wrap.innerHTML = '<div id="scan-lista-empty">Nenhum item ainda. Use a câmera (👤 Nome → 📍 Endereço) pra ir adicionando.</div>';
+    wrap.innerHTML = '<div id="scan-lista-empty">Nenhum item ainda. Use a câmera pra ir adicionando endereços.</div>';
     return;
   }
 
   wrap.innerHTML = _scanListaItens.map(it => `
     <div class="scan-lista-item" data-id="${it.id}">
       <div class="scan-lista-item-fields">
-        <input class="nome" placeholder="Nome" value="${escHtml(it.nome || '')}" oninput="scanEditarItemLista(${it.id}, 'nome', this.value)">
         <input class="endereco" placeholder="Endereço" value="${escHtml(it.endereco || '')}" oninput="scanEditarItemLista(${it.id}, 'endereco', this.value)">
       </div>
       ${it.fonte ? `<span class="scan-lista-item-fonte">${escHtml(it.fonte)}</span>` : ''}
@@ -7846,9 +7804,9 @@ async function scanGerarListaXlsx() {
   scanRenderLista();
   status.textContent = '📄 Gerando planilha...';
 
-  const dataOut = [['Nome', 'Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']];
+  const dataOut = [['Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']];
   _scanListaItens.forEach(it => {
-    dataOut.push([it.nome || '', it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
+    dataOut.push([it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
   });
   const ws = XLSX.utils.aoa_to_sheet(dataOut);
   const wb = XLSX.utils.book_new();
