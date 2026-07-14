@@ -635,6 +635,77 @@ header .badge b { color: var(--accent2); }
   #scan-capture-hint { font-size: 12px; color: var(--muted); }
   .scan-cam-row { display: flex; gap: 8px; margin-top: 12px; }
   .scan-cam-row .btn { flex: 1; font-size: 13px; }
+
+  /* ── Câmera ao vivo com guia de recorte (Rota Scan) ── */
+  #scan-cam-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 600;
+    flex-direction: column;
+  }
+  #scan-cam-overlay.show { display: flex; }
+  #scan-cam-video-wrap {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    background: #000;
+  }
+  #scan-cam-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #scan-cam-guide {
+    position: absolute;
+    left: 5%;
+    right: 5%;
+    top: 42%;
+    height: 16%;
+    border: 2px solid #ffb300;
+    border-radius: 6px;
+    box-shadow: 0 0 0 2000px rgba(0,0,0,.55);
+    pointer-events: none;
+  }
+  #scan-cam-hint {
+    position: absolute;
+    left: 5%;
+    right: 5%;
+    top: calc(42% - 28px);
+    text-align: center;
+    color: #ffb300;
+    font-size: 12px;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8);
+    pointer-events: none;
+  }
+  #scan-cam-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px calc(18px + env(safe-area-inset-bottom, 0px));
+    background: #000;
+  }
+  #scan-cam-shutter {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: #fff;
+    border: 4px solid #ffb300;
+    cursor: pointer;
+    padding: 0;
+  }
+  #scan-cam-close, #scan-cam-flip {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    width: 44px;
+    height: 44px;
+  }
   #scan-texto {
     width: 100%;
     box-sizing: border-box;
@@ -3413,12 +3484,26 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <img id="scan-preview-img" alt="Foto capturada">
         <div id="scan-capture-hint">Tire uma foto da etiqueta ou envie da galeria</div>
         <div class="scan-cam-row">
-          <button class="btn btn-primary" onclick="document.getElementById('scan-file-camera').click()">📷 Câmera</button>
+          <button class="btn btn-primary" onclick="scanAbrirCameraViva()">📷 Câmera</button>
           <button class="btn" onclick="document.getElementById('scan-file-galeria').click()">🖼 Galeria</button>
         </div>
       </div>
       <input type="file" id="scan-file-camera" accept="image/*" capture="environment" style="display:none" onchange="scanArquivoSelecionado(event)">
       <input type="file" id="scan-file-galeria" accept="image/*" style="display:none" onchange="scanArquivoSelecionado(event)">
+
+      <div id="scan-cam-overlay">
+        <div id="scan-cam-video-wrap">
+          <video id="scan-cam-video" autoplay playsinline muted></video>
+          <div id="scan-cam-guide"></div>
+          <div id="scan-cam-hint">Encaixe a linha do endereço aqui dentro</div>
+        </div>
+        <div id="scan-cam-controls">
+          <button id="scan-cam-close" onclick="scanFecharCameraViva()">✕</button>
+          <button id="scan-cam-shutter" onclick="scanCapturarFotoViva()" aria-label="Capturar"></button>
+          <button id="scan-cam-flip" onclick="scanAlternarCamera()">🔄</button>
+        </div>
+        <canvas id="scan-cam-canvas" style="display:none"></canvas>
+      </div>
 
       <textarea id="scan-texto" placeholder="Texto reconhecido (editável)..." onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); scanExecutarBusca(); }"></textarea>
       <div class="scan-campos-tags" id="scan-campos-tags"></div>
@@ -6746,6 +6831,7 @@ function abrirScan() {
 
 function fecharScan(e) {
   if (e && e.target !== document.getElementById('scan-overlay')) return;
+  scanFecharCameraViva();
   _fecharOverlayAnimado('scan-overlay', 'scan-panel', 'animate__slideOutRight');
 }
 
@@ -7136,6 +7222,96 @@ async function anjunBaixarResultado() {
   } catch (err) {
     document.getElementById('anjun-status').textContent = '❌ ' + err.message;
   }
+}
+
+// ── Câmera ao vivo com guia de recorte ──────────────────────────────
+let _scanCamStream = null;
+let _scanCamFacing = 'environment';
+
+async function scanAbrirCameraViva() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // Sem suporte: cai no input de arquivo com câmera nativa do sistema
+    document.getElementById('scan-file-camera').click();
+    return;
+  }
+  document.getElementById('scan-cam-overlay').classList.add('show');
+  await scanIniciarStream();
+}
+
+async function scanIniciarStream() {
+  scanPararStream();
+  try {
+    _scanCamStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: _scanCamFacing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    const video = document.getElementById('scan-cam-video');
+    video.srcObject = _scanCamStream;
+  } catch (e) {
+    alert('Não foi possível acessar a câmera: ' + e.message);
+    scanFecharCameraViva();
+  }
+}
+
+function scanPararStream() {
+  if (_scanCamStream) {
+    _scanCamStream.getTracks().forEach(t => t.stop());
+    _scanCamStream = null;
+  }
+}
+
+function scanFecharCameraViva() {
+  scanPararStream();
+  document.getElementById('scan-cam-overlay').classList.remove('show');
+}
+
+function scanAlternarCamera() {
+  _scanCamFacing = _scanCamFacing === 'environment' ? 'user' : 'environment';
+  scanIniciarStream();
+}
+
+function scanCapturarFotoViva() {
+  const video = document.getElementById('scan-cam-video');
+  const guide = document.getElementById('scan-cam-guide');
+  const wrap = document.getElementById('scan-cam-video-wrap');
+  const canvas = document.getElementById('scan-cam-canvas');
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+
+  // Mapeia a área da guia (tela) para as coordenadas reais do vídeo,
+  // considerando que object-fit:cover corta o vídeo pra preencher o wrap.
+  const wrapRect = wrap.getBoundingClientRect();
+  const guideRect = guide.getBoundingClientRect();
+
+  const scale = Math.max(wrapRect.width / vw, wrapRect.height / vh);
+  const dispW = vw * scale, dispH = vh * scale;
+  const offX = (wrapRect.width - dispW) / 2;
+  const offY = (wrapRect.height - dispH) / 2;
+
+  let sx = (guideRect.left - wrapRect.left - offX) / scale;
+  let sy = (guideRect.top - wrapRect.top - offY) / scale;
+  let sw = guideRect.width / scale;
+  let sh = guideRect.height / scale;
+
+  sx = Math.max(0, sx);
+  sy = Math.max(0, sy);
+  sw = Math.min(sw, vw - sx);
+  sh = Math.min(sh, vh - sy);
+
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  _scanFotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
+  const img = document.getElementById('scan-preview-img');
+  const area = document.getElementById('scan-capture-area');
+  img.src = _scanFotoBase64;
+  area.classList.add('has-img');
+
+  scanFecharCameraViva();
+  scanReconhecerTexto();
 }
 
 function scanArquivoSelecionado(event) {
