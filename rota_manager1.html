@@ -681,6 +681,72 @@ header .badge b { color: var(--accent2); }
     text-shadow: 0 1px 3px rgba(0,0,0,.8);
     pointer-events: none;
   }
+  #scan-cam-topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    gap: 8px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+    z-index: 2;
+  }
+  .scan-cam-pill {
+    flex: 1;
+    background: rgba(15,20,30,.7);
+    border: 1px solid rgba(255,255,255,.25);
+    color: #cbd5e1;
+    border-radius: 20px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .scan-cam-pill.active {
+    background: #ffb300;
+    color: #1a1200;
+    border-color: #ffb300;
+  }
+  .scan-cam-pill .val {
+    display: block;
+    font-weight: 400;
+    font-size: 11px;
+    opacity: .85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #scan-cam-badge {
+    position: absolute;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: 12px;
+    background: rgba(34,197,94,.9);
+    color: #05230f;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 5px 10px;
+    z-index: 3;
+  }
+  #scan-cam-toast {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15,20,30,.9);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 20px;
+    opacity: 0;
+    transition: opacity .25s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #scan-cam-toast.show { opacity: 1; }
   #scan-cam-controls {
     display: flex;
     align-items: center;
@@ -706,6 +772,54 @@ header .badge b { color: var(--accent2); }
     width: 44px;
     height: 44px;
   }
+
+  /* ── Lista acumulada de itens escaneados (Rota Scan) ── */
+  #scan-lista-wrap {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  #scan-lista-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  #scan-lista-header .title { flex: 1; font-size: 13px; font-weight: 700; color: var(--text); }
+  #scan-lista-count { font-size: 11px; color: var(--muted); }
+  #scan-lista-itens { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .scan-lista-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .scan-lista-item-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .scan-lista-item input {
+    width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--text);
+    font-size: 12px;
+    padding: 2px 0;
+  }
+  .scan-lista-item input:focus { outline: none; border-bottom: 1px solid var(--accent2); }
+  .scan-lista-item input.nome { font-weight: 700; }
+  .scan-lista-item input.endereco { color: var(--muted); }
+  .scan-lista-item-fonte { font-size: 10px; color: var(--accent2); white-space: nowrap; }
+  .scan-lista-item-del {
+    background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; line-height: 1; flex-shrink: 0;
+  }
+  .scan-lista-item-del:hover { color: var(--danger); }
+  #scan-lista-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 10px; }
+  #scan-lista-status { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
+  .scan-lista-row { display: flex; gap: 8px; margin-top: 8px; }
+  .scan-lista-row .btn { flex: 1; font-size: 13px; }
   #scan-texto {
     width: 100%;
     box-sizing: border-box;
@@ -3495,7 +3609,13 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <div id="scan-cam-video-wrap">
           <video id="scan-cam-video" autoplay playsinline muted></video>
           <div id="scan-cam-guide"></div>
-          <div id="scan-cam-hint">Encaixe a linha do endereço aqui dentro</div>
+          <div id="scan-cam-hint">Encaixe a linha aqui dentro</div>
+          <div id="scan-cam-topbar">
+            <button type="button" class="scan-cam-pill active" id="scan-cam-pill-nome" onclick="scanSetModoCaptura('nome')">👤 Nome<span class="val" id="scan-cam-nome-val">—</span></button>
+            <button type="button" class="scan-cam-pill" id="scan-cam-pill-end" onclick="scanSetModoCaptura('endereco')">📍 Endereço<span class="val" id="scan-cam-end-val">—</span></button>
+          </div>
+          <div id="scan-cam-badge">📋 0 itens</div>
+          <div id="scan-cam-toast"></div>
         </div>
         <div id="scan-cam-controls">
           <button id="scan-cam-close" onclick="scanFecharCameraViva()">✕</button>
@@ -3517,6 +3637,21 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <h3>Resultado</h3>
         <div id="scan-melhor-resultado"></div>
         <div class="scan-alt-list" id="scan-alt-list"></div>
+      </div>
+
+      <div id="scan-lista-wrap">
+        <div id="scan-lista-header">
+          <span class="title">📋 Lista para gerar planilha</span>
+          <span id="scan-lista-count">0 item(ns)</span>
+        </div>
+        <div id="scan-lista-itens">
+          <div id="scan-lista-empty">Nenhum item ainda. Use a câmera (👤 Nome → 📍 Endereço) pra ir adicionando.</div>
+        </div>
+        <div class="scan-lista-row">
+          <button class="btn btn-primary" id="scan-lista-gerar-btn" onclick="scanGerarListaXlsx()">🌍 Gerar lista (geolocalizar + baixar XLSX)</button>
+          <button class="btn" onclick="scanLimparLista()">Limpar lista</button>
+        </div>
+        <div id="scan-lista-status"></div>
       </div>
     </div>
   </div>
@@ -7235,6 +7370,7 @@ async function scanAbrirCameraViva() {
     return;
   }
   document.getElementById('scan-cam-overlay').classList.add('show');
+  scanAtualizarBadgeCam();
   await scanIniciarStream();
 }
 
@@ -7263,6 +7399,14 @@ function scanPararStream() {
 function scanFecharCameraViva() {
   scanPararStream();
   document.getElementById('scan-cam-overlay').classList.remove('show');
+  // Descarta rascunho incompleto (nome capturado sem endereço, se houver)
+  _scanDraftNome = '';
+  _scanDraftEndereco = '';
+  const nomeVal = document.getElementById('scan-cam-nome-val');
+  const endVal = document.getElementById('scan-cam-end-val');
+  if (nomeVal) nomeVal.textContent = '—';
+  if (endVal) endVal.textContent = '—';
+  scanSetModoCaptura('nome');
 }
 
 function scanAlternarCamera() {
@@ -7270,14 +7414,52 @@ function scanAlternarCamera() {
   scanIniciarStream();
 }
 
-function scanCapturarFotoViva() {
+// ── Modos de captura (Nome / Endereço) e lista acumulada ────────────
+let _scanCapturaModo = 'nome'; // 'nome' | 'endereco'
+let _scanDraftNome = '';
+let _scanDraftEndereco = '';
+let _scanListaItens = []; // [{id, nome, endereco, lat, lng, fonte}]
+let _scanListaSeq = 0;
+
+function scanSetModoCaptura(modo) {
+  _scanCapturaModo = modo;
+  document.getElementById('scan-cam-pill-nome').classList.toggle('active', modo === 'nome');
+  document.getElementById('scan-cam-pill-end').classList.toggle('active', modo === 'endereco');
+}
+
+function scanMostrarToast(msg) {
+  const toast = document.getElementById('scan-cam-toast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 1600);
+}
+
+function scanAtualizarBadgeCam() {
+  const badge = document.getElementById('scan-cam-badge');
+  if (badge) badge.textContent = `📋 ${_scanListaItens.length} ${_scanListaItens.length === 1 ? 'item' : 'itens'}`;
+}
+
+async function scanOcrSoTexto(base64) {
+  const r = await fetch(SERVER + '/scan/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ imagem: base64 })
+  });
+  const d = await r.json();
+  if (!d.ok) throw new Error(d.erro || 'Falha no OCR.');
+  return (d.texto || '').replace(/\s+/g, ' ').trim();
+}
+
+function scanCropFrameParaBase64() {
   const video = document.getElementById('scan-cam-video');
   const guide = document.getElementById('scan-cam-guide');
   const wrap = document.getElementById('scan-cam-video-wrap');
   const canvas = document.getElementById('scan-cam-canvas');
 
   const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return;
+  if (!vw || !vh) return null;
 
   // Mapeia a área da guia (tela) para as coordenadas reais do vídeo,
   // considerando que object-fit:cover corta o vídeo pra preencher o wrap.
@@ -7303,15 +7485,54 @@ function scanCapturarFotoViva() {
   canvas.height = sh;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
 
-  _scanFotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
-  const img = document.getElementById('scan-preview-img');
-  const area = document.getElementById('scan-capture-area');
-  img.src = _scanFotoBase64;
-  area.classList.add('has-img');
+async function scanCapturarFotoViva() {
+  const base64 = scanCropFrameParaBase64();
+  if (!base64) return;
 
-  scanFecharCameraViva();
-  scanReconhecerTexto();
+  const shutter = document.getElementById('scan-cam-shutter');
+  shutter.disabled = true;
+  scanMostrarToast('⏳ Reconhecendo...');
+  try {
+    const texto = await scanOcrSoTexto(base64);
+    if (!texto) {
+      scanMostrarToast('⚠️ Nada reconhecido, tente de novo');
+      return;
+    }
+
+    if (_scanCapturaModo === 'nome') {
+      _scanDraftNome = texto;
+      document.getElementById('scan-cam-nome-val').textContent = texto;
+      scanMostrarToast('✅ Nome capturado');
+      scanSetModoCaptura('endereco');
+    } else {
+      _scanDraftEndereco = texto;
+      document.getElementById('scan-cam-end-val').textContent = texto;
+
+      _scanListaItens.push({
+        id: ++_scanListaSeq,
+        nome: _scanDraftNome,
+        endereco: _scanDraftEndereco,
+        lat: null, lng: null, fonte: ''
+      });
+      scanAtualizarBadgeCam();
+      scanRenderLista();
+      scanMostrarToast(`✅ Item adicionado (${_scanListaItens.length})`);
+
+      // reseta o rascunho pro próximo item
+      _scanDraftNome = '';
+      _scanDraftEndereco = '';
+      document.getElementById('scan-cam-nome-val').textContent = '—';
+      document.getElementById('scan-cam-end-val').textContent = '—';
+      scanSetModoCaptura('nome');
+    }
+  } catch (e) {
+    scanMostrarToast('❌ Erro no OCR');
+  } finally {
+    shutter.disabled = false;
+  }
 }
 
 function scanArquivoSelecionado(event) {
@@ -7445,6 +7666,135 @@ function scanLimpar() {
   const area = document.getElementById('scan-capture-area');
   img.src = '';
   area.classList.remove('has-img');
+}
+
+// ── Lista acumulada (Nome + Endereço) ────────────────────────────────
+function scanRenderLista() {
+  const wrap = document.getElementById('scan-lista-itens');
+  const count = document.getElementById('scan-lista-count');
+  count.textContent = `${_scanListaItens.length} item(ns)`;
+
+  if (!_scanListaItens.length) {
+    wrap.innerHTML = '<div id="scan-lista-empty">Nenhum item ainda. Use a câmera (👤 Nome → 📍 Endereço) pra ir adicionando.</div>';
+    return;
+  }
+
+  wrap.innerHTML = _scanListaItens.map(it => `
+    <div class="scan-lista-item" data-id="${it.id}">
+      <div class="scan-lista-item-fields">
+        <input class="nome" placeholder="Nome" value="${escHtml(it.nome || '')}" oninput="scanEditarItemLista(${it.id}, 'nome', this.value)">
+        <input class="endereco" placeholder="Endereço" value="${escHtml(it.endereco || '')}" oninput="scanEditarItemLista(${it.id}, 'endereco', this.value)">
+      </div>
+      ${it.fonte ? `<span class="scan-lista-item-fonte">${escHtml(it.fonte)}</span>` : ''}
+      <button class="scan-lista-item-del" onclick="scanRemoverItemLista(${it.id})" title="Remover">✕</button>
+    </div>
+  `).join('');
+}
+
+function scanEditarItemLista(id, campo, valor) {
+  const item = _scanListaItens.find(i => i.id === id);
+  if (item) item[campo] = valor;
+}
+
+function scanRemoverItemLista(id) {
+  _scanListaItens = _scanListaItens.filter(i => i.id !== id);
+  scanAtualizarBadgeCam();
+  scanRenderLista();
+}
+
+function scanLimparLista() {
+  if (_scanListaItens.length && !confirm('Apagar todos os itens da lista?')) return;
+  _scanListaItens = [];
+  scanAtualizarBadgeCam();
+  scanRenderLista();
+  document.getElementById('scan-lista-status').textContent = '';
+}
+
+// ── Geocodificação headless (mesma lógica do mapa: HERE → Google → Mapbox) ──
+async function scanGeocodeHereRest(query) {
+  try {
+    const HERE_KEY = 'P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M';
+    const r = await fetch('https://geocode.search.hereapi.com/v1/geocode?q=' + encodeURIComponent(query + ', Goiânia, GO, Brasil') + '&apiKey=' + HERE_KEY + '&limit=1&lang=pt-BR');
+    const d = await r.json();
+    if (d.items?.length) return { lat: d.items[0].position.lat, lng: d.items[0].position.lng, fonte: 'HERE' };
+  } catch (e) { /* cai pro próximo da cadeia */ }
+  return null;
+}
+
+async function scanGeocodeGoogleRest(query) {
+  try {
+    const GKEY = 'AIzaSyAaESp78MrYmySlHiupJKjjgCi0-1dfWnE';
+    const r = await fetch('https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(query + ', Goiânia, GO, Brasil') + '&key=' + GKEY + '&language=pt-BR&region=br');
+    const d = await r.json();
+    if (d.status === 'OK' && d.results?.length) {
+      const loc = d.results[0].geometry.location;
+      return { lat: loc.lat, lng: loc.lng, fonte: 'Google' };
+    }
+  } catch (e) { /* cai pro próximo da cadeia */ }
+  return null;
+}
+
+async function scanGeocodeMapboxRest(query) {
+  try {
+    const url = 'https://api.mapbox.com/search/geocode/v6/forward'
+      + '?q=' + encodeURIComponent(query + ', Goiânia, GO, Brasil')
+      + '&access_token=' + MAPA_ROTAS_TOKEN
+      + '&country=br&language=pt&proximity=-49.2925,-16.7159&limit=1';
+    const r = await fetch(url);
+    const d = await r.json();
+    const feat = d.features?.[0];
+    if (feat) {
+      const [lng, lat] = feat.geometry.coordinates;
+      return { lat, lng, fonte: 'Mapbox' };
+    }
+  } catch (e) { /* nenhum resultado */ }
+  return null;
+}
+
+async function scanGeocodeChain(query) {
+  return (await scanGeocodeHereRest(query))
+    || (await scanGeocodeGoogleRest(query))
+    || (await scanGeocodeMapboxRest(query))
+    || null;
+}
+
+async function scanGerarListaXlsx() {
+  if (!_scanListaItens.length) {
+    alert('A lista está vazia. Escaneie pelo menos um item antes de gerar.');
+    return;
+  }
+  const status = document.getElementById('scan-lista-status');
+  const btn = document.getElementById('scan-lista-gerar-btn');
+  btn.disabled = true;
+
+  const total = _scanListaItens.length;
+  for (let i = 0; i < total; i++) {
+    const item = _scanListaItens[i];
+    status.textContent = `🌍 Geolocalizando ${i + 1}/${total}...`;
+    if (!item.endereco) { item.fonte = '—'; continue; }
+    const geo = await scanGeocodeChain(item.endereco);
+    if (geo) { item.lat = geo.lat; item.lng = geo.lng; item.fonte = geo.fonte; }
+    else { item.fonte = 'Não encontrado'; }
+  }
+
+  scanRenderLista();
+  status.textContent = '📄 Gerando planilha...';
+
+  const dataOut = [['Nome', 'Endereço', 'Latitude', 'Longitude', 'Fonte']];
+  _scanListaItens.forEach(it => {
+    dataOut.push([it.nome || '', it.endereco || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(dataOut);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rota Scan');
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  XLSX.writeFile(wb, `rota_scan_lista_${ts}.xlsx`);
+
+  const semGeo = _scanListaItens.filter(it => it.fonte === 'Não encontrado').length;
+  status.textContent = semGeo
+    ? `✅ Planilha baixada (${total} item(ns)). ⚠️ ${semGeo} não geolocalizado(s).`
+    : `✅ Planilha baixada com ${total} item(ns), todos geolocalizados.`;
+  btn.disabled = false;
 }
 
 // Ao clicar num resultado, fecha o painel e leva o usuário até a linha na tabela
