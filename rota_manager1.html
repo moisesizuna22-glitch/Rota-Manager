@@ -7781,11 +7781,26 @@ async function scanGerarListaXlsx() {
   btn.disabled = true;
 
   const total = _scanListaItens.length;
+  const _scanGeoCache = new Map(); // evita geocodificar o mesmo endereço padronizado 2x
   for (let i = 0; i < total; i++) {
     const item = _scanListaItens[i];
+    status.textContent = `🧭 Padronizando ${i + 1}/${total}...`;
+    if (!item.endereco) { item.fonte = '—'; item.enderecoPadronizado = ''; continue; }
+
+    // Passa pelo mesmo pipeline de padronização usado no restante do app
+    // (extractStreetKey + parseQdLt/número + nome de edifício) antes de geocodificar.
+    const padronizado = standardize(item.endereco);
+    item.enderecoPadronizado = padronizado || item.endereco;
+
     status.textContent = `🌍 Geolocalizando ${i + 1}/${total}...`;
-    if (!item.endereco) { item.fonte = '—'; continue; }
-    const geo = await scanGeocodeChain(item.endereco);
+    const chaveCache = item.enderecoPadronizado;
+    let geo;
+    if (_scanGeoCache.has(chaveCache)) {
+      geo = _scanGeoCache.get(chaveCache);
+    } else {
+      geo = await scanGeocodeChain(item.enderecoPadronizado);
+      _scanGeoCache.set(chaveCache, geo);
+    }
     if (geo) { item.lat = geo.lat; item.lng = geo.lng; item.fonte = geo.fonte; }
     else { item.fonte = 'Não encontrado'; }
   }
@@ -7793,9 +7808,9 @@ async function scanGerarListaXlsx() {
   scanRenderLista();
   status.textContent = '📄 Gerando planilha...';
 
-  const dataOut = [['Nome', 'Endereço', 'Latitude', 'Longitude', 'Fonte']];
+  const dataOut = [['Nome', 'Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']];
   _scanListaItens.forEach(it => {
-    dataOut.push([it.nome || '', it.endereco || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
+    dataOut.push([it.nome || '', it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
   });
   const ws = XLSX.utils.aoa_to_sheet(dataOut);
   const wb = XLSX.utils.book_new();
