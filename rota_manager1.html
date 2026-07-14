@@ -6033,11 +6033,24 @@ async function checarAcesso() {
   }
 }
 
+let _pingFalhasSeguidas = 0;
 async function checarServidor() {
+let pingOk = false;
 try {
-const r = await fetch(SERVER + '/ping', { signal: AbortSignal.timeout(900) });
-_serverOnline = r.ok;
-} catch(e) { _serverOnline = false; }
+const r = await fetch(SERVER + '/ping', { signal: AbortSignal.timeout(3500) });
+pingOk = r.ok;
+} catch(e) { pingOk = false; }
+
+if (pingOk) {
+  _pingFalhasSeguidas = 0;
+  _serverOnline = true;
+} else {
+  _pingFalhasSeguidas++;
+  // Só marca "desconectado" depois de 2 falhas seguidas (~10s no pior caso,
+  // já que o polling roda a cada 5s) — evita que um pico de latência
+  // momentâneo derrube a UI achando que o servidor caiu.
+  if (_pingFalhasSeguidas >= 2) _serverOnline = false;
+}
 
 if (_serverOnline) await checarAcesso();
 

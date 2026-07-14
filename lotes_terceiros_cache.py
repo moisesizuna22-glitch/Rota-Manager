@@ -48,6 +48,25 @@ _token_cache = {"token": None, "expires_at": 0.0}
 _token_lock = threading.Lock()
 _db_lock = threading.Lock()
 
+# ── Dedup de buscas concorrentes pro MESMO tile ──────────────────────
+# Sem isso, 2+ usuários (ou o próprio Mapbox pedindo vários tiles da
+# mesma área) podem disparar 2+ requests idênticos e simultâneos pro
+# Route Planner. Se ele engasgar com isso (timeout/429/5xx), o tile
+# falha e some do mapa até o próximo refresh. Com uma trava por
+# (cidade,z,x,y), a 2ª+ requisição espera a 1ª terminar e reaproveita
+# o resultado, em vez de duplicar a chamada pro servidor de terceiros.
+_inflight_locks: dict = {}
+_inflight_locks_guard = threading.Lock()
+
+
+def _get_inflight_lock(key):
+    with _inflight_locks_guard:
+        lock = _inflight_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _inflight_locks[key] = lock
+        return lock
+
 
 def _conn():
     conn = sqlite3.connect(str(DB_PATH), timeout=30, check_same_thread=False)
@@ -133,10 +152,13 @@ def obter_token():
         return _token_cache["token"]
 
 
-def fetch_tile_from_source(cidade: str, z: int, x: int, y: int):
+def fetch_tile_from_source(cidade: str, z: int, x: int, y: int, tentativas: int = 3):
     """Busca direto no Route Planner, ignorando o cache. Retorna bytes do
     tile, None se o Route Planner respondeu 404 (área sem lote), ou levanta
-    exceção em erro de rede/HTTP inesperado."""
+    exceção em erro de rede/HTTP inesperado (depois de esgotar as tentativas).
+    Faz até `tentativas` tentativas com backoff curto — cobre falhas
+    transitórias (timeout, 5xx, rate limit) sem propagar erro na primeira
+    hesitação do Route Planner."""
     endpoint = LOTES_TERCEIROS_CIDADES.get(cidade)
     if endpoint is None:
         raise ValueError(f"cidade inválida: {cidade!r}")
@@ -146,20 +168,41 @@ def fetch_tile_from_source(cidade: str, z: int, x: int, y: int):
         raise RuntimeError("falha ao obter token de acesso do Route Planner")
 
     url = f"{ROUTEPLANNER_BASE}/{endpoint}/{z}/{x}/{y}.pbf"
-    r = requests.get(url, params={"token": token}, headers=_HEADERS, timeout=10)
-    if r.status_code == 404:
-        return None
-    r.raise_for_status()
-    return r.content
+    ultimo_erro = None
+    for tentativa in range(tentativas):
+        try:
+            r = requests.get(url, params={"token": token}, headers=_HEADERS, timeout=10)
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return r.content
+        except requests.exceptions.RequestException as e:
+            ultimo_erro = e
+            if tentativa < tentativas - 1:
+                time.sleep(0.4 * (tentativa + 1))  # 0.4s, 0.8s...
+    print(f"  [LOTES-TERCEIROS] esgotou {tentativas} tentativas em {cidade} {z}/{x}/{y}: "
+          f"{type(ultimo_erro).__name__}: {ultimo_erro}")
+    raise ultimo_erro
 
 
 def get_tile(cidade: str, z: int, x: int, y: int, usar_cache: bool = True):
-    """Função de alto nível: cache primeiro, senão busca na fonte e salva
-    (inclusive tombstone se vier vazio) pro cache ficar permanente."""
+    """Função de alto nível: cache primeiro, senão busca na fonte (com dedup
+    e retry) e salva (inclusive tombstone se vier vazio) pro cache ficar
+    permanente."""
     if usar_cache:
         cached = get_cached(cidade, z, x, y)
         if cached is not None:
             return cached[0]
-    data = fetch_tile_from_source(cidade, z, x, y)
-    save_tile(cidade, z, x, y, data)
-    return data
+
+    # Trava por tile: se outra thread já está buscando exatamente esse
+    # (cidade,z,x,y), espera ela terminar em vez de duplicar a chamada.
+    lock = _get_inflight_lock((cidade, z, x, y))
+    with lock:
+        # Quem esperou pode reaproveitar o que a 1ª thread já deixou no cache
+        if usar_cache:
+            cached = get_cached(cidade, z, x, y)
+            if cached is not None:
+                return cached[0]
+        data = fetch_tile_from_source(cidade, z, x, y)
+        save_tile(cidade, z, x, y, data)
+        return data
