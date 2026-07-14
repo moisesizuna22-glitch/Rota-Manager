@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 
 <style>
 /* ===================== DESIGN TOKENS ===================== */
@@ -30,7 +30,7 @@
   --danger:    #e35c84;
   --font:      'Inter', 'Segoe UI', system-ui, sans-serif;
   --mono:      'JetBrains Mono', 'Consolas', monospace;
-  --display:   'Inter', system-ui, sans-serif;
+  --display:   'Oswald', 'Inter', system-ui, sans-serif;
   --steel:     linear-gradient(180deg, #161a33 0%, #12152a 100%);
   /* sidebar */
   --sidebar-bg: #060814;
@@ -124,7 +124,7 @@ input, select, textarea { font: inherit; color: inherit; }
   align-items: center;
   padding: 0 16px;
   gap: 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 2px dashed rgba(245,166,35,0.35);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -135,7 +135,8 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: 18px; flex-shrink: 0;
 }
 .sidebar-logo-text {
-  font-size: 1rem; font-weight: 800; white-space: nowrap;
+  font-family: var(--display);
+  font-size: 1rem; font-weight: 700; white-space: nowrap;
   letter-spacing: 0.08em; text-transform: uppercase;
   transition: opacity var(--transition), width var(--transition);
   color: #fff;
@@ -668,6 +669,25 @@ header .badge b { color: var(--accent2); }
     border-radius: 6px;
     box-shadow: 0 0 0 2000px rgba(0,0,0,.55);
     pointer-events: none;
+    animation: scan-guide-respira 2s ease-in-out infinite;
+  }
+  #scan-cam-guide.capturando { animation: none; opacity: 1; }
+  @keyframes scan-guide-respira {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .55; }
+  }
+  #scan-cam-video-wrap.flash-ok::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(34,197,94,.28);
+    border: 3px solid #22c55e;
+    pointer-events: none;
+    animation: scan-flash-ok 380ms ease-out;
+  }
+  @keyframes scan-flash-ok {
+    from { opacity: 1; }
+    to   { opacity: 0; }
   }
   #scan-cam-hint {
     position: absolute;
@@ -1777,7 +1797,7 @@ color: var(--muted);
 display: none;
 }
 .stats-bar.show { display: flex; }
-.stat-item b { color: var(--text); }
+.stat-item b { color: var(--text); font-family: var(--display); font-weight: 700; letter-spacing: .01em; }
 .stat-item .dot {
 display: inline-block;
 width: 8px; height: 8px;
@@ -2286,7 +2306,12 @@ gap: 6px;
 .lstep .lstep-label { font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: .02em; transition: color .2s; }
 .lstep.done .lstep-bar { background: var(--green); }
 .lstep.done .lstep-label { color: var(--green); }
-.lstep.active .lstep-bar { background: var(--accent); }
+.lstep.active .lstep-bar {
+  background-image: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 11px);
+  background-size: 200% 100%;
+  animation: rota-dash-move 900ms linear infinite;
+}
+@keyframes rota-dash-move { from { background-position: 0 0; } to { background-position: -17px 0; } }
 .lstep.active .lstep-label { color: var(--accent); }
 
 .loading-ring { position: relative; width: 76px; height: 76px; border-radius: 50%; border: 4px solid var(--border); display: flex; align-items: center; justify-content: center; margin-top: 4px; }
@@ -3135,7 +3160,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   border-right: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
-[data-theme="light"] .sidebar-logo { border-bottom: 1px solid var(--border); }
+[data-theme="light"] .sidebar-logo { border-bottom: 2px dashed rgba(217,119,6,0.35); }
 [data-theme="light"] .sidebar-logo-icon {
   background: linear-gradient(135deg, #2563eb 0%, #6366f1 100%);
   color: #fff;
@@ -7501,12 +7526,24 @@ function scanCropFrameParaBase64() {
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
+function scanFlashCaptura(ok) {
+  const guide = document.getElementById('scan-cam-guide');
+  const wrap = document.getElementById('scan-cam-video-wrap');
+  if (guide) guide.classList.add('capturando');
+  if (ok && wrap) {
+    wrap.classList.add('flash-ok');
+    setTimeout(() => wrap.classList.remove('flash-ok'), 400);
+  }
+  setTimeout(() => { if (guide) guide.classList.remove('capturando'); }, ok ? 600 : 0);
+}
+
 async function scanCapturarFotoViva() {
   const base64 = scanCropFrameParaBase64();
   if (!base64) return;
 
   const shutter = document.getElementById('scan-cam-shutter');
   shutter.disabled = true;
+  scanFlashCaptura(false); // pausa o "respirar" da guia enquanto processa, sem confirmar sucesso ainda
   scanMostrarToast('⏳ Reconhecendo...');
   try {
     const texto = await scanOcrSoTexto(base64);
@@ -7514,6 +7551,7 @@ async function scanCapturarFotoViva() {
       scanMostrarToast('⚠️ Nada reconhecido, tente de novo');
       return;
     }
+    scanFlashCaptura(true); // leitura boa: flash verde de confirmação
 
     if (_scanCapturaModo === 'nome') {
       _scanDraftNome = texto;
