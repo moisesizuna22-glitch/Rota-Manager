@@ -817,19 +817,6 @@ header .badge b { color: var(--accent2); }
     align-items: center;
     gap: 8px;
   }
-  .scan-lista-item-seq {
-    flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    background: var(--accent2);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
   .scan-lista-item-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
   .scan-lista-item input {
     width: 100%;
@@ -1591,6 +1578,152 @@ header .badge b { color: var(--accent2); }
   }
   .export-option.detailed .opt-tag { background: rgba(245,166,35,.15); color: var(--accent); border-color: rgba(245,166,35,.4); }
 
+  /* ── Modal de revisão de endereços antes de exportar ── */
+  #export-review-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 610;
+    align-items: center;
+    justify-content: center;
+  }
+  #export-review-overlay.show { display: flex; }
+  #export-review-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: 4px;
+    width: 640px;
+    max-width: 92vw;
+    max-height: 88vh;
+    box-shadow: 0 12px 48px rgba(0,0,0,.5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #export-review-body {
+    padding: 14px 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #export-review-hint {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 0 8px;
+  }
+  .export-review-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .export-review-item-seq {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent2);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 26px;
+  }
+  .export-review-item-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 5px 6px;
+    margin: -5px -6px;
+    border-radius: 4px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: pan-y;
+    overflow-wrap: break-word;
+    transition: background .12s;
+  }
+  .export-review-item-text.pressing {
+    background: rgba(245,166,35,.18);
+  }
+  .export-review-item.editing {
+    border-color: var(--accent2);
+  }
+  .export-review-item-edit-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .export-review-item-edit-wrap input {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--accent2);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 0;
+  }
+  .export-review-item-edit-wrap input:focus { outline: none; }
+  .export-review-item-btn {
+    background: none;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .export-review-item-btn.ok { color: var(--accent2); border-color: rgba(91,155,213,.4); }
+  .export-review-item-btn.ok:hover { background: rgba(91,155,213,.15); }
+  .export-review-item-btn.cancel:hover { color: var(--danger); border-color: var(--danger); background: rgba(220,60,60,.12); }
+  #export-review-footer {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--steel);
+  }
+  #export-review-footer button {
+    flex: 1;
+    padding: 11px;
+    border-radius: 3px;
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: .15s;
+  }
+  #export-review-cancelar {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  #export-review-cancelar:hover { color: var(--text); border-color: var(--text); }
+  #export-review-confirmar {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: #1a1205;
+  }
+  #export-review-confirmar:hover { filter: brightness(1.08); }
+
   /* ── Painel Assinatura (mesmo padrão visual do histórico/admin) ── */
   #assinatura-overlay {
     display: none;
@@ -2052,37 +2185,6 @@ font-size: 15px;
 font-weight: 700;
 color: var(--text);
 line-height: 1.35;
-}
-.td-addr-reformado.editable-endereco {
-cursor: text;
-border-radius: var(--radius-sm);
-padding: 2px 5px;
-margin: -2px -5px;
-border: 1px dashed transparent;
-transition: border-color var(--transition), background var(--transition);
-}
-.td-addr-reformado.editable-endereco:hover {
-border-color: var(--border);
-background: var(--surface2);
-}
-.td-addr-reformado.editable-endereco:focus {
-outline: none;
-border-color: var(--accent);
-background: var(--surface2);
-}
-.badge-nome-editado {
-display: inline-flex;
-align-items: center;
-gap: 4px;
-margin-top: 4px;
-margin-right: 6px;
-font-size: 10px;
-font-weight: 700;
-letter-spacing: .03em;
-border-radius: 999px;
-padding: 2px 8px;
-color: var(--accent);
-background: rgba(245,166,35,0.14);
 }
 .td-addr-original {
 font-size: 13px;
@@ -3624,7 +3726,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     </div>
     <div id="anjun-body">
       <div id="anjun-drop-area">
-        <div id="anjun-drop-hint">Envie o CSV ou XLSX da lista de entregas (delivery_list) pra gerar o xlsx já com a geolocalização organizada</div>
+        <div id="anjun-drop-hint">Envie o CSV da lista de entregas (delivery_list) pra gerar o xlsx já com a geolocalização organizada</div>
         <div id="anjun-file-name"></div>
         <button class="btn btn-primary" onclick="document.getElementById('anjun-file-input').click()">📄 Escolher arquivo</button>
       </div>
@@ -3711,10 +3813,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           <div id="scan-lista-empty">Nenhum item ainda. Use a câmera (👤 Nome → 📍 Endereço) pra ir adicionando.</div>
         </div>
         <div class="scan-lista-row">
-          <button class="btn btn-primary" id="scan-lista-gerar-btn" onclick="scanGerarListaXlsx(true)">🌍 Gerar lista (geolocalizar + baixar XLSX)</button>
-        </div>
-        <div class="scan-lista-row">
-          <button class="btn" id="scan-lista-gerar-semgeo-btn" onclick="scanGerarListaXlsx(false)" title="Baixa só os endereços organizados, sem geolocalizar. Depois é só passar o arquivo pelo Anjun pra geolocalizar.">📋 Gerar só a lista (sem geolocalização)</button>
+          <button class="btn btn-primary" id="scan-lista-gerar-btn" onclick="scanGerarListaXlsx()">🌍 Gerar lista (geolocalizar + baixar XLSX)</button>
           <button class="btn" onclick="scanLimparLista()">Limpar lista</button>
         </div>
         <div id="scan-lista-status"></div>
@@ -3897,6 +3996,32 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <span class="opt-desc">Endereço original completo de cada item do grupo (ENDERECO_ORIGINAL). Mais informação por parada.</span>
         <span class="opt-tag">Coluna J</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL REVISÃO DE ENDEREÇOS (antes de exportar) ══ -->
+<div id="export-review-overlay" onclick="fecharExportReview(event)">
+  <div id="export-review-modal">
+    <div id="export-modal-header">
+      <span class="header-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+      </span>
+      <div class="header-text">
+        <span class="title">Revisar endereços</span>
+        <span class="subtitle">Edite o nome de qualquer endereço antes de exportar</span>
+      </div>
+      <button class="close-btn" onclick="fecharExportReview()" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="export-review-body">
+      <div id="export-review-hint">Aperte e segure um endereço pra renomeá-lo. A sequência e as coordenadas não mudam.</div>
+      <div id="export-review-lista"></div>
+    </div>
+    <div id="export-review-footer">
+      <button type="button" id="export-review-cancelar" onclick="fecharExportReview()">Cancelar</button>
+      <button type="button" id="export-review-confirmar" onclick="confirmarExportacaoFinal()">Confirmar e exportar</button>
     </div>
   </div>
 </div>
@@ -4782,15 +4907,11 @@ const editouAgoraBadgeHtml = row._editado
   ? `<span class="badge-voce-editou" title="Você confirmou esta coordenada agora, nesta sessão.">✎ Você editou agora</span>`
   : '';
 
-const nomeEditadoBadgeHtml = row._nome_editado
-  ? `<span class="badge-nome-editado" title="Você renomeou este endereço manualmente. É esse nome que vai sair na exportação.">✎ Nome editado</span>`
-  : '';
-
 tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr">
-         <div class="td-addr-reformado editable-endereco" contenteditable="true" spellcheck="false" data-cid="${row._cid}" title="Clique para mudar o nome deste endereço (vale pra exportação também)">${escHtml(endReformado)}</div>
-         ${hereBadgeHtml}${confiancaBadgeHtml}${editouAgoraBadgeHtml}${nomeEditadoBadgeHtml}
+         <div class="td-addr-reformado">${escHtml(endReformado)}</div>
+         ${hereBadgeHtml}${confiancaBadgeHtml}${editouAgoraBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
@@ -4882,53 +5003,6 @@ if (chk.checked) _selecionados.add(cid);
 else _selecionados.delete(cid);
 chk.closest('tr').classList.toggle('tr-selecionada', chk.checked);
 atualizarFab();
-});
-
-// ══════════════════════════════════════════════════════════
-//  EDITAR NOME DO ENDEREÇO NA TABELA (reflete direto na exportação,
-//  já que a exportação usa row.group_label quando presente)
-// ══════════════════════════════════════════════════════════
-
-function _salvarNomeEditado(el) {
-const cid = parseInt(el.dataset.cid);
-const row = _allRows.find(r => r._cid === cid);
-if (!row) return;
-
-const novoNome = el.textContent.replace(/\s+/g, ' ').trim();
-if (!novoNome) {
-// Não deixa salvar vazio: volta pro nome anterior
-el.textContent = row.group_label || standardize(row.address) || row.address || '';
-return;
-}
-
-const nomeAtual = row.group_label || standardize(row.address) || row.address || '';
-if (novoNome === nomeAtual) return;
-
-row.group_label = novoNome;
-row._nome_editado = true;
-renderTable(_allRows);
-if (typeof autoSaveDraft === 'function') autoSaveDraft();
-}
-
-document.getElementById('table-body').addEventListener('blur', (e) => {
-const el = e.target.closest('.editable-endereco');
-if (!el) return;
-_salvarNomeEditado(el);
-}, true);
-
-document.getElementById('table-body').addEventListener('keydown', (e) => {
-const el = e.target.closest('.editable-endereco');
-if (!el) return;
-if (e.key === 'Enter') {
-e.preventDefault();
-el.blur();
-} else if (e.key === 'Escape') {
-e.preventDefault();
-const cid = parseInt(el.dataset.cid);
-const row = _allRows.find(r => r._cid === cid);
-el.textContent = row ? (row.group_label || standardize(row.address) || row.address || '') : '';
-el.blur();
-}
 });
 
 function toggleSelecionarTodos(marcar) {
@@ -7787,9 +7861,8 @@ function scanRenderLista() {
     return;
   }
 
-  wrap.innerHTML = _scanListaItens.map((it, idx) => `
+  wrap.innerHTML = _scanListaItens.map(it => `
     <div class="scan-lista-item" data-id="${it.id}">
-      <span class="scan-lista-item-seq" title="Sequência">${idx + 1}</span>
       <div class="scan-lista-item-fields">
         <input class="endereco" placeholder="Endereço" value="${escHtml(it.endereco || '')}" oninput="scanEditarItemLista(${it.id}, 'endereco', this.value)">
       </div>
@@ -7866,88 +7939,58 @@ async function scanGeocodeChain(query) {
     || null;
 }
 
-async function scanGerarListaXlsx(comGeo) {
-  comGeo = comGeo !== false; // default true (mantém comportamento antigo pra quem já chama sem argumento)
-
+async function scanGerarListaXlsx() {
   if (!_scanListaItens.length) {
     alert('A lista está vazia. Escaneie pelo menos um item antes de gerar.');
     return;
   }
   const status = document.getElementById('scan-lista-status');
-  const btnGeo = document.getElementById('scan-lista-gerar-btn');
-  const btnSemGeo = document.getElementById('scan-lista-gerar-semgeo-btn');
-  if (btnGeo) btnGeo.disabled = true;
-  if (btnSemGeo) btnSemGeo.disabled = true;
+  const btn = document.getElementById('scan-lista-gerar-btn');
+  btn.disabled = true;
 
   const total = _scanListaItens.length;
+  const _scanGeoCache = new Map(); // evita geocodificar o mesmo endereço padronizado 2x
+  for (let i = 0; i < total; i++) {
+    const item = _scanListaItens[i];
+    status.textContent = `🧭 Padronizando ${i + 1}/${total}...`;
+    if (!item.endereco) { item.fonte = '—'; item.enderecoPadronizado = ''; continue; }
 
-  if (comGeo) {
-    const _scanGeoCache = new Map(); // evita geocodificar o mesmo endereço padronizado 2x
-    for (let i = 0; i < total; i++) {
-      const item = _scanListaItens[i];
-      status.textContent = `🧭 Padronizando ${i + 1}/${total}...`;
-      if (!item.endereco) { item.fonte = '—'; item.enderecoPadronizado = ''; continue; }
+    // Passa pelo mesmo pipeline de padronização usado no restante do app
+    // (extractStreetKey + parseQdLt/número + nome de edifício) antes de geocodificar.
+    const padronizado = standardize(item.endereco);
+    item.enderecoPadronizado = padronizado || item.endereco;
 
-      // Passa pelo mesmo pipeline de padronização usado no restante do app
-      // (extractStreetKey + parseQdLt/número + nome de edifício) antes de geocodificar.
-      const padronizado = standardize(item.endereco);
-      item.enderecoPadronizado = padronizado || item.endereco;
-
-      status.textContent = `🌍 Geolocalizando ${i + 1}/${total}...`;
-      const chaveCache = item.enderecoPadronizado;
-      let geo;
-      if (_scanGeoCache.has(chaveCache)) {
-        geo = _scanGeoCache.get(chaveCache);
-      } else {
-        geo = await scanGeocodeChain(item.enderecoPadronizado);
-        _scanGeoCache.set(chaveCache, geo);
-      }
-      if (geo) { item.lat = geo.lat; item.lng = geo.lng; item.fonte = geo.fonte; }
-      else { item.fonte = 'Não encontrado'; }
+    status.textContent = `🌍 Geolocalizando ${i + 1}/${total}...`;
+    const chaveCache = item.enderecoPadronizado;
+    let geo;
+    if (_scanGeoCache.has(chaveCache)) {
+      geo = _scanGeoCache.get(chaveCache);
+    } else {
+      geo = await scanGeocodeChain(item.enderecoPadronizado);
+      _scanGeoCache.set(chaveCache, geo);
     }
-  } else {
-    // Sem geolocalização: só padroniza o texto do endereço, não chama nenhum
-    // serviço de geocodificação. Útil pra organizar a lista primeiro e
-    // deixar a geolocalização pra depois (ex.: enviando pro Anjun).
-    _scanListaItens.forEach(item => {
-      item.enderecoPadronizado = item.endereco ? (standardize(item.endereco) || item.endereco) : '';
-      item.lat = '';
-      item.lng = '';
-      item.fonte = '';
-    });
-    status.textContent = '📄 Gerando planilha (sem geolocalização)...';
+    if (geo) { item.lat = geo.lat; item.lng = geo.lng; item.fonte = geo.fonte; }
+    else { item.fonte = 'Não encontrado'; }
   }
 
   scanRenderLista();
   status.textContent = '📄 Gerando planilha...';
 
-  const dataOut = comGeo
-    ? [['Sequência', 'Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']]
-    : [['Sequência', 'Endereço', 'Endereço Padronizado']];
-  _scanListaItens.forEach((it, idx) => {
-    if (comGeo) {
-      dataOut.push([idx + 1, it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
-    } else {
-      dataOut.push([idx + 1, it.endereco || '', it.enderecoPadronizado || '']);
-    }
+  const dataOut = [['Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']];
+  _scanListaItens.forEach(it => {
+    dataOut.push([it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
   });
   const ws = XLSX.utils.aoa_to_sheet(dataOut);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Rota Scan');
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  const sufixo = comGeo ? '' : '_sem_geo';
-  XLSX.writeFile(wb, `rota_scan_lista_${ts}${sufixo}.xlsx`);
+  XLSX.writeFile(wb, `rota_scan_lista_${ts}.xlsx`);
 
-  if (comGeo) {
-    const semGeo = _scanListaItens.filter(it => it.fonte === 'Não encontrado').length;
-    status.textContent = semGeo
-      ? `✅ Planilha baixada (${total} item(ns)). ⚠️ ${semGeo} não geolocalizado(s).`
-      : `✅ Planilha baixada com ${total} item(ns), todos geolocalizados.`;
-  } else {
-    status.textContent = `✅ Planilha baixada com ${total} item(ns), sem geolocalização.`;
-  }
-  if (btnGeo) btnGeo.disabled = false;
-  if (btnSemGeo) btnSemGeo.disabled = false;
+  const semGeo = _scanListaItens.filter(it => it.fonte === 'Não encontrado').length;
+  status.textContent = semGeo
+    ? `✅ Planilha baixada (${total} item(ns)). ⚠️ ${semGeo} não geolocalizado(s).`
+    : `✅ Planilha baixada com ${total} item(ns), todos geolocalizados.`;
+  btn.disabled = false;
 }
 
 // Ao clicar num resultado, fecha o painel e leva o usuário até a linha na tabela
@@ -7979,31 +8022,19 @@ if (e && e.target !== document.getElementById('export-overlay')) return;
 _fecharOverlayAnimado('export-overlay', 'export-modal', 'animate__zoomOut');
 }
 
+let _exportModoAtual = 'clean';
+let _exportPreviewData = [];
+
+// Passo 1: monta a prévia (sequência + endereço calculado) e abre o modal
+// de revisão, onde o usuário pode renomear qualquer endereço antes de gerar
+// o arquivo de fato. Nada é exportado aqui ainda.
 function exportarXlsx(modo) {
 modo = modo === 'detailed' ? 'detailed' : 'clean';
 if (!_allRows.length) { alert("Nenhum dado para exportar."); return; }
 
-fecharExportModal();
+_exportModoAtual = modo;
 
-const btn = document.getElementById("bn-exportar");
-const label = document.getElementById("bn-exportar-label");
-btn.disabled = true;
-label.textContent = "Exportando...";
-
-try {
-// Exporta só 3 colunas — formato pensado pra importar direto no Circuit:
-// LATITUDE | LONGITUDE | SEQUENCE + ENDERECO
-//
-// IMPORTANTE: 1 linha exportada = 1 parada/pino do app (mesmo total que
-// aparece em "endereços" na barra de estatísticas), em AMBOS os modos.
-// O que muda entre os modos é só qual texto de endereço vai na célula:
-//
-// - "clean"    -> endereço padronizado/reformado (Destination Address,
-//                 coluna B), o mesmo exibido como título do pino na tela.
-// - "detailed" -> todos os endereços originais distintos do grupo
-//                 (ENDERECO_ORIGINAL, coluna J), separados por " | ".
-const dataOut = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
-for (const row of _allRows) {
+_exportPreviewData = _allRows.map(row => {
 const membros = Array.isArray(row.membros) && row.membros.length
 ? row.membros
 : [{ stop: row.stop, original: row.endereco_original || row.address }];
@@ -8031,8 +8062,133 @@ endereco = originaisVistos.join(' | ') || row.group_label || standardize(row.add
 endereco = row.group_label || standardize(row.address) || row.address || '';
 }
 
-const celula = seqStr ? `${seqStr} - ${endereco}` : endereco;
-dataOut.push([row.lat || '', row.lon || '', celula]);
+return { lat: row.lat || '', lon: row.lon || '', seqStr, endereco };
+});
+
+fecharExportModal();
+renderExportReviewLista();
+_abrirOverlayAnimado('export-review-overlay', 'export-review-modal', 'animate__zoomIn');
+}
+
+function renderExportReviewLista() {
+const wrap = document.getElementById('export-review-lista');
+wrap.innerHTML = _exportPreviewData.map((it, idx) => exportReviewItemHtmlView(idx)).join('');
+}
+
+// ── Visualização normal (texto estático) e modo edição (input),
+// alternados via aperta-e-segura, não por clique/toque simples ────────
+function exportReviewItemHtmlView(idx) {
+const it = _exportPreviewData[idx];
+return `
+  <div class="export-review-item" data-idx="${idx}">
+    <span class="export-review-item-seq">#${escHtml(it.seqStr || '—')}</span>
+    <span class="export-review-item-text"
+      onpointerdown="exportReviewPressStart(event, ${idx})"
+      onpointerup="exportReviewPressEnd(event)"
+      onpointermove="exportReviewPressMove(event)"
+      onpointercancel="exportReviewPressEnd(event)"
+      onpointerleave="exportReviewPressEnd(event)"
+      oncontextmenu="return false;">${escHtml(it.endereco || '')}</span>
+  </div>`;
+}
+
+function exportReviewItemHtmlEdit(idx) {
+const it = _exportPreviewData[idx];
+return `
+  <div class="export-review-item editing" data-idx="${idx}">
+    <span class="export-review-item-seq">#${escHtml(it.seqStr || '—')}</span>
+    <div class="export-review-item-edit-wrap">
+      <input id="export-review-input-${idx}" value="${escHtml(it.endereco || '')}"
+        onkeydown="if(event.key==='Enter'){exportReviewSalvar(${idx});} else if(event.key==='Escape'){exportReviewCancelarEdicao(${idx});}">
+      <button type="button" class="export-review-item-btn ok" onclick="exportReviewSalvar(${idx})" title="Salvar">✓</button>
+      <button type="button" class="export-review-item-btn cancel" onclick="exportReviewCancelarEdicao(${idx})" title="Cancelar">✕</button>
+    </div>
+  </div>`;
+}
+
+const EXPORT_REVIEW_LONGPRESS_MS = 420;
+const EXPORT_REVIEW_MOVE_TOLERANCE = 10;
+let _exportReviewPressTimer = null;
+let _exportReviewPressStartXY = null;
+
+function exportReviewPressStart(ev, idx) {
+exportReviewPressLimparTimer();
+_exportReviewPressStartXY = { x: ev.clientX, y: ev.clientY };
+ev.currentTarget.classList.add('pressing');
+_exportReviewPressTimer = setTimeout(() => {
+exportReviewPressLimparTimer();
+exportReviewEntrarEdicao(idx);
+}, EXPORT_REVIEW_LONGPRESS_MS);
+}
+
+function exportReviewPressMove(ev) {
+if (!_exportReviewPressStartXY) return;
+const dx = Math.abs(ev.clientX - _exportReviewPressStartXY.x);
+const dy = Math.abs(ev.clientY - _exportReviewPressStartXY.y);
+if (dx > EXPORT_REVIEW_MOVE_TOLERANCE || dy > EXPORT_REVIEW_MOVE_TOLERANCE) {
+exportReviewPressLimparTimer();
+}
+}
+
+function exportReviewPressEnd() {
+exportReviewPressLimparTimer();
+}
+
+function exportReviewPressLimparTimer() {
+if (_exportReviewPressTimer) { clearTimeout(_exportReviewPressTimer); _exportReviewPressTimer = null; }
+document.querySelectorAll('.export-review-item-text.pressing').forEach(el => el.classList.remove('pressing'));
+_exportReviewPressStartXY = null;
+}
+
+function exportReviewEntrarEdicao(idx) {
+const item = document.querySelector(`.export-review-item[data-idx="${idx}"]`);
+if (!item) return;
+item.outerHTML = exportReviewItemHtmlEdit(idx);
+const input = document.getElementById(`export-review-input-${idx}`);
+if (input) { input.focus(); input.select(); }
+}
+
+function exportReviewSalvar(idx) {
+const input = document.getElementById(`export-review-input-${idx}`);
+if (input && _exportPreviewData[idx]) _exportPreviewData[idx].endereco = input.value;
+exportReviewVoltarVisualizacao(idx);
+}
+
+function exportReviewCancelarEdicao(idx) {
+exportReviewVoltarVisualizacao(idx);
+}
+
+function exportReviewVoltarVisualizacao(idx) {
+const item = document.querySelector(`.export-review-item[data-idx="${idx}"]`);
+if (!item) return;
+item.outerHTML = exportReviewItemHtmlView(idx);
+}
+
+function fecharExportReview(e) {
+if (e && e.target !== document.getElementById('export-review-overlay')) return;
+exportReviewPressLimparTimer();
+_fecharOverlayAnimado('export-review-overlay', 'export-review-modal', 'animate__zoomOut');
+}
+
+// Passo 2: gera o arquivo de verdade, usando os endereços (possivelmente
+// renomeados pelo usuário) da prévia.
+function confirmarExportacaoFinal() {
+if (!_exportPreviewData.length) { alert("Nenhum dado para exportar."); return; }
+
+fecharExportReview();
+
+const btn = document.getElementById("bn-exportar");
+const label = document.getElementById("bn-exportar-label");
+btn.disabled = true;
+label.textContent = "Exportando...";
+
+try {
+// Exporta só 3 colunas — formato pensado pra importar direto no Circuit:
+// LATITUDE | LONGITUDE | SEQUENCE + ENDERECO
+const dataOut = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
+for (const it of _exportPreviewData) {
+const celula = it.seqStr ? `${it.seqStr} - ${it.endereco}` : it.endereco;
+dataOut.push([it.lat, it.lon, celula]);
 }
 
 const ws = XLSX.utils.aoa_to_sheet(dataOut);
@@ -8044,7 +8200,7 @@ XLSX.utils.book_append_sheet(wb, ws, "Rotas Consolidadas");
 const baseName = String(_fileName || 'rota')
   .replace(/\.(xlsx|xls|csv)$/i, '')
   .trim() || 'rota';
-const sufixoDetalhado = modo === 'detailed' ? '_DETALHADO' : '';
+const sufixoDetalhado = _exportModoAtual === 'detailed' ? '_DETALHADO' : '';
 XLSX.writeFile(wb, `${baseName}_CIRCUIT${sufixoDetalhado}.xlsx`);
 
 btn.classList.add('bn-sucesso');
