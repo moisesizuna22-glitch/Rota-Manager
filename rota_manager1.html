@@ -3611,7 +3611,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     </div>
     <div id="anjun-body">
       <div id="anjun-drop-area">
-        <div id="anjun-drop-hint">Envie o CSV da lista de entregas (delivery_list) pra gerar o xlsx já com a geolocalização organizada</div>
+        <div id="anjun-drop-hint">Envie o CSV ou XLSX da lista de entregas (delivery_list) pra gerar o xlsx já com a geolocalização organizada</div>
         <div id="anjun-file-name"></div>
         <button class="btn btn-primary" onclick="document.getElementById('anjun-file-input').click()">📄 Escolher arquivo</button>
       </div>
@@ -3698,7 +3698,10 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           <div id="scan-lista-empty">Nenhum item ainda. Use a câmera (👤 Nome → 📍 Endereço) pra ir adicionando.</div>
         </div>
         <div class="scan-lista-row">
-          <button class="btn btn-primary" id="scan-lista-gerar-btn" onclick="scanGerarListaXlsx()">🌍 Gerar lista (geolocalizar + baixar XLSX)</button>
+          <button class="btn btn-primary" id="scan-lista-gerar-btn" onclick="scanGerarListaXlsx(true)">🌍 Gerar lista (geolocalizar + baixar XLSX)</button>
+        </div>
+        <div class="scan-lista-row">
+          <button class="btn" id="scan-lista-gerar-semgeo-btn" onclick="scanGerarListaXlsx(false)" title="Baixa só os endereços organizados, sem geolocalizar. Depois é só passar o arquivo pelo Anjun pra geolocalizar.">📋 Gerar só a lista (sem geolocalização)</button>
           <button class="btn" onclick="scanLimparLista()">Limpar lista</button>
         </div>
         <div id="scan-lista-status"></div>
@@ -7849,58 +7852,88 @@ async function scanGeocodeChain(query) {
     || null;
 }
 
-async function scanGerarListaXlsx() {
+async function scanGerarListaXlsx(comGeo) {
+  comGeo = comGeo !== false; // default true (mantém comportamento antigo pra quem já chama sem argumento)
+
   if (!_scanListaItens.length) {
     alert('A lista está vazia. Escaneie pelo menos um item antes de gerar.');
     return;
   }
   const status = document.getElementById('scan-lista-status');
-  const btn = document.getElementById('scan-lista-gerar-btn');
-  btn.disabled = true;
+  const btnGeo = document.getElementById('scan-lista-gerar-btn');
+  const btnSemGeo = document.getElementById('scan-lista-gerar-semgeo-btn');
+  if (btnGeo) btnGeo.disabled = true;
+  if (btnSemGeo) btnSemGeo.disabled = true;
 
   const total = _scanListaItens.length;
-  const _scanGeoCache = new Map(); // evita geocodificar o mesmo endereço padronizado 2x
-  for (let i = 0; i < total; i++) {
-    const item = _scanListaItens[i];
-    status.textContent = `🧭 Padronizando ${i + 1}/${total}...`;
-    if (!item.endereco) { item.fonte = '—'; item.enderecoPadronizado = ''; continue; }
 
-    // Passa pelo mesmo pipeline de padronização usado no restante do app
-    // (extractStreetKey + parseQdLt/número + nome de edifício) antes de geocodificar.
-    const padronizado = standardize(item.endereco);
-    item.enderecoPadronizado = padronizado || item.endereco;
+  if (comGeo) {
+    const _scanGeoCache = new Map(); // evita geocodificar o mesmo endereço padronizado 2x
+    for (let i = 0; i < total; i++) {
+      const item = _scanListaItens[i];
+      status.textContent = `🧭 Padronizando ${i + 1}/${total}...`;
+      if (!item.endereco) { item.fonte = '—'; item.enderecoPadronizado = ''; continue; }
 
-    status.textContent = `🌍 Geolocalizando ${i + 1}/${total}...`;
-    const chaveCache = item.enderecoPadronizado;
-    let geo;
-    if (_scanGeoCache.has(chaveCache)) {
-      geo = _scanGeoCache.get(chaveCache);
-    } else {
-      geo = await scanGeocodeChain(item.enderecoPadronizado);
-      _scanGeoCache.set(chaveCache, geo);
+      // Passa pelo mesmo pipeline de padronização usado no restante do app
+      // (extractStreetKey + parseQdLt/número + nome de edifício) antes de geocodificar.
+      const padronizado = standardize(item.endereco);
+      item.enderecoPadronizado = padronizado || item.endereco;
+
+      status.textContent = `🌍 Geolocalizando ${i + 1}/${total}...`;
+      const chaveCache = item.enderecoPadronizado;
+      let geo;
+      if (_scanGeoCache.has(chaveCache)) {
+        geo = _scanGeoCache.get(chaveCache);
+      } else {
+        geo = await scanGeocodeChain(item.enderecoPadronizado);
+        _scanGeoCache.set(chaveCache, geo);
+      }
+      if (geo) { item.lat = geo.lat; item.lng = geo.lng; item.fonte = geo.fonte; }
+      else { item.fonte = 'Não encontrado'; }
     }
-    if (geo) { item.lat = geo.lat; item.lng = geo.lng; item.fonte = geo.fonte; }
-    else { item.fonte = 'Não encontrado'; }
+  } else {
+    // Sem geolocalização: só padroniza o texto do endereço, não chama nenhum
+    // serviço de geocodificação. Útil pra organizar a lista primeiro e
+    // deixar a geolocalização pra depois (ex.: enviando pro Anjun).
+    _scanListaItens.forEach(item => {
+      item.enderecoPadronizado = item.endereco ? (standardize(item.endereco) || item.endereco) : '';
+      item.lat = '';
+      item.lng = '';
+      item.fonte = '';
+    });
+    status.textContent = '📄 Gerando planilha (sem geolocalização)...';
   }
 
   scanRenderLista();
   status.textContent = '📄 Gerando planilha...';
 
-  const dataOut = [['Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']];
+  const dataOut = comGeo
+    ? [['Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']]
+    : [['Endereço', 'Endereço Padronizado']];
   _scanListaItens.forEach(it => {
-    dataOut.push([it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
+    if (comGeo) {
+      dataOut.push([it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
+    } else {
+      dataOut.push([it.endereco || '', it.enderecoPadronizado || '']);
+    }
   });
   const ws = XLSX.utils.aoa_to_sheet(dataOut);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Rota Scan');
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  XLSX.writeFile(wb, `rota_scan_lista_${ts}.xlsx`);
+  const sufixo = comGeo ? '' : '_sem_geo';
+  XLSX.writeFile(wb, `rota_scan_lista_${ts}${sufixo}.xlsx`);
 
-  const semGeo = _scanListaItens.filter(it => it.fonte === 'Não encontrado').length;
-  status.textContent = semGeo
-    ? `✅ Planilha baixada (${total} item(ns)). ⚠️ ${semGeo} não geolocalizado(s).`
-    : `✅ Planilha baixada com ${total} item(ns), todos geolocalizados.`;
-  btn.disabled = false;
+  if (comGeo) {
+    const semGeo = _scanListaItens.filter(it => it.fonte === 'Não encontrado').length;
+    status.textContent = semGeo
+      ? `✅ Planilha baixada (${total} item(ns)). ⚠️ ${semGeo} não geolocalizado(s).`
+      : `✅ Planilha baixada com ${total} item(ns), todos geolocalizados.`;
+  } else {
+    status.textContent = `✅ Planilha baixada com ${total} item(ns), sem geolocalização.`;
+  }
+  if (btnGeo) btnGeo.disabled = false;
+  if (btnSemGeo) btnSemGeo.disabled = false;
 }
 
 // Ao clicar num resultado, fecha o painel e leva o usuário até a linha na tabela

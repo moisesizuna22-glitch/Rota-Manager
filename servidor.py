@@ -21,6 +21,7 @@ Railway / Render / Fly:
     público de demonstração do OSRM, que não tem SLA e pode falhar.
 """
 
+import csv
 import hashlib
 import json
 import os
@@ -2024,6 +2025,32 @@ async def scan_ocr(request: Request):
 # ─── Anjun: CSV -> XLSX geocodificado, com progresso em tempo real ──
 _ANJUN_JOBS: dict = {}  # uid -> {status, total, done, erro, pronto, nome_saida}
 
+def _anjun_xlsx_para_csv(origem_path: Path, destino_path: Path):
+    """
+    Converte a aba ativa de um .xlsx pra .csv, célula por célula.
+    Usado quando o usuário sobe o Anjun com xlsx em vez de csv — assim o
+    csv_para_rota_xlsx.py continua recebendo sempre um CSV, sem precisar
+    mexer nele.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise RuntimeError("openpyxl não instalado no servidor.")
+
+    wb = load_workbook(origem_path, data_only=True)
+    ws = wb.active
+    with destino_path.open("w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        linhas_gravadas = 0
+        for row in ws.iter_rows(values_only=True):
+            # Ignora linhas totalmente vazias (comuns no fim de planilhas exportadas)
+            if row is None or all(v is None or str(v).strip() == "" for v in row):
+                continue
+            writer.writerow(["" if v is None else v for v in row])
+            linhas_gravadas += 1
+    if linhas_gravadas == 0:
+        raise RuntimeError("a planilha está vazia.")
+
 def _anjun_processar_bg(uid: str, entrada_path: Path, saida_path: Path):
     job = _ANJUN_JOBS[uid]
     try:
@@ -2078,10 +2105,30 @@ async def anjun_iniciar(request: Request, arquivo: UploadFile = File(...)):
         return err_json("Arquivo vazio ou inválido.")
 
     uid = sess["user_id"]
-    sufixo_original = Path(arquivo.filename or "entrada.csv").suffix or ".csv"
-    entrada_path = DATA_DIR / f"anjun_entrada_{uid}{sufixo_original}"
-    saida_path   = DATA_DIR / f"anjun_saida_{uid}.xlsx"
-    entrada_path.write_bytes(contents)
+    sufixo_original = Path(arquivo.filename or "entrada.csv").suffix.lower() or ".csv"
+    saida_path = DATA_DIR / f"anjun_saida_{uid}.xlsx"
+
+    if sufixo_original == ".xls":
+        return err_json(
+            "Arquivo .xls (formato antigo do Excel) não é suportado. "
+            "Salve como .xlsx ou .csv e envie de novo."
+        )
+
+    if sufixo_original == ".xlsx":
+        # csv_para_rota_xlsx.py só sabe ler CSV — converte o xlsx enviado
+        # antes de passar pro script, sem precisar alterá-lo.
+        xlsx_tmp = DATA_DIR / f"anjun_entrada_{uid}_tmp.xlsx"
+        entrada_path = DATA_DIR / f"anjun_entrada_{uid}.csv"
+        xlsx_tmp.write_bytes(contents)
+        try:
+            _anjun_xlsx_para_csv(xlsx_tmp, entrada_path)
+        except Exception as e:
+            return err_json(f"Não consegui ler o xlsx enviado: {e}")
+        finally:
+            xlsx_tmp.unlink(missing_ok=True)
+    else:
+        entrada_path = DATA_DIR / f"anjun_entrada_{uid}{sufixo_original}"
+        entrada_path.write_bytes(contents)
 
     nome_saida = f"{Path(arquivo.filename or 'anjun').stem}_GEO.xlsx"
     _ANJUN_JOBS[uid] = {
