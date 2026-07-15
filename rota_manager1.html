@@ -817,6 +817,19 @@ header .badge b { color: var(--accent2); }
     align-items: center;
     gap: 8px;
   }
+  .scan-lista-item-seq {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: var(--accent2);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .scan-lista-item-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
   .scan-lista-item input {
     width: 100%;
@@ -7774,8 +7787,9 @@ function scanRenderLista() {
     return;
   }
 
-  wrap.innerHTML = _scanListaItens.map(it => `
+  wrap.innerHTML = _scanListaItens.map((it, idx) => `
     <div class="scan-lista-item" data-id="${it.id}">
+      <span class="scan-lista-item-seq" title="Sequência">${idx + 1}</span>
       <div class="scan-lista-item-fields">
         <input class="endereco" placeholder="Endereço" value="${escHtml(it.endereco || '')}" oninput="scanEditarItemLista(${it.id}, 'endereco', this.value)">
       </div>
@@ -7908,13 +7922,13 @@ async function scanGerarListaXlsx(comGeo) {
   status.textContent = '📄 Gerando planilha...';
 
   const dataOut = comGeo
-    ? [['Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']]
-    : [['Endereço', 'Endereço Padronizado']];
-  _scanListaItens.forEach(it => {
+    ? [['Sequência', 'Endereço', 'Endereço Padronizado', 'Latitude', 'Longitude', 'Fonte']]
+    : [['Sequência', 'Endereço', 'Endereço Padronizado']];
+  _scanListaItens.forEach((it, idx) => {
     if (comGeo) {
-      dataOut.push([it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
+      dataOut.push([idx + 1, it.endereco || '', it.enderecoPadronizado || '', it.lat ?? '', it.lng ?? '', it.fonte || '']);
     } else {
-      dataOut.push([it.endereco || '', it.enderecoPadronizado || '']);
+      dataOut.push([idx + 1, it.endereco || '', it.enderecoPadronizado || '']);
     }
   });
   const ws = XLSX.utils.aoa_to_sheet(dataOut);
