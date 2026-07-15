@@ -24,7 +24,6 @@ Railway / Render / Fly:
 import csv
 import hashlib
 import json
-import math
 import os
 import re
 import secrets
@@ -567,56 +566,39 @@ def atualizar_rows_historico(nome_arquivo: str, rows: list, user_id: str = "") -
 def _normalizar_endereco(end: str) -> str:
     return re.sub(r"\s+", " ", (end or "").strip().lower())
 
-# Raio (em metros) dentro do qual um voto novo é considerado "o mesmo
-# lugar" de um cluster já existente (ver banco_votos_registrar).
-RAIO_VOTO_METROS = 10.0
-
-def _distancia_metros(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Distância aproximada entre duas coordenadas, em metros (fórmula
-    equirretangular — suficiente pra raios pequenos como 10m e bem mais
-    barata que haversine completo)."""
-    R = 6371000.0
-    lat1r, lat2r = math.radians(lat1), math.radians(lat2)
-    dlat = lat2r - lat1r
-    dlon = math.radians(lon2 - lon1)
-    x = dlon * math.cos((lat1r + lat2r) / 2)
-    y = dlat
-    return R * math.sqrt(x * x + y * y)
-
 def banco_coords_carregar() -> dict:
     """
     Formato do arquivo:
         {
-          "global":    { chave: {lat, lon, endereco_original, salvo_em, fonte, usuario} },
-          "overrides": { user_id: { chave: {lat, lon, endereco_original, salvo_em} } },
-          "votos":     { chave: [ {lat, lon, votos, votantes: {user_id: {lat, lon}}, atualizado_em} ] }
+          "global":      { chave: {lat, lon, endereco_original, salvo_em, fonte, usuario} },
+          "overrides":   { user_id: { chave: {lat, lon, endereco_original, salvo_em} } },
+          "correlacoes": { chave: {grupo_id, endereco_original, quando, por} }
         }
-    "global" é o banco confirmado por API (HERE/Google) OU por consenso da
-    comunidade (voto_comunidade) — permanente e compartilhado por todo
-    mundo, o "ciclo" que vai pegando os prédios de Goiânia aos poucos.
-    "overrides" é a correção manual de um usuário específico (arrastou o
-    pin no mapa) — vale só enquanto a rota que contém aquele endereço
-    estiver no histórico dele; quando ela sai do histórico (apagada ou
-    substituída por nova importação), o override é descartado e ele volta
-    a ver o valor global normal. "votos" são os votos ocultos de consenso
-    (ver banco_votos_registrar) — cada usuário editando um endereço no
-    mapa gera um voto ali, agrupado por proximidade (raio de 10m); o
-    cluster com mais votos vira sugestão pro "global", mas isso nunca
-    interfere no override pessoal de ninguém.
+    "global" é o banco confirmado por API (HERE/Google) — permanente e
+    compartilhado por todo mundo, o "ciclo" que vai pegando os prédios de
+    Goiânia aos poucos. "overrides" é a correção manual de um usuário
+    específico (arrastou o pin no mapa) — vale só enquanto a rota que
+    contém aquele endereço estiver no histórico dele; quando ela sai do
+    histórico (apagada ou substituída por nova importação), o override
+    é descartado e ele volta a ver o valor global normal. "correlacoes"
+    é a marcação manual de "esses textos são o mesmo lugar" (usuário
+    agrupou 2+ paradas no mapa ou na lista) — é só uma DICA de consenso,
+    nunca sobrescreve coordenada de ninguém sozinha (ver
+    banco_coords_correlacionar).
     """
     p = Path(BANCO_COORDS_FILE)
     if not p.exists():
-        return {"global": {}, "overrides": {}, "votos": {}}
+        return {"global": {}, "overrides": {}, "correlacoes": {}}
     try:
         banco = json.loads(p.read_text("utf-8"))
     except Exception:
-        return {"global": {}, "overrides": {}, "votos": {}}
+        return {"global": {}, "overrides": {}, "correlacoes": {}}
     # Migração do formato antigo (dict plano na raiz, sem separar override).
     if "global" not in banco and "overrides" not in banco:
         banco = {"global": banco, "overrides": {}}
     banco.setdefault("global", {})
     banco.setdefault("overrides", {})
-    banco.setdefault("votos", {})
+    banco.setdefault("correlacoes", {})
     return banco
 
 def banco_coords_salvar(banco: dict):
@@ -649,17 +631,6 @@ def banco_coords_salvar_coord(endereco: str, lat: float, lon: float, user_id: st
     overrides_usuario[chave] = entrada
     banco_coords_salvar(banco)
     print(f"  [BANCO_COORDS] override de {user_id!r} em {chave!r} → ({lat:.6f}, {lon:.6f})")
-
-    # Além do override pessoal (acima, só vale pra esse usuário), toda
-    # edição também conta como um voto oculto de consenso da comunidade —
-    # ver banco_votos_registrar. Nunca deixa uma falha aqui derrubar o
-    # salvamento do override, que já aconteceu e é o que importa pro
-    # usuário na hora.
-    try:
-        banco_votos_registrar(endereco, lat, lon, user_id)
-    except Exception as e:
-        print(f"  [BANCO_VOTOS] ⚠️ falha ao registrar voto de {user_id!r} em {chave!r}: {e}")
-
     return True, "Coordenada salva (só pra você, enquanto essa rota estiver no seu histórico).", {"lat": entrada["lat"], "lon": entrada["lon"]}
 
 def banco_coords_salvar_global(endereco: str, lat: float, lon: float, fonte: str, usuario: str = "") -> dict:
@@ -682,106 +653,6 @@ def banco_coords_salvar_global(endereco: str, lat: float, lon: float, fonte: str
     banco_coords_salvar(banco)
     print(f"  [BANCO_COORDS] confirmado via {fonte} → {chave!r} = ({entrada['lat']:.6f}, {entrada['lon']:.6f})")
     return {"lat": entrada["lat"], "lon": entrada["lon"]}
-
-def banco_votos_registrar(endereco: str, lat: float, lon: float, user_id: str) -> None:
-    """
-    Voto oculto de consenso da comunidade — roda em paralelo ao override
-    pessoal (banco_coords_salvar_coord) toda vez que alguém edita/arrasta
-    o pin no mapa. Não confunde com override: o override é só a escolha
-    pessoal do usuário pra planilha dele; o voto é o "termômetro" que
-    decide o valor global sugerido pra todo mundo.
-
-    Regras:
-    - Cada usuário tem no máximo 1 voto ativo por endereço. Se ele editar
-      de novo, o voto antigo dele é retirado antes de contar o novo.
-    - Um voto dentro de RAIO_VOTO_METROS de um cluster já existente
-      reforça esse cluster (soma mais um voto no mesmo lugar).
-    - Um voto longe de todos os clusters existentes cria um cluster novo,
-      separado, com 1 voto.
-    - O cluster com MAIS votos é quem manda no valor "global" — mesmo que
-      um cluster antigo tenha 1000 votos, se um novo lugar superar esse
-      número (voto estrito, empate não troca), o consenso muda pra lá.
-    - Isso nunca mexe no override pessoal de ninguém — cada um continua
-      livre pra manter o pin onde quiser só na própria planilha.
-    """
-    chave = _normalizar_endereco(endereco)
-    if not chave or not user_id:
-        return
-    try:
-        lat = float(lat)
-        lon = float(lon)
-    except (TypeError, ValueError):
-        return
-
-    banco = banco_coords_carregar()
-    clusters = banco["votos"].get(chave) or []
-
-    # Retira o voto antigo desse usuário de qualquer cluster (só pode ter
-    # 1 voto ativo por endereço) e descarta clusters que ficaram vazios.
-    for c in clusters:
-        c.get("votantes", {}).pop(user_id, None)
-    clusters = [c for c in clusters if c.get("votantes")]
-
-    # Acha um cluster existente dentro do raio de 10m, ou cria um novo.
-    alvo = None
-    for c in clusters:
-        if _distancia_metros(lat, lon, c["lat"], c["lon"]) <= RAIO_VOTO_METROS:
-            alvo = c
-            break
-    if alvo is None:
-        alvo = {"lat": lat, "lon": lon, "votantes": {}}
-        clusters.append(alvo)
-
-    alvo["votantes"][user_id] = {"lat": lat, "lon": lon}
-    # Recalcula o centro do cluster como a média dos votos que ele contém,
-    # pra o raio de 10m ser medido a partir de um ponto que reflete o
-    # grupo todo, não só o primeiro voto que criou o cluster.
-    lats = [v["lat"] for v in alvo["votantes"].values()]
-    lons = [v["lon"] for v in alvo["votantes"].values()]
-    alvo["lat"] = round(sum(lats) / len(lats), 6)
-    alvo["lon"] = round(sum(lons) / len(lons), 6)
-    alvo["votos"] = len(alvo["votantes"])
-    alvo["atualizado_em"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-
-    banco["votos"][chave] = clusters
-
-    # ── decide se o consenso global muda ──
-    vencedor = max(clusters, key=lambda c: c["votos"]) if clusters else None
-    global_atual = banco["global"].get(chave)
-
-    cluster_do_global = None
-    if global_atual:
-        for c in clusters:
-            if _distancia_metros(global_atual["lat"], global_atual["lon"], c["lat"], c["lon"]) <= RAIO_VOTO_METROS:
-                cluster_do_global = c
-                break
-    votos_do_global_atual = cluster_do_global["votos"] if cluster_do_global else 0
-
-    if vencedor is not None and vencedor["votos"] > votos_do_global_atual and vencedor is not cluster_do_global:
-        entrada = banco["global"].get(chave) or {"endereco_original": endereco.strip()}
-        entrada["lat"] = vencedor["lat"]
-        entrada["lon"] = vencedor["lon"]
-        entrada["endereco_original"] = entrada.get("endereco_original") or endereco.strip()
-        entrada["salvo_em"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-        entrada["fonte"] = "voto_comunidade"
-        banco["global"][chave] = entrada
-        print(f"  [BANCO_VOTOS] consenso de {chave!r} mudou → ({vencedor['lat']:.6f}, {vencedor['lon']:.6f}) "
-              f"com {vencedor['votos']} voto(s)")
-
-    banco_coords_salvar(banco)
-
-def banco_votos_limpar(endereco: str):
-    """Apaga os votos escondidos de um endereço. Chamado sempre que a
-    entrada correspondente é removida do banco global (painel admin) —
-    senão um voto antigo poderia "ressuscitar" a coordenada que acabou
-    de ser apagada, na próxima vez que alguém editasse por perto."""
-    chave = _normalizar_endereco(endereco)
-    if not chave:
-        return
-    banco = banco_coords_carregar()
-    if banco["votos"].pop(chave, None) is not None:
-        banco_coords_salvar(banco)
-        print(f"  [BANCO_VOTOS] votos de {chave!r} limpos (entrada apagada do banco global)")
 
 def banco_coords_buscar(endereco: str, user_id: str = "") -> dict | None:
     """Prioriza o override pessoal do usuário (se a rota ainda estiver no
@@ -813,15 +684,12 @@ def banco_coords_limpar_overrides_usuario(user_id: str):
         print(f"  [BANCO_COORDS] overrides de {user_id!r} limpos (rota saiu do histórico)")
 
 def banco_coords_apagar(endereco: str) -> tuple[bool, str]:
-    """Remove do banco global — usado só pelo painel admin. Também limpa
-    os votos escondidos desse endereço, senão um voto antigo poderia
-    "ressuscitar" a coordenada que o admin acabou de apagar."""
+    """Remove do banco global — usado só pelo painel admin."""
     chave = _normalizar_endereco(endereco)
     banco = banco_coords_carregar()
     if chave not in banco["global"]:
         return False, "Endereço não encontrado no banco."
     del banco["global"][chave]
-    banco["votos"].pop(chave, None)
     banco_coords_salvar(banco)
     return True, "Entrada removida do banco."
 
@@ -842,7 +710,6 @@ def banco_coords_apagar_recentes(horas: float) -> int:
             removidas.append(chave)
     for chave in removidas:
         del banco["global"][chave]
-        banco["votos"].pop(chave, None)
     if removidas:
         banco_coords_salvar(banco)
     return len(removidas)
@@ -874,16 +741,73 @@ def banco_coords_apagar_intervalo(data_inicio: str, data_fim: str) -> int:
             removidas.append(chave)
     for chave in removidas:
         del banco["global"][chave]
-        banco["votos"].pop(chave, None)
     if removidas:
         banco_coords_salvar(banco)
     return len(removidas)
+
+def banco_coords_correlacionar(enderecos: list[str], user_id: str = "") -> dict:
+    """
+    Correlação manual entre endereços (usuário agrupou 2+ paradas — no
+    mapa ou na lista — que na verdade são o mesmo lugar, só escritas
+    diferente). É só uma DICA pra consenso futuro: nunca sobrescreve
+    coordenada de ninguém sozinha; só serve pra avisar quando um desses
+    endereços aparecer de novo sem coordenada própria, mas outro do
+    mesmo grupo já tiver (ver o uso em banco_coords_aplicar).
+
+    Cada endereço só pode estar em 1 grupo. Se algum dos endereços
+    informados já pertencia a um grupo (de uma correlação anterior),
+    todo mundo se junta a esse grupo — inclusive fundindo 2 grupos
+    antigos diferentes em 1 só, se for o caso.
+    """
+    pares: list[tuple[str, str]] = []
+    vistas = set()
+    for e in enderecos or []:
+        chave = _normalizar_endereco(e)
+        if chave and chave not in vistas:
+            vistas.add(chave)
+            pares.append((chave, (e or "").strip()))
+    if len(pares) < 2:
+        return {"ok": False, "msg": "Precisa de pelo menos 2 endereços diferentes pra correlacionar."}
+
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    banco = banco_coords_carregar()
+    correlacoes = banco["correlacoes"]
+
+    grupos_existentes = {correlacoes[c]["grupo_id"] for c, _ in pares if c in correlacoes}
+    if grupos_existentes:
+        grupo_id = sorted(grupos_existentes)[0]
+        if len(grupos_existentes) > 1:
+            # fundindo grupos antigos diferentes em 1 só (o vencedor é o "menor" id)
+            for info in correlacoes.values():
+                if info.get("grupo_id") in grupos_existentes:
+                    info["grupo_id"] = grupo_id
+    else:
+        grupo_id = uuid.uuid4().hex[:12]
+
+    for chave, original in pares:
+        entrada = correlacoes.get(chave) or {}
+        entrada["grupo_id"]          = grupo_id
+        entrada["endereco_original"] = entrada.get("endereco_original") or original
+        entrada["quando"]            = agora
+        if user_id:
+            entrada["por"] = user_id
+        correlacoes[chave] = entrada
+
+    banco_coords_salvar(banco)
+    membros = sorted({
+        info["endereco_original"] for info in correlacoes.values()
+        if info.get("grupo_id") == grupo_id
+    })
+    print(f"  [BANCO_COORDS] correlação manual: {len(pares)} endereço(s) → grupo {grupo_id!r} ({user_id or '?'})")
+    return {"ok": True, "grupo_id": grupo_id, "membros": membros}
+
 
 def banco_coords_aplicar(rows: list, user_id: str = "") -> list:
     banco = banco_coords_carregar()
     overrides_usuario = banco["overrides"].get(user_id, {}) if user_id else {}
     globais = banco["global"]
-    if not overrides_usuario and not globais:
+    correlacoes = banco.get("correlacoes", {})
+    if not overrides_usuario and not globais and not correlacoes:
         return rows
     for row in rows:
         chave = _normalizar_endereco(row.get("address", ""))
@@ -900,6 +824,25 @@ def banco_coords_aplicar(rows: list, user_id: str = "") -> list:
             row["coord"]       = lat + "," + lon
             row["do_banco"]    = True
             row["fonte_coord"] = fonte
+        elif correlacoes:
+            # Sem coordenada própria (nem override, nem global) — mas talvez
+            # um "parente" correlacionado manualmente já tenha uma. Isso é só
+            # uma dica (correlacao_sugerida) pro front avisar o usuário; não
+            # aplica a coordenada sozinho.
+            info = correlacoes.get(chave)
+            if info:
+                grupo_id = info["grupo_id"]
+                for c2, i2 in correlacoes.items():
+                    if c2 == chave or i2.get("grupo_id") != grupo_id:
+                        continue
+                    sugestao = overrides_usuario.get(c2) or globais.get(c2)
+                    if sugestao:
+                        row["correlacao_sugerida"] = {
+                            "endereco": i2["endereco_original"],
+                            "lat": sugestao["lat"],
+                            "lon": sugestao["lon"],
+                        }
+                        break
     return rows
 
 # ─── Geocodificação sob demanda (confirmação na tela de loading) ──────
@@ -1998,6 +1941,19 @@ async def coords_salvar(request: Request):
     else:
         resposta["erro"] = msg
     return ok_json(resposta)
+
+@app.post("/coords/correlacionar")
+async def coords_correlacionar(request: Request):
+    """Chamado quando o usuário agrupa manualmente 2+ paradas (no mapa ou
+    na lista) — salva que esses endereços (com texto diferente) são o
+    mesmo lugar, como dica de consenso pra próxima vez."""
+    sess = _sessao_ou_401(request)
+    data = await request.json()
+    enderecos = data.get("enderecos", [])
+    if not isinstance(enderecos, list):
+        return err_json("Campo 'enderecos' deve ser uma lista.")
+    resultado = banco_coords_correlacionar(enderecos, sess["user_id"])
+    return ok_json(resultado, 200 if resultado.get("ok") else 400)
 
 @app.post("/coords/apagar")
 async def coords_apagar(request: Request):

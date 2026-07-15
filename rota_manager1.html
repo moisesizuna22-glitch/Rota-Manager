@@ -5127,6 +5127,17 @@ if (document.getElementById('mapa-overlay').classList.contains('show')) {
 fecharParadaSheet();
 renderMapaRotas();
 }
+
+// Salva a correlação manual no servidor: esses endereços (texto
+// diferente) são o mesmo lugar. É só uma dica pra próxima vez — não
+// bloqueia a UI se falhar.
+if (origsUnicos.length >= 2) {
+fetch(SERVER + '/coords/correlacionar', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', ...authHeaders() },
+body: JSON.stringify({ enderecos: origsUnicos })
+}).catch(err => console.warn('[CORRELACAO] Erro:', err));
+}
 }
 
 function escHtml(s) {
