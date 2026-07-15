@@ -462,6 +462,28 @@ header .badge b { color: var(--accent2); }
   }
   .badge-sem-coord .bc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 
+  /* ── Correlação sugerida (agrupamento manual anterior) — clicável ── */
+  .badge-correlacao {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 4px;
+    margin-left: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(56,132,255,.12);
+    color: #6ea8ff;
+    border: 1px solid rgba(56,132,255,.4);
+    vertical-align: middle;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .badge-correlacao:hover { background: rgba(56,132,255,.22); }
+  [data-theme="light"] .badge-correlacao { background: rgba(37,99,235,.1); color: #1d4ed8; border-color: rgba(37,99,235,.35); }
+  [data-theme="light"] .badge-correlacao:hover { background: rgba(37,99,235,.18); }
+
   /* ── "Você editou agora" — marcador extra ── */
   .badge-voce-editou {
     display: inline-flex;
@@ -4901,6 +4923,15 @@ if (row.do_banco) {
   confiancaBadgeHtml = `<span class="badge-sem-coord" title="Esta linha ainda não tem coordenada."><span class="bc-dot"></span>Sem coordenada</span>`;
 }
 
+// Badge — dica de correlação manual: um endereço parecido (agrupado
+// antes) já tem coordenada confirmada. Clicável — o usuário decide se
+// usa ou não (nunca aplica sozinho).
+let correlacaoBadgeHtml = '';
+if (!hasCoord && row.correlacao_sugerida) {
+  const sug = row.correlacao_sugerida;
+  correlacaoBadgeHtml = `<span class="badge-correlacao" data-cid="${row._cid}" data-lat="${sug.lat}" data-lon="${sug.lon}" title="Você já agrupou este endereço com '${escHtml(sug.endereco)}', que tem coordenada confirmada. Clique pra usar essa coordenada aqui também.">🔗 Igual a "${escHtml(sug.endereco)}"? Usar coordenada</span>`;
+}
+
 // Badge extra — marca que FOI VOCÊ quem confirmou/mudou essa coordenada
 // agora, nesta sessão.
 const editouAgoraBadgeHtml = row._editado
@@ -4911,7 +4942,7 @@ tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr">
          <div class="td-addr-reformado">${escHtml(endReformado)}</div>
-         ${hereBadgeHtml}${confiancaBadgeHtml}${editouAgoraBadgeHtml}
+         ${hereBadgeHtml}${confiancaBadgeHtml}${correlacaoBadgeHtml}${editouAgoraBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
@@ -4935,6 +4966,48 @@ if (confirm('Tirar este endereço do grupo? Ele passará a ser uma rota separada
 desagruparMembro(cid, mi);
 }
 });
+
+// Delegação de evento: badge de correlação sugerida — usuário decide
+// se aceita a coordenada de um endereço parecido que já foi agrupado
+// com este antes.
+document.getElementById('table-body').addEventListener('click', (e) => {
+const badge = e.target.closest('.badge-correlacao');
+if (!badge) return;
+const cid = parseInt(badge.dataset.cid);
+const lat = parseFloat(badge.dataset.lat);
+const lon = parseFloat(badge.dataset.lon);
+if (Number.isNaN(lat) || Number.isNaN(lon)) return;
+aplicarCorrelacaoSugerida(cid, lat, lon);
+});
+
+// Aplica a coordenada sugerida por correlação manual a uma linha
+// específica (o usuário clicou no badge pra aceitar a sugestão).
+function aplicarCorrelacaoSugerida(cid, lat, lon) {
+const row = _allRows.find(r => r._cid === cid);
+if (!row) return;
+const coord = lat.toFixed(6) + ',' + lon.toFixed(6);
+row.lat         = lat.toFixed(6);
+row.lon         = lon.toFixed(6);
+row.coord       = coord;
+row.do_banco    = true;
+row.fonte_coord = 'override';
+row._editado    = true;
+delete row.correlacao_sugerida;
+
+const q = document.getElementById('filter-input').value.trim();
+if (q) filtrarTabela(); else renderTable(_allRows);
+updateStats(_allRows);
+autoSaveDraft();
+
+const enderecoParaBanco = row.address || '';
+if (enderecoParaBanco) {
+fetch(SERVER + '/coords/salvar', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', ...authHeaders() },
+body: JSON.stringify({ endereco: enderecoParaBanco, lat, lon })
+}).then(r => r.json()).then(gamiProcessarResposta).catch(err => console.warn('[BANCO] Erro:', err));
+}
+}
 
 let _nextGroupId = 1;
 let _nextCid = 1;
