@@ -2040,6 +2040,37 @@ font-weight: 700;
 color: var(--text);
 line-height: 1.35;
 }
+.td-addr-reformado.editable-endereco {
+cursor: text;
+border-radius: var(--radius-sm);
+padding: 2px 5px;
+margin: -2px -5px;
+border: 1px dashed transparent;
+transition: border-color var(--transition), background var(--transition);
+}
+.td-addr-reformado.editable-endereco:hover {
+border-color: var(--border);
+background: var(--surface2);
+}
+.td-addr-reformado.editable-endereco:focus {
+outline: none;
+border-color: var(--accent);
+background: var(--surface2);
+}
+.badge-nome-editado {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+margin-top: 4px;
+margin-right: 6px;
+font-size: 10px;
+font-weight: 700;
+letter-spacing: .03em;
+border-radius: 999px;
+padding: 2px 8px;
+color: var(--accent);
+background: rgba(245,166,35,0.14);
+}
 .td-addr-original {
 font-size: 13px;
 color: var(--text);
@@ -4735,11 +4766,15 @@ const editouAgoraBadgeHtml = row._editado
   ? `<span class="badge-voce-editou" title="Você confirmou esta coordenada agora, nesta sessão.">✎ Você editou agora</span>`
   : '';
 
+const nomeEditadoBadgeHtml = row._nome_editado
+  ? `<span class="badge-nome-editado" title="Você renomeou este endereço manualmente. É esse nome que vai sair na exportação.">✎ Nome editado</span>`
+  : '';
+
 tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr">
-         <div class="td-addr-reformado">${escHtml(endReformado)}</div>
-         ${hereBadgeHtml}${confiancaBadgeHtml}${editouAgoraBadgeHtml}
+         <div class="td-addr-reformado editable-endereco" contenteditable="true" spellcheck="false" data-cid="${row._cid}" title="Clique para mudar o nome deste endereço (vale pra exportação também)">${escHtml(endReformado)}</div>
+         ${hereBadgeHtml}${confiancaBadgeHtml}${editouAgoraBadgeHtml}${nomeEditadoBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
@@ -4831,6 +4866,53 @@ if (chk.checked) _selecionados.add(cid);
 else _selecionados.delete(cid);
 chk.closest('tr').classList.toggle('tr-selecionada', chk.checked);
 atualizarFab();
+});
+
+// ══════════════════════════════════════════════════════════
+//  EDITAR NOME DO ENDEREÇO NA TABELA (reflete direto na exportação,
+//  já que a exportação usa row.group_label quando presente)
+// ══════════════════════════════════════════════════════════
+
+function _salvarNomeEditado(el) {
+const cid = parseInt(el.dataset.cid);
+const row = _allRows.find(r => r._cid === cid);
+if (!row) return;
+
+const novoNome = el.textContent.replace(/\s+/g, ' ').trim();
+if (!novoNome) {
+// Não deixa salvar vazio: volta pro nome anterior
+el.textContent = row.group_label || standardize(row.address) || row.address || '';
+return;
+}
+
+const nomeAtual = row.group_label || standardize(row.address) || row.address || '';
+if (novoNome === nomeAtual) return;
+
+row.group_label = novoNome;
+row._nome_editado = true;
+renderTable(_allRows);
+if (typeof autoSaveDraft === 'function') autoSaveDraft();
+}
+
+document.getElementById('table-body').addEventListener('blur', (e) => {
+const el = e.target.closest('.editable-endereco');
+if (!el) return;
+_salvarNomeEditado(el);
+}, true);
+
+document.getElementById('table-body').addEventListener('keydown', (e) => {
+const el = e.target.closest('.editable-endereco');
+if (!el) return;
+if (e.key === 'Enter') {
+e.preventDefault();
+el.blur();
+} else if (e.key === 'Escape') {
+e.preventDefault();
+const cid = parseInt(el.dataset.cid);
+const row = _allRows.find(r => r._cid === cid);
+el.textContent = row ? (row.group_label || standardize(row.address) || row.address || '') : '';
+el.blur();
+}
 });
 
 function toggleSelecionarTodos(marcar) {
