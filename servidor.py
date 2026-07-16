@@ -2458,6 +2458,51 @@ async def lotes_terceiros_tile(cidade: str, z: int, x: int, y: int):
     )
 
 
+# ─── Admin: indexação de quadra/lote (busca direta, sem precisar abrir mapa) ─
+# Lê o MESMO lotes_cache.sqlite3 (populado pelo warmup_lotes.py) e monta a
+# tabela `lotes_busca` (quadra + lote + centroide) pra busca instantânea.
+# Reaproveita a autenticação admin já existente — nenhuma secret nova.
+import io
+from contextlib import redirect_stdout
+import indexar_do_cache
+
+
+@app.post("/admin/lotes")
+async def admin_lotes(request: Request):
+    _sessao_admin_ou_403(request)
+
+    body = await request.json()
+    acao = body.get("acao")
+
+    buffer = io.StringIO()
+    try:
+        if acao == "listar":
+            with redirect_stdout(buffer):
+                await run_in_threadpool(indexar_do_cache.listar)
+        elif acao == "inspecionar":
+            faltando = [k for k in ("cidade", "z", "x", "y") if body.get(k) is None]
+            if faltando:
+                raise HTTPException(status_code=400, detail=f"faltando: {', '.join(faltando)}")
+            with redirect_stdout(buffer):
+                await run_in_threadpool(
+                    indexar_do_cache.inspecionar,
+                    body["cidade"], int(body["z"]), int(body["x"]), int(body["y"]),
+                )
+        elif acao == "indexar":
+            with redirect_stdout(buffer):
+                await run_in_threadpool(indexar_do_cache.indexar)
+        else:
+            raise HTTPException(status_code=400, detail="acao inválida: use listar | inspecionar | indexar")
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse(
+            {"erro": f"{type(e).__name__}: {e}", "log": buffer.getvalue()}, status_code=500
+        )
+
+    return JSONResponse({"ok": True, "log": buffer.getvalue()})
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  ROTAS  ──  DELETE
 # ═══════════════════════════════════════════════════════════════════
