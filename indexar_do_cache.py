@@ -28,12 +28,29 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/data" if Path("/data").is_dir() els
 DB_PATH = DATA_DIR / "lotes_cache.sqlite3"
 
 # ============================================================
-# AJUSTE COM BASE NO QUE O --inspecionar mostrar
+# SCHEMA REAL (descoberto via --inspecionar)
 # ============================================================
-LAYER_NAME = "lotes"          # nome da layer dentro do pbf
-FIELD_BAIRRO = "bairro"
-FIELD_QUADRA = "quadra"
-FIELD_LOTE = "lote"
+# Cada cidade tem sua própria layer (ex: 'lotes_aparecida'), então
+# detectamos a layer automaticamente em vez de fixar um nome.
+#
+# Os campos não vêm separados - vem tudo dentro de 'sup', tipo:
+#   "Q 26, LT 43"  ->  quadra=26, lote=43
+# 'nsvia' é o bairro/loteamento (ex: "JD Tropical").
+# 'via' é o nome da rua.
+import re
+
+_PADRAO_QUADRA_LOTE = re.compile(
+    r"Q\w*\.?\s*([^\s,]+)\s*,?\s*LT\w*\.?\s*([^\s,]+)", re.IGNORECASE
+)
+
+
+def _extrair_quadra_lote(sup):
+    if not sup:
+        return None, None
+    m = _PADRAO_QUADRA_LOTE.search(sup)
+    if not m:
+        return None, None
+    return m.group(1), m.group(2)
 
 
 def get_conn():
@@ -140,6 +157,8 @@ def criar_schema(conn):
             bairro TEXT,
             quadra TEXT,
             lote TEXT,
+            via TEXT,
+            busca_end TEXT,
             centroid_lat REAL,
             centroid_lon REAL,
             tile_z INTEGER,
@@ -185,6 +204,7 @@ def indexar():
     print(f"{len(rows)} tiles com dado no cache para decodificar")
 
     total_lotes = 0
+    sem_match = 0
     for i, (cidade, z, x, y, data) in enumerate(rows):
         try:
             tile = mapbox_vector_tile.decode(data)
@@ -192,16 +212,24 @@ def indexar():
             print(f"  erro ao decodificar {cidade}/{z}/{x}/{y}: {e}")
             continue
 
-        layer = tile.get(LAYER_NAME)
-        if not layer:
+        # a layer tem nome diferente por cidade (ex: lotes_aparecida) -
+        # pega a primeira (e geralmente única) layer do tile
+        if not tile:
             continue
+        layer_name = next(iter(tile.keys()))
+        layer = tile[layer_name]
 
         extent = layer.get("extent", 4096)
         for feature in layer.get("features", []):
             props = feature.get("properties", {})
-            bairro = props.get(FIELD_BAIRRO)
-            quadra = props.get(FIELD_QUADRA)
-            lote = props.get(FIELD_LOTE)
+            sup = props.get("sup")
+            quadra, lote = _extrair_quadra_lote(sup)
+            if quadra is None:
+                sem_match += 1
+                continue
+            bairro = props.get("nsvia")
+            via = props.get("via")
+            busca_end = props.get("BuscaEnd")
 
             geometry = feature.get("geometry", {})
             coords = geometry.get("coordinates", [])
@@ -209,21 +237,23 @@ def indexar():
 
             cur = conn.execute("""
                 INSERT OR IGNORE INTO lotes_busca
-                    (cidade, bairro, quadra, lote, centroid_lat, centroid_lon,
-                     tile_z, tile_x, tile_y)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (cidade, bairro, quadra, lote, lat, lon, z, x, y))
+                    (cidade, bairro, quadra, lote, via, busca_end,
+                     centroid_lat, centroid_lon, tile_z, tile_x, tile_y)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (cidade, bairro, quadra, lote, via, busca_end,
+                  lat, lon, z, x, y))
             if cur.rowcount:
                 total_lotes += 1
 
-        if (i + 1) % 500 == 0:
+        if (i + 1) % 100 == 0:
             conn.commit()
-            print(f"  ... {i + 1}/{len(rows)} tiles, {total_lotes} lotes indexados ate agora")
+            print(f"  ... {i + 1}/{len(rows)} tiles, {total_lotes} lotes indexados ate agora "
+                  f"({sem_match} sem match no padrao Q/LT)")
 
     conn.commit()
     conn.close()
     print(f"\nConcluido: {total_lotes} lotes indexados em lotes_busca "
-          f"(dentro de {DB_PATH})")
+          f"({sem_match} features sem match no padrao Q/LT, ignoradas)")
 
 
 def main():
