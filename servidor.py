@@ -2464,12 +2464,27 @@ async def lotes_terceiros_tile(cidade: str, z: int, x: int, y: int):
 # Reaproveita a autenticação admin já existente — nenhuma secret nova.
 import io
 from contextlib import redirect_stdout
-import indexar_do_cache
+
+try:
+    import indexar_do_cache
+    _INDEXAR_DISPONIVEL = True
+except ImportError as _e:
+    print(f"  [ADMIN/LOTES] ⚠️ indexar_do_cache indisponível ({_e}). "
+          f"Adicione 'mapbox-vector-tile' e 'mercantile' ao requirements.txt.")
+    indexar_do_cache = None
+    _INDEXAR_DISPONIVEL = False
 
 
 @app.post("/admin/lotes")
 async def admin_lotes(request: Request):
     _sessao_admin_ou_403(request)
+
+    if not _INDEXAR_DISPONIVEL:
+        raise HTTPException(
+            status_code=503,
+            detail="indexar_do_cache indisponível: falta 'mapbox-vector-tile' e/ou "
+                   "'mercantile' no requirements.txt. Adicione e faça o deploy de novo.",
+        )
 
     body = await request.json()
     acao = body.get("acao")
