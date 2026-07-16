@@ -4675,7 +4675,14 @@ return { rows, headers, colAddr, colLat, colLon, colCoor };
 let _allRows = [];
 
 // ── Auto-save do estado da rota no localStorage ─────────────────────────────
-const _ROTA_DRAFT_KEY = 'rota_manager_draft';
+// Chave do rascunho é por usuário (não uma constante global!) — senão,
+// no mesmo navegador/celular, a conta B abriria o rascunho que ficou
+// salvo da conta A. Cada login só enxerga o próprio rascunho.
+function _draftKey() {
+  const s = getSession();
+  const user = (s && s.user) ? s.user : '_anon';
+  return 'rota_manager_draft:' + user;
+}
 
 function autoSaveDraft() {
   try {
@@ -4688,17 +4695,17 @@ function autoSaveDraft() {
       rows: _allRows,
       fileName: _fileName,
     };
-    localStorage.setItem(_ROTA_DRAFT_KEY, JSON.stringify(draft));
+    localStorage.setItem(_draftKey(), JSON.stringify(draft));
   } catch(e) { /* quota ou privado — ignora */ }
 }
 
 function clearDraft() {
-  try { localStorage.removeItem(_ROTA_DRAFT_KEY); } catch(e) {}
+  try { localStorage.removeItem(_draftKey()); } catch(e) {}
 }
 
 function loadDraftIfExists() {
   try {
-    const raw = localStorage.getItem(_ROTA_DRAFT_KEY);
+    const raw = localStorage.getItem(_draftKey());
     if (!raw) return false;
     const draft = JSON.parse(raw);
     if (!draft || !Array.isArray(draft.rows) || !draft.rows.length) return false;
@@ -9430,6 +9437,9 @@ if (snavAdmin) snavAdmin.style.display = isAdminUser() ? '' : 'none';
 const snavBanco = document.getElementById('snav-banco');
 if (snavBanco) snavBanco.style.display = isAdminUser() ? '' : 'none';
 if (!_allRows.length) { if (!loadDraftIfExists()) checarServidor(); } else checarServidor();
+// Limpeza única do rascunho antigo (de antes da correção que isolava o
+// rascunho por usuário) — evita ele ficar perdido no navegador pra sempre.
+try { localStorage.removeItem('rota_manager_draft'); } catch(e) {}
 confirmarPagamentoSeRetornouDoCheckout();
 carregarPerfilUsuario().then(() => {
   // Update sidebar user info after profile loads
