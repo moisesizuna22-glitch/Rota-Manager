@@ -2494,6 +2494,9 @@ async def admin_lotes(request: Request):
         if acao == "listar":
             with redirect_stdout(buffer):
                 await run_in_threadpool(indexar_do_cache.listar)
+        elif acao == "diagnostico":
+            with redirect_stdout(buffer):
+                await run_in_threadpool(indexar_do_cache.diagnostico)
         elif acao == "inspecionar":
             faltando = [k for k in ("cidade", "z", "x", "y") if body.get(k) is None]
             if faltando:

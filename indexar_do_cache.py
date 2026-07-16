@@ -67,6 +67,35 @@ def inspecionar(cidade, z, x, y):
             print(f"    Exemplo de properties: {features[0].get('properties')}")
 
 
+def diagnostico():
+    print(f"DATA_DIR resolvido para: {DATA_DIR.resolve()}")
+    print(f"DATA_DIR existe? {DATA_DIR.is_dir()}")
+    print(f"DB_PATH esperado: {DB_PATH.resolve()}")
+    print(f"DB_PATH existe? {DB_PATH.exists()}")
+    if DB_PATH.exists():
+        print(f"Tamanho do arquivo: {DB_PATH.stat().st_size} bytes "
+              f"({DB_PATH.stat().st_size / (1024*1024):.1f} MB)")
+
+    print("\nConteúdo de DATA_DIR:")
+    if DATA_DIR.is_dir():
+        for item in sorted(DATA_DIR.iterdir()):
+            tamanho = item.stat().st_size if item.is_file() else "-"
+            print(f"  {item.name}  ({tamanho} bytes)" if item.is_file() else f"  {item.name}/ (pasta)")
+    else:
+        print("  DATA_DIR não existe como diretório")
+
+    if DB_PATH.exists() and DB_PATH.stat().st_size > 0:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            tabelas = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+            print(f"\nTabelas encontradas no banco: {[t[0] for t in tabelas]}")
+            conn.close()
+        except Exception as e:
+            print(f"\nErro ao abrir o banco: {e}")
+
+
 def listar(limite=10):
     conn = get_conn()
     cidades = conn.execute(
