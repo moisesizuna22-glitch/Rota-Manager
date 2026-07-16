@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
-pip install --quiet mapbox-vector-tile mercantile
+
+if ! command -v pip3 &> /dev/null; then
+    if command -v dnf &> /dev/null; then
+        dnf install -y python3-pip
+    elif command -v yum &> /dev/null; then
+        yum install -y python3-pip
+    else
+        python3 -m ensurepip --upgrade
+    fi
+fi
+
+pip3 install --quiet mapbox-vector-tile mercantile
 
 cat > /tmp/indexar_do_cache.py << 'PYEOF'
 """
