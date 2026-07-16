@@ -127,6 +127,20 @@ PLANOS = {
 }
 
 SESSION_TTL_HORAS = 12
+DIAS_TESTE_GRATIS = 3
+AVISO_TRIAL_HORAS_ANTES = 24  # avisa quando faltar 1 dia (ou menos) pro teste grátis acabar
+
+def _conceder_teste_gratis(user: dict) -> None:
+    """3 dias grátis automáticos pra TODA conta nova, não importa por onde
+    ela foi criada (cadastro público com email, ou criação direta pelo
+    painel admin) — acesso completo (sem plano_ativo, então sem limite
+    diário). "origem_acesso" só serve pro painel admin diferenciar teste
+    grátis de plano pago; some sozinho quando o acesso expirar ou quando
+    a pessoa assinar/for liberada de verdade (ver admin_liberar_acesso e
+    _creditar_plano)."""
+    expira_trial = datetime.now() + timedelta(days=DIAS_TESTE_GRATIS)
+    user["acesso_expira_em"] = expira_trial.isoformat()
+    user["origem_acesso"]    = "teste_gratis"
 
 # ═══════════════════════════════════════════════════════════════════
 #  FASTAPI APP
@@ -290,7 +304,7 @@ def _sessao_com_acesso_ou_403(request: Request) -> dict:
         return sess
     if not usuario_tem_acesso_ativo(sess["usuario"]):
         raise HTTPException(status_code=403,
-            detail="Seu acesso à importação de rotas expirou ou não foi liberado. Fale com o administrador.")
+            detail="Sua assinatura venceu. Assine para continuar importando rotas.")
     pode, motivo = usuario_pode_importar_hoje(sess["usuario"])
     if not pode:
         raise HTTPException(status_code=403, detail=motivo)
@@ -417,9 +431,11 @@ def confirmar_cadastro(pending_token: str, codigo: str) -> tuple[bool, str]:
         "email":    pend["email"],
         "telefone": pend.get("telefone", ""),
     }
+    # 3 dias grátis automáticos pra toda conta nova (ver _conceder_teste_gratis).
+    _conceder_teste_gratis(users[pend["username"]])
     salvar_usuarios(users)
     del _cadastros_pendentes[pending_token]
-    return True, "Conta criada com sucesso."
+    return True, f"Conta criada com sucesso. Você ganhou {DIAS_TESTE_GRATIS} dias grátis!"
 
 # ═══════════════════════════════════════════════════════════════════
 #  RECUPERAÇÃO DE SENHA
@@ -1064,6 +1080,7 @@ def admin_listar_usuarios() -> list:
             "telefone":            dados.get("telefone", ""),
             "is_admin":            bool(dados.get("is_admin", False)),
             "acesso_expira_em":    dados.get("acesso_expira_em"),
+            "origem_acesso":       dados.get("origem_acesso"),
             "avulsa_creditos":     int(dados.get("avulsa_creditos", 0) or 0),
             "plano_solicitado":    dados.get("plano_solicitado"),
             "plano_solicitado_em": dados.get("plano_solicitado_em"),
@@ -1091,6 +1108,10 @@ def admin_criar_usuario(username: str, senha: str, email: str = "", is_admin: bo
         novo["email"] = email
     if is_admin:
         novo["is_admin"] = True
+    else:
+        # Mesma regra do cadastro público: toda conta nova (que não seja
+        # admin) começa com 3 dias grátis automáticos.
+        _conceder_teste_gratis(novo)
     users[username] = novo
     salvar_usuarios(users)
     return True, "Usuário criado com sucesso."
@@ -1160,6 +1181,7 @@ def admin_liberar_acesso(username: str, dias: int) -> tuple[bool, str]:
     expira_em = datetime.now() + timedelta(days=dias)
     u["acesso_expira_em"] = expira_em.isoformat()
     u.pop("plano_ativo", None)
+    u.pop("origem_acesso", None)
     salvar_usuarios(users)
     return True, f"Acesso liberado até {expira_em.strftime('%d/%m/%Y %H:%M')}."
 
@@ -1170,6 +1192,7 @@ def admin_revogar_acesso(username: str) -> tuple[bool, str]:
         return False, "Usuário não encontrado."
     u.pop("acesso_expira_em", None)
     u.pop("plano_ativo", None)
+    u.pop("origem_acesso", None)
     salvar_usuarios(users)
     return True, "Acesso revogado."
 
@@ -1180,10 +1203,12 @@ def _creditar_plano(u: dict, plano_id: str) -> str:
     if plano["tipo"] == "avulso":
         u["avulsa_creditos"] = int(u.get("avulsa_creditos", 0) or 0) + 1
         u.pop("plano_ativo", None)
+        u.pop("origem_acesso", None)
         return "1 crédito de importação avulsa liberado."
     expira_em = datetime.now() + timedelta(days=plano["dias"])
     u["acesso_expira_em"] = expira_em.isoformat()
     u["plano_ativo"] = plano_id
+    u.pop("origem_acesso", None)
     return f"{plano['nome']} liberado até {expira_em.strftime('%d/%m/%Y %H:%M')}."
 
 def usuario_solicitar_plano(username: str, plano_id: str) -> tuple[bool, str]:
@@ -1595,8 +1620,30 @@ async def get_dados(request: Request):
 @app.get("/auth/status")
 async def auth_status(request: Request):
     sess = _sessao_ou_401(request)
-    tem_acesso = bool(sess.get("is_admin")) or usuario_tem_acesso_ativo(sess["usuario"])
-    return ok_json({"ok": True, "tem_acesso": tem_acesso, "is_admin": bool(sess.get("is_admin"))})
+    is_admin = bool(sess.get("is_admin"))
+    tem_acesso = is_admin or usuario_tem_acesso_ativo(sess["usuario"])
+
+    # Aviso de teste grátis acabando — só pra quem ainda está no
+    # "teste_gratis" (não afeta plano pago nem créditos avulsos).
+    aviso_trial = None
+    if not is_admin and tem_acesso:
+        users = carregar_usuarios()
+        _, u = _buscar_usuario(users, sess["usuario"])
+        if u and u.get("origem_acesso") == "teste_gratis":
+            expira_raw = u.get("acesso_expira_em")
+            if expira_raw:
+                try:
+                    expira_em = datetime.fromisoformat(expira_raw)
+                    horas_restantes = (expira_em - datetime.now()).total_seconds() / 3600
+                    if horas_restantes <= AVISO_TRIAL_HORAS_ANTES:
+                        aviso_trial = {
+                            "dias_restantes":  max(0, round(horas_restantes / 24, 1)),
+                            "expira_em":       expira_raw,
+                        }
+                except ValueError:
+                    pass
+
+    return ok_json({"ok": True, "tem_acesso": tem_acesso, "is_admin": is_admin, "aviso_trial": aviso_trial})
 
 @app.get("/api/perfil/me")
 async def perfil_gamificacao_me(request: Request):
@@ -1688,6 +1735,7 @@ async def assinatura_status(request: Request):
     return ok_json({
         "ok":                    True,
         "acesso_expira_em":      u.get("acesso_expira_em"),
+        "origem_acesso":         u.get("origem_acesso"),
         "avulsa_creditos":       int(u.get("avulsa_creditos", 0) or 0),
         "plano_solicitado":      plano_solicitado,
         "plano_solicitado_em":   u.get("plano_solicitado_em"),

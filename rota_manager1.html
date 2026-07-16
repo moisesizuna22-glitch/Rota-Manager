@@ -462,6 +462,46 @@ header .badge b { color: var(--accent2); }
   }
   .badge-sem-coord .bc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 
+  /* ── Banner de aviso: teste grátis acabando ── */
+  #banner-trial {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    background: rgba(245,166,35,.14);
+    border-bottom: 1px solid rgba(245,166,35,.4);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  #banner-trial.urgente {
+    background: rgba(239,68,68,.14);
+    border-bottom-color: rgba(239,68,68,.45);
+  }
+  .banner-trial-btn {
+    margin-left: auto;
+    background: var(--accent);
+    color: #1a1205;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  #banner-trial.urgente .banner-trial-btn { background: #ef4444; color: #fff; }
+  .banner-trial-fechar {
+    background: transparent;
+    border: none;
+    color: var(--text-muted, currentColor);
+    opacity: .6;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+  }
+  .banner-trial-fechar:hover { opacity: 1; }
+
   /* ── Correlação sugerida (agrupamento manual anterior) — clicável ── */
   .badge-correlacao {
     display: inline-flex;
@@ -2104,7 +2144,21 @@ font-weight: 700;
 color: var(--text);
 line-height: 1.3;
 }
-.drop-sub { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.drop-sub {
+font-size: 12px;
+color: var(--muted);
+line-height: 1.3;
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
+#drop-zone-sem-acesso {
+flex-wrap: wrap;
+row-gap: 10px;
+}
+#drop-zone-sem-acesso .drop-zone-text { flex: 1 1 180px; }
+#drop-zone-sem-acesso #drop-btn-sem-acesso { flex-shrink: 0; margin-left: auto; }
 #server-status { font-size: 12px; color: var(--muted); margin-top: 10px; }
 .import-actions {
 display: flex;
@@ -4192,6 +4246,12 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   </div>
 </div>
 </header>
+
+<div id="banner-trial" style="display:none">
+  <span id="banner-trial-texto"></span>
+  <button class="banner-trial-btn" onclick="sidebarNav('assinatura')">Ver planos →</button>
+  <button class="banner-trial-fechar" onclick="fecharBannerTrial()" aria-label="Fechar aviso">✕</button>
+</div>
 
 <div class="toolbar" id="toolbar" style="display:none">
 <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
@@ -6303,9 +6363,41 @@ async function checarAcesso() {
     const r = await fetch(SERVER + '/auth/status', { headers: authHeaders(), signal: AbortSignal.timeout(2500) });
     const d = await r.json();
     _temAcesso = d.ok ? !!d.tem_acesso : true;   // erro inesperado -> não bloqueia a UI
+    atualizarBannerTrial(d.ok ? d.aviso_trial : null);
   } catch (e) {
     _temAcesso = true;
   }
+}
+
+// Mostra/atualiza o banner "seu teste grátis está acabando". Não mostra
+// de novo no mesmo dia se o usuário já fechou (localStorage por dia).
+function atualizarBannerTrial(aviso) {
+  const el = document.getElementById('banner-trial');
+  if (!el) return;
+  if (!aviso) { el.style.display = 'none'; return; }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (localStorage.getItem('_rm_trial_banner_fechado') === hoje) {
+    el.style.display = 'none';
+    return;
+  }
+
+  const dias = aviso.dias_restantes;
+  const urgente = dias <= 0.5;
+  el.classList.toggle('urgente', urgente);
+  const texto = dias <= 0
+    ? '⏱ Seu teste grátis acaba a qualquer momento.'
+    : dias < 1
+      ? `⏱ Seu teste grátis acaba em menos de 1 dia.`
+      : `⏱ Seu teste grátis acaba em ${Math.ceil(dias)} dia(s).`;
+  document.getElementById('banner-trial-texto').textContent = texto + ' Assine pra não perder o acesso.';
+  el.style.display = 'flex';
+}
+
+function fecharBannerTrial() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  localStorage.setItem('_rm_trial_banner_fechado', hoje);
+  document.getElementById('banner-trial').style.display = 'none';
 }
 
 let _pingFalhasSeguidas = 0;
@@ -8396,7 +8488,9 @@ function renderListaAdmin(lista, isFiltro) {
       statusHtml = `<span class="admin-acesso-badge admin-acesso-ok">✓ Acesso total (admin)</span>`;
     } else if (temAcesso) {
       const dataFmt = expiraEm.toLocaleDateString('pt-BR') + ' ' + expiraEm.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-      statusHtml = `<span class="admin-acesso-badge admin-acesso-ok">✓ Acesso até ${dataFmt}</span>`;
+      statusHtml = u.origem_acesso === 'teste_gratis'
+        ? `<span class="admin-acesso-badge admin-acesso-ok">🎁 Teste grátis até ${dataFmt}</span>`
+        : `<span class="admin-acesso-badge admin-acesso-ok">✓ Acesso até ${dataFmt}</span>`;
     } else if (expiraEm) {
       statusHtml = `<span class="admin-acesso-badge admin-acesso-expirado">⏱ Acesso expirado</span>`;
     } else {
@@ -8654,6 +8748,14 @@ function fmtPreco(v) {
   return v.toFixed(2).replace('.', ',');
 }
 
+// Texto auxiliar " (faltam N dia(s))" pra complementar a data de validade.
+function diasRestantesTxt(expiraEm) {
+  const ms = expiraEm.getTime() - Date.now();
+  const dias = Math.ceil(ms / (1000 * 60 * 60 * 24));
+  if (dias <= 0) return '';
+  return ` (falta${dias === 1 ? '' : 'm'} ${dias} dia${dias === 1 ? '' : 's'})`;
+}
+
 async function carregarAssinatura() {
   const body = document.getElementById('assinatura-body');
   body.innerHTML = '<div id="assinatura-empty">Carregando planos...</div>';
@@ -8707,7 +8809,9 @@ function renderAssinatura(planos, status) {
           : `Importações hoje: ${usadas}/${limite}`;
         limiteHtml = `<div class="${cls}">${msg}</div>`;
       }
-      html += `<div class="assinatura-ativa">✓ Você já tem <b>acesso ativo</b> até ${expiraEm.toLocaleDateString('pt-BR')}.${limiteHtml}</div>`;
+      html += status.origem_acesso === 'teste_gratis'
+        ? `<div class="assinatura-ativa">🎁 Você está no <b>teste grátis</b>, válido até ${expiraEm.toLocaleDateString('pt-BR')}${diasRestantesTxt(expiraEm)}.${limiteHtml}</div>`
+        : `<div class="assinatura-ativa">✓ Você já tem <b>acesso ativo</b> até ${expiraEm.toLocaleDateString('pt-BR')}.${limiteHtml}</div>`;
     } else if (status.avulsa_creditos > 0) {
       html += `<div class="assinatura-ativa">✓ Você tem <b>${status.avulsa_creditos}</b> importação(ões) avulsa(s) disponível(eis).</div>`;
     }
