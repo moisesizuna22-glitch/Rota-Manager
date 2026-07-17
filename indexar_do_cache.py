@@ -17,7 +17,10 @@ USO:
     python indexar_do_cache.py --indexar
 """
 import argparse
+import io
 import os
+import threading
+from contextlib import redirect_stdout
 import sqlite3
 from pathlib import Path
 
@@ -54,7 +57,10 @@ def _extrair_quadra_lote(sup):
 
 
 def get_conn():
-    return sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
 
 
 def inspecionar(cidade, z, x, y):
@@ -149,6 +155,52 @@ def listar(limite=10):
     conn.close()
 
 
+_progresso = {"rodando": False, "log": "", "concluido": False, "erro": None}
+_progresso_lock = threading.Lock()
+
+
+def indexar_em_background():
+    """Roda indexar() numa thread separada, guardando o log/progresso em
+    memoria pra ser consultado via --status, evitando timeout de proxy em
+    execucoes longas."""
+    global _progresso
+    with _progresso_lock:
+        if _progresso["rodando"]:
+            return False
+        _progresso = {"rodando": True, "log": "", "concluido": False, "erro": None}
+
+    def _run():
+        global _progresso
+        buffer_local = io.StringIO()
+
+        class _Tee:
+            def write(self, s):
+                buffer_local.write(s)
+                with _progresso_lock:
+                    _progresso["log"] = buffer_local.getvalue()
+            def flush(self):
+                pass
+
+        try:
+            with redirect_stdout(_Tee()):
+                indexar()
+        except Exception as e:
+            with _progresso_lock:
+                _progresso["erro"] = f"{type(e).__name__}: {e}"
+        finally:
+            with _progresso_lock:
+                _progresso["rodando"] = False
+                _progresso["concluido"] = True
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
+
+
+def obter_progresso():
+    with _progresso_lock:
+        return dict(_progresso)
+
+
 def criar_schema(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS lotes_busca (
@@ -205,6 +257,7 @@ def indexar():
 
     total_lotes = 0
     sem_match = 0
+    exemplos_sem_match = []
     for i, (cidade, z, x, y, data) in enumerate(rows):
         try:
             tile = mapbox_vector_tile.decode(data)
@@ -226,6 +279,8 @@ def indexar():
             quadra, lote = _extrair_quadra_lote(sup)
             if quadra is None:
                 sem_match += 1
+                if sup and len(exemplos_sem_match) < 10 and sup not in exemplos_sem_match:
+                    exemplos_sem_match.append(sup)
                 continue
             bairro = props.get("nsvia")
             via = props.get("via")
@@ -245,15 +300,21 @@ def indexar():
             if cur.rowcount:
                 total_lotes += 1
 
-        if (i + 1) % 100 == 0:
+        if (i + 1) % 20 == 0:
             conn.commit()
             print(f"  ... {i + 1}/{len(rows)} tiles, {total_lotes} lotes indexados ate agora "
                   f"({sem_match} sem match no padrao Q/LT)")
+            if exemplos_sem_match:
+                print(f"      exemplos sem match ate agora: {exemplos_sem_match[:3]}")
 
     conn.commit()
     conn.close()
     print(f"\nConcluido: {total_lotes} lotes indexados em lotes_busca "
           f"({sem_match} features sem match no padrao Q/LT, ignoradas)")
+    if exemplos_sem_match:
+        print("\nExemplos de 'sup' que NAO bateram no padrao (pra ajustar o regex):")
+        for ex in exemplos_sem_match:
+            print(f"  {ex!r}")
 
 
 def main():

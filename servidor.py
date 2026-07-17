@@ -2507,8 +2507,15 @@ async def admin_lotes(request: Request):
                     body["cidade"], int(body["z"]), int(body["x"]), int(body["y"]),
                 )
         elif acao == "indexar":
-            with redirect_stdout(buffer):
-                await run_in_threadpool(indexar_do_cache.indexar)
+            iniciou = indexar_do_cache.indexar_em_background()
+            return JSONResponse({
+                "ok": True,
+                "iniciou": iniciou,
+                "msg": "Indexação rodando em background. Consulte com acao=status."
+                       if iniciou else "Já tem uma indexação rodando. Consulte com acao=status.",
+            })
+        elif acao == "status":
+            return JSONResponse({"ok": True, **indexar_do_cache.obter_progresso()})
         else:
             raise HTTPException(status_code=400, detail="acao inválida: use listar | inspecionar | indexar")
     except HTTPException:
