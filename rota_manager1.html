@@ -6098,10 +6098,17 @@ async function buscarLotePorTexto() {
  box.innerHTML = '<div class="lote-result-empty">Buscando…</div>';
  box.classList.add('show');
 
+ // Não depende de SERVER/authHeaders (definidos em outro <script>): lê o
+ // token direto do sessionStorage e usa caminho relativo, pra funcionar
+ // mesmo se aquele outro bloco de script ainda não tiver rodado.
+ let headers = {};
  try {
-   const resp = await fetch(SERVER + '/buscar-lote?q=' + encodeURIComponent(termo), {
-     headers: authHeaders(),
-   });
+   const sess = JSON.parse(sessionStorage.getItem('rm_session_v1') || 'null');
+   if (sess && sess.token) headers = { 'Authorization': 'Bearer ' + sess.token };
+ } catch (e) { /* sem sessão salva, segue sem header */ }
+
+ try {
+   const resp = await fetch('/buscar-lote?q=' + encodeURIComponent(termo), { headers });
    const data = await resp.json();
 
    if (!resp.ok) {
