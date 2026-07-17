@@ -2516,8 +2516,46 @@ async def admin_lotes(request: Request):
             })
         elif acao == "status":
             return JSONResponse({"ok": True, **indexar_do_cache.obter_progresso()})
+        elif acao == "consultar":
+            # Consulta bruta em lotes_busca — não passa pelo parser/regex de
+            # /buscar-lote, é só pra diagnosticar o que realmente está (ou
+            # não está) gravado no banco.
+            db_path = DATA_DIR / "lotes_cache.sqlite3"
+            if not db_path.exists():
+                raise HTTPException(status_code=503, detail="lotes_cache.sqlite3 não existe.")
+            import sqlite3 as _sq_diag
+            conn = _sq_diag.connect(str(db_path), timeout=10)
+            try:
+                if body.get("contagem_por_cidade"):
+                    linhas = conn.execute(
+                        "SELECT cidade, COUNT(*) FROM lotes_busca GROUP BY cidade"
+                    ).fetchall()
+                    return JSONResponse({"ok": True, "contagem_por_cidade": linhas})
+
+                sql = "SELECT cidade, bairro, quadra, lote, via, busca_end, centroid_lat, centroid_lon FROM lotes_busca WHERE 1=1"
+                params = []
+                if body.get("cidade"):
+                    sql += " AND cidade = ?"
+                    params.append(body["cidade"])
+                if body.get("quadra"):
+                    sql += " AND quadra = ? COLLATE NOCASE"
+                    params.append(str(body["quadra"]))
+                if body.get("lote"):
+                    sql += " AND lote = ? COLLATE NOCASE"
+                    params.append(str(body["lote"]))
+                if body.get("via_contem"):
+                    sql += " AND via LIKE ?"
+                    params.append(f"%{body['via_contem']}%")
+                if body.get("bairro_contem"):
+                    sql += " AND bairro LIKE ?"
+                    params.append(f"%{body['bairro_contem']}%")
+                sql += " LIMIT 50"
+                linhas = conn.execute(sql, params).fetchall()
+                return JSONResponse({"ok": True, "sql": sql, "resultados": linhas})
+            finally:
+                conn.close()
         else:
-            raise HTTPException(status_code=400, detail="acao inválida: use listar | inspecionar | indexar")
+            raise HTTPException(status_code=400, detail="acao inválida: use listar | inspecionar | indexar | status | consultar")
     except HTTPException:
         raise
     except Exception as e:
