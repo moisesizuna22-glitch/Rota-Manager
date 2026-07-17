@@ -21,16 +21,20 @@ Railway / Render / Fly:
     público de demonstração do OSRM, que não tem SLA e pode falhar.
 """
 
+import base64
 import csv
 import hashlib
 import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
+import time
 import uuid
+import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -86,6 +90,16 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 USERS_FILE        = str(DATA_DIR / "usuarios.json")
 HISTORICO_FILE    = str(DATA_DIR / "historico_rotas.json")
 BANCO_COORDS_FILE = str(DATA_DIR / "banco_coords.json")
+
+# ─── Backup ──────────────────────────────────────────────────────────
+# Pasta de snapshots DENTRO do mesmo volume (protege contra escrita
+# corrompida / sobrescrita acidental), + envio periódico por email
+# (BREVO) para fora do Railway (protege contra perda do volume inteiro).
+BACKUP_DIR               = DATA_DIR / "backups"
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+BACKUP_MAX_SNAPSHOTS     = int(os.environ.get("BACKUP_MAX_SNAPSHOTS", "40"))  # por arquivo
+BACKUP_EMAIL_DESTINO     = os.environ.get("BACKUP_EMAIL_DESTINO", "").strip()  # ex: seu@email.com
+BACKUP_EMAIL_INTERVALO_H = float(os.environ.get("BACKUP_EMAIL_INTERVALO_H", "24"))
 
 PAGAMENTO_LINK_REUSE_MINUTOS  = 30
 INFINITEPAY_HANDLE            = "moisessenju"
@@ -221,6 +235,136 @@ def _base_url(request: Request) -> str:
     else:
         proto = request.headers.get("x-forwarded-proto", "https")
     return f"{proto}://{host}"
+
+# ═══════════════════════════════════════════════════════════════════
+#  BACKUP  (snapshot local rotativo + cópia fora do volume por email)
+# ═══════════════════════════════════════════════════════════════════
+
+def _backup_snapshot(path: Path):
+    """Antes de sobrescrever um arquivo de dados, guarda uma cópia com
+    timestamp em DATA_DIR/backups/. Mantém só os últimos
+    BACKUP_MAX_SNAPSHOTS por arquivo (apaga os mais antigos)."""
+    try:
+        if not path.exists():
+            return
+        ts = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        destino = BACKUP_DIR / f"{path.stem}_{ts}{path.suffix}"
+        shutil.copy2(path, destino)
+        # poda: mantém só os N mais recentes desse arquivo
+        irmaos = sorted(
+            BACKUP_DIR.glob(f"{path.stem}_*{path.suffix}"),
+            key=lambda p: p.stat().st_mtime,
+        )
+        for antigo in irmaos[:-BACKUP_MAX_SNAPSHOTS]:
+            antigo.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"  [backup] falha ao criar snapshot de {path.name}: {e}")
+
+def _snapshot_mais_recente(path: Path) -> Path | None:
+    candidatos = sorted(
+        BACKUP_DIR.glob(f"{path.stem}_*{path.suffix}"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    return candidatos[-1] if candidatos else None
+
+def _salvar_com_backup(path_str: str, conteudo_serializado: str, dados_novos_vazios: bool):
+    """Escrita segura e comum a usuarios/historico/banco_coords:
+    1) tira snapshot do estado atual antes de mexer;
+    2) recusa sobrescrever um arquivo COM dados por um payload vazio
+       (a causa mais comum de perda de dados: um bug ou uma corrida
+       de leitura fizeram o app achar que estava tudo vazio)."""
+    path = Path(path_str)
+    if path.exists() and dados_novos_vazios:
+        try:
+            tinha_conteudo = len(path.read_text("utf-8").strip()) > 2  # mais que "{}"/"[]"
+        except Exception:
+            tinha_conteudo = True  # arquivo ilegível: por segurança, trata como "tinha dado"
+        if tinha_conteudo:
+            print(f"  [backup] BLOQUEADO: recusando sobrescrever {path.name} (tinha dados) "
+                  f"com payload vazio. Nada foi alterado — investigue antes de forçar.")
+            return False
+    _backup_snapshot(path)
+    path.write_text(conteudo_serializado, "utf-8")
+    return True
+
+def _carregar_com_recuperacao(path_str: str, vazio_padrao):
+    """Lê um arquivo de dados; se ele não existir ou estiver corrompido,
+    tenta se recuperar sozinho a partir do snapshot de backup mais
+    recente (em vez de silenciosamente devolver vazio, que é o que
+    causava a perda em cascata: 'não achei nada' → próxima escrita
+    grava vazio 'de verdade')."""
+    path = Path(path_str)
+    if path.exists():
+        try:
+            return json.loads(path.read_text("utf-8"))
+        except Exception as e:
+            print(f"  [backup] {path.name} corrompido ({e}); tentando restaurar de snapshot...")
+    else:
+        print(f"  [backup] {path.name} não existe; tentando restaurar de snapshot (se houver)...")
+    recente = _snapshot_mais_recente(path)
+    if recente:
+        try:
+            dados = json.loads(recente.read_text("utf-8"))
+            print(f"  [backup] restaurado {path.name} a partir de {recente.name}")
+            # regrava o arquivo principal com o que foi recuperado
+            path.write_text(recente.read_text("utf-8"), "utf-8")
+            return dados
+        except Exception as e:
+            print(f"  [backup] snapshot {recente.name} também corrompido: {e}")
+    return vazio_padrao
+
+def _zip_backup_atual() -> Path:
+    """Empacota os 3 arquivos de dados atuais num .zip em /tmp, pra
+    anexar no email de backup."""
+    zip_path = Path("/tmp") / f"backup_rota_manager_{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in (USERS_FILE, HISTORICO_FILE, BANCO_COORDS_FILE):
+            p = Path(f)
+            if p.exists():
+                zf.write(p, arcname=p.name)
+    return zip_path
+
+def enviar_backup_por_email(destino: str = "") -> tuple[bool, str]:
+    """Manda os arquivos de dados atuais, zipados, por email via Brevo —
+    cópia fora do volume do Railway. Configure BACKUP_EMAIL_DESTINO
+    (ou passe `destino`) e BREVO_API_KEY/BREVO_SENDER_EMAIL."""
+    destino = (destino or BACKUP_EMAIL_DESTINO).strip()
+    if not destino:
+        return False, "BACKUP_EMAIL_DESTINO não configurado."
+    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
+        return False, "BREVO_API_KEY/BREVO_SENDER_EMAIL ausentes."
+    try:
+        zip_path = _zip_backup_atual()
+        conteudo_b64 = base64.b64encode(zip_path.read_bytes()).decode("ascii")
+        payload = {
+            "sender":      {"name": BREVO_SENDER_NOME, "email": BREVO_SENDER_EMAIL},
+            "to":          [{"email": destino}],
+            "subject":     f"[Rota Manager] Backup automático — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            "textContent": "Backup automático dos dados (usuarios.json, historico_rotas.json, banco_coords.json) em anexo.",
+            "attachment":  [{"content": conteudo_b64, "name": zip_path.name}],
+        }
+        headers = {"api-key": BREVO_API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
+        r = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=30)
+        zip_path.unlink(missing_ok=True)
+        if r.status_code in (200, 201):
+            return True, "Backup enviado."
+        return False, f"Brevo retornou erro {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        return False, f"Falha ao enviar backup: {e}"
+
+def _loop_backup_periodico():
+    """Thread em background: manda backup por email a cada
+    BACKUP_EMAIL_INTERVALO_H horas. Só roda se BACKUP_EMAIL_DESTINO
+    estiver configurado."""
+    if not BACKUP_EMAIL_DESTINO:
+        print("  [backup] BACKUP_EMAIL_DESTINO não configurado — backup por email desativado "
+              "(defina essa variável de ambiente no Railway pra ativar).")
+        return
+    intervalo_s = max(BACKUP_EMAIL_INTERVALO_H, 1) * 3600
+    while True:
+        ok, msg = enviar_backup_por_email()
+        print(f"  [backup] envio periódico: {'ok' if ok else 'falhou'} — {msg}")
+        time.sleep(intervalo_s)
 
 # ═══════════════════════════════════════════════════════════════════
 #  MIGRAÇÃO DE VOLUME
@@ -526,17 +670,13 @@ def redefinir_senha_recuperacao(recovery_token: str, nova_senha: str) -> tuple[b
 # ═══════════════════════════════════════════════════════════════════
 
 def carregar_historico() -> list:
-    p = Path(HISTORICO_FILE)
-    if not p.exists():
-        return []
-    try:
-        return json.loads(p.read_text("utf-8"))
-    except Exception:
-        return []
+    return _carregar_com_recuperacao(HISTORICO_FILE, [])
 
 def salvar_historico(historico: list):
-    Path(HISTORICO_FILE).write_text(
-        json.dumps(historico, ensure_ascii=False, indent=2), "utf-8"
+    _salvar_com_backup(
+        HISTORICO_FILE,
+        json.dumps(historico, ensure_ascii=False, indent=2),
+        dados_novos_vazios=(len(historico) == 0),
     )
 
 def adicionar_ao_historico(nome_arquivo: str, rows: list, headers: list, user_id: str = ""):
@@ -602,13 +742,9 @@ def banco_coords_carregar() -> dict:
     nunca sobrescreve coordenada de ninguém sozinha (ver
     banco_coords_correlacionar).
     """
-    p = Path(BANCO_COORDS_FILE)
-    if not p.exists():
-        return {"global": {}, "overrides": {}, "correlacoes": {}}
-    try:
-        banco = json.loads(p.read_text("utf-8"))
-    except Exception:
-        return {"global": {}, "overrides": {}, "correlacoes": {}}
+    banco = _carregar_com_recuperacao(
+        BANCO_COORDS_FILE, {"global": {}, "overrides": {}, "correlacoes": {}}
+    )
     # Migração do formato antigo (dict plano na raiz, sem separar override).
     if "global" not in banco and "overrides" not in banco:
         banco = {"global": banco, "overrides": {}}
@@ -618,8 +754,11 @@ def banco_coords_carregar() -> dict:
     return banco
 
 def banco_coords_salvar(banco: dict):
-    Path(BANCO_COORDS_FILE).write_text(
-        json.dumps(banco, ensure_ascii=False, indent=2), "utf-8"
+    vazio = not banco.get("global") and not banco.get("overrides") and not banco.get("correlacoes")
+    _salvar_com_backup(
+        BANCO_COORDS_FILE,
+        json.dumps(banco, ensure_ascii=False, indent=2),
+        dados_novos_vazios=vazio,
     )
 
 def banco_coords_salvar_coord(endereco: str, lat: float, lon: float, user_id: str) -> tuple[bool, str, dict]:
@@ -957,17 +1096,13 @@ def _hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode("utf-8")).hexdigest()
 
 def carregar_usuarios() -> dict:
-    p = Path(USERS_FILE)
-    if not p.exists():
-        return {}
-    try:
-        return json.loads(p.read_text("utf-8"))
-    except Exception:
-        return {}
+    return _carregar_com_recuperacao(USERS_FILE, {})
 
 def salvar_usuarios(users: dict):
-    Path(USERS_FILE).write_text(
-        json.dumps(users, ensure_ascii=False, indent=2), "utf-8"
+    _salvar_com_backup(
+        USERS_FILE,
+        json.dumps(users, ensure_ascii=False, indent=2),
+        dados_novos_vazios=(len(users) == 0),
     )
 
 def _buscar_usuario(users: dict, username: str):
@@ -1800,6 +1935,46 @@ async def coords_listar(request: Request):
 async def admin_usuarios(request: Request):
     _sessao_admin_ou_403(request)
     return ok_json({"ok": True, "usuarios": admin_listar_usuarios()})
+
+@app.get("/admin/backup/status")
+async def admin_backup_status(request: Request):
+    _sessao_admin_ou_403(request)
+    def _info(path_str):
+        p = Path(path_str)
+        recente = _snapshot_mais_recente(p)
+        n_snapshots = len(list(BACKUP_DIR.glob(f"{p.stem}_*{p.suffix}")))
+        return {
+            "arquivo_existe": p.exists(),
+            "tamanho_bytes": p.stat().st_size if p.exists() else 0,
+            "modificado_em": datetime.fromtimestamp(p.stat().st_mtime).strftime("%d/%m/%Y %H:%M") if p.exists() else None,
+            "snapshots_guardados": n_snapshots,
+            "snapshot_mais_recente": recente.name if recente else None,
+        }
+    return ok_json({
+        "ok": True,
+        "usuarios": _info(USERS_FILE),
+        "historico": _info(HISTORICO_FILE),
+        "banco_coords": _info(BANCO_COORDS_FILE),
+        "email_backup_configurado": bool(BACKUP_EMAIL_DESTINO),
+        "email_destino": BACKUP_EMAIL_DESTINO or None,
+        "intervalo_horas": BACKUP_EMAIL_INTERVALO_H,
+    })
+
+@app.post("/admin/backup/enviar-agora")
+async def admin_backup_enviar_agora(request: Request):
+    _sessao_admin_ou_403(request)
+    corpo = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+    destino = (corpo or {}).get("email", "")
+    ok, msg = enviar_backup_por_email(destino)
+    if not ok:
+        return err_json(msg, 400)
+    return ok_json({"ok": True, "mensagem": msg})
+
+@app.get("/admin/backup/baixar")
+async def admin_backup_baixar(request: Request):
+    _sessao_admin_ou_403(request)
+    zip_path = _zip_backup_atual()
+    return FileResponse(str(zip_path), media_type="application/zip", filename=zip_path.name)
 
 # ═══════════════════════════════════════════════════════════════════
 #  ROTAS  ──  POST
@@ -2787,6 +2962,8 @@ if __name__ == "__main__":
 
     _migrar_para_volume()
     _bootstrap_admin()
+
+    threading.Thread(target=_loop_backup_periodico, daemon=True).start()
 
     uvicorn.run(
         app,
