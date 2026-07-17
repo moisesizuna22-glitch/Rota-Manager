@@ -69,6 +69,33 @@ def _extrair_quadra_lote(sup):
     return _normalizar_num_busca(m.group(1)), _normalizar_num_busca(m.group(2))
 
 
+def _extrair_campos(props):
+    """Extrai (quadra, lote, bairro, via, busca_end) das properties de um
+    feature, adaptando ao formato usado por cada layer/cidade.
+
+    - Aparecida (e Canedo, aparentemente igual): tudo embutido no campo
+      'sup', tipo "Q 26, LT 43". Bairro em 'nsvia', rua em 'via',
+      endereço formatado pronto em 'BuscaEnd'.
+    - Goiânia: layer 'lotes_goiania' já vem com quadra/lote separados em
+      'nm_qdr'/'nm_lot' — não tem 'sup'. Não tem bairro/via/busca_end
+      prontos nesse layer (descoberto via --inspecionar); usa 'LABEL'
+      como texto de referência quando não tem BuscaEnd.
+    """
+    if props.get("nm_qdr") is not None or props.get("nm_lot") is not None:
+        quadra = _normalizar_num_busca(props.get("nm_qdr"))
+        lote = _normalizar_num_busca(props.get("nm_lot"))
+        bairro = props.get("nsvia") or props.get("bairro")
+        via = props.get("via") or props.get("nm_via")
+        busca_end = props.get("BuscaEnd") or props.get("LABEL")
+        return quadra, lote, bairro, via, busca_end
+
+    quadra, lote = _extrair_quadra_lote(props.get("sup"))
+    bairro = props.get("nsvia")
+    via = props.get("via")
+    busca_end = props.get("BuscaEnd")
+    return quadra, lote, bairro, via, busca_end
+
+
 def get_conn():
     conn = sqlite3.connect(str(DB_PATH), timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -318,16 +345,15 @@ def indexar():
         extent = layer.get("extent", 4096)
         for feature in layer.get("features", []):
             props = feature.get("properties", {})
-            sup = props.get("sup")
-            quadra, lote = _extrair_quadra_lote(sup)
-            if quadra is None:
+            quadra, lote, bairro, via, busca_end = _extrair_campos(props)
+            if quadra is None or lote is None:
                 sem_match += 1
-                if sup and len(exemplos_sem_match) < 10 and sup not in exemplos_sem_match:
-                    exemplos_sem_match.append(sup)
+                # texto de referência pro exemplo: 'sup' no formato antigo,
+                # ou o LABEL/props bruto no formato novo (Goiânia)
+                ref = props.get("sup") or props.get("LABEL") or str(props)
+                if ref and len(exemplos_sem_match) < 10 and ref not in exemplos_sem_match:
+                    exemplos_sem_match.append(ref)
                 continue
-            bairro = props.get("nsvia")
-            via = props.get("via")
-            busca_end = props.get("BuscaEnd")
 
             geometry = feature.get("geometry", {})
             coords = geometry.get("coordinates", [])
