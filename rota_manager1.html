@@ -5488,10 +5488,14 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 .map-label { height:24px; min-height:24px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:bold; letter-spacing:.07em; background:#0b1120; border-bottom:1px solid #111827; }
 #lbl-here { color:#f59e0b; }
 #lbl-google { color:#22c55e; }
-#lbl-terceiros { color:#14b8a6; }
+#lbl-terceiros {
+ display:none; /* escondido por enquanto — reativar removendo essa linha */
+ color:#14b8a6;
+}
 #lote-search-bar {
+ display:none; /* escondido por enquanto — reativar removendo essa linha */
  position:absolute; z-index:900; top:32px; left:8px; right:8px;
- display:flex; flex-direction:column; gap:0; pointer-events:none;
+ flex-direction:row; gap:0; pointer-events:none;
 }
 #lote-search-bar > input, #lote-search-bar > button { pointer-events:auto; }
 #lote-search-input {
