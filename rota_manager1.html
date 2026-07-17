@@ -5502,10 +5502,16 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 #lote-search-input::placeholder { color:#64748b; }
 #lote-search-bar { flex-direction:row; }
 #btn-lote-search {
- background:#0f766e; color:#fff; border:none; border-radius:0 8px 8px 0;
- padding:0 14px; height:34px; font-size:12px; font-weight:bold; cursor:pointer;
+ background:#0f766e; color:#fff; border:none; border-radius:0;
+ padding:0 12px; height:34px; font-size:12px; font-weight:bold; cursor:pointer;
 }
 #btn-lote-search:hover { background:#0d9488; }
+#btn-lote-salvar-posicao {
+ background:#7c3aed; color:#fff; border:none; border-radius:0 8px 8px 0;
+ padding:0 10px; height:34px; font-size:11px; font-weight:bold; cursor:pointer; white-space:nowrap;
+}
+#btn-lote-salvar-posicao:hover { background:#6d28d9; }
+#btn-lote-salvar-posicao:disabled { opacity:.7; cursor:default; }
 #lote-search-resultados {
  position:absolute; top:38px; left:0; right:0; pointer-events:auto;
  background:#0b1120ee; border:1px solid #1e3a5f; border-radius:8px;
@@ -5619,6 +5625,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
    <div id="lote-search-bar">
      <input id="lote-search-input" type="text" placeholder="Buscar quadra/lote... (ex: nova era Q3 LT12)" onkeydown="if(event.key==='Enter'){event.preventDefault();buscarLotePorTexto();}"/>
      <button class="btn" id="btn-lote-search" type="button" onclick="buscarLotePorTexto()">🔎 LOTE</button>
+     <button class="btn" id="btn-lote-salvar-posicao" type="button" onclick="salvarPosicaoAtualComoLote()" title="Salva a posição atual do pin no mapa como o lote certo pra esse endereço">📍 SALVAR AQUI</button>
      <div id="lote-search-resultados"></div>
    </div>
    <div id="terceiros-map"></div>
@@ -6142,6 +6149,28 @@ async function buscarLotePorTexto() {
      return '≈' + (m / 1000).toFixed(1) + ' km do pin';
    };
 
+   // Salva a escolha do usuário como correção manual pra esse texto de
+   // endereço, pra próxima busca (mesmo texto) já vir certa direto.
+   const salvarCorrecao = (r) => {
+     fetch('/buscar-lote/confirmar', {
+       method: 'POST',
+       headers: { ...headers, 'Content-Type': 'application/json' },
+       body: JSON.stringify({
+         q: termo, cidade: r.cidade, bairro: r.bairro, quadra: r.quadra,
+         lote: r.lote, via: r.via, busca_end: r.busca_end, lat: r.lat, lon: r.lon,
+       }),
+     }).catch(() => {}); // silencioso — não bloqueia a navegação se falhar
+   };
+
+   // Resultado veio de uma correção manual salva anteriormente — não
+   // precisa escolher de novo, só avisa e já navega direto.
+   if (data.correcao_manual) {
+     const r = resultados[0];
+     box.innerHTML = '<div class="lote-result-empty">✔ Usando correção salva: ' + rotuloLote(r) + '</div>';
+     _irParaLote(r.lat, r.lon, rotuloLote(r));
+     return;
+   }
+
    const itemHtml = (r, i) =>
      '<div class="lote-result-item" data-i="' + i + '" data-bairro="' + (r.bairro || '').toLowerCase() + '">' +
      '<b>' + rotuloLote(r) + '</b>' +
@@ -6176,6 +6205,7 @@ async function buscarLotePorTexto() {
    box.querySelectorAll('.lote-result-item').forEach(el => {
      el.addEventListener('click', () => {
        const r = resultados[parseInt(el.dataset.i, 10)];
+       salvarCorrecao(r);
        _irParaLote(r.lat, r.lon, rotuloLote(r));
      });
    });
@@ -6187,6 +6217,65 @@ async function buscarLotePorTexto() {
 document.addEventListener('click', e => {
  if (!e.target.closest('#lote-search-bar')) _fecharResultadosLote();
 });
+
+// ── Salva a posição atual do pin (arrastada/ajustada manualmente no mapa)
+// como correção pro endereço buscado. Usa o texto que está no campo de
+// busca de lote — se estiver vazio, cai pro endereço original da entrega.
+async function salvarPosicaoAtualComoLote() {
+ const input = document.getElementById('lote-search-input');
+ const termo = (input && input.value.trim())
+   || (typeof endReformado !== 'undefined' && endReformado ? endReformado : '');
+
+ if (!termo) {
+   document.getElementById('status-bar').textContent =
+     '⚠ Cole/digite o endereço no campo de busca de lote antes de salvar a posição.';
+   return;
+ }
+ if (typeof currentLat !== 'number' || typeof currentLng !== 'number') {
+   document.getElementById('status-bar').textContent = '⚠ Posição do pin não disponível.';
+   return;
+ }
+
+ let headers = {};
+ try {
+   const sess = JSON.parse(sessionStorage.getItem('rm_session_v1') || 'null');
+   if (sess && sess.token) headers = { 'Authorization': 'Bearer ' + sess.token };
+ } catch (e) { /* sem sessão salva, segue sem header */ }
+
+ const btn = document.getElementById('btn-lote-salvar-posicao');
+ const rotuloOriginal = btn.textContent;
+ btn.disabled = true;
+ btn.textContent = '💾 Salvando…';
+
+ try {
+   const resp = await fetch('/buscar-lote/confirmar', {
+     method: 'POST',
+     headers: { ...headers, 'Content-Type': 'application/json' },
+     body: JSON.stringify({
+       q: termo,
+       lat: currentLat, lon: currentLng,
+       busca_end: termo,  // posição marcada à mão — usa o próprio texto buscado como rótulo
+     }),
+   });
+   const data = await resp.json().catch(() => ({}));
+   if (resp.ok) {
+     document.getElementById('status-bar').textContent =
+       '✔ Posição salva pra esse endereço (' + currentLat.toFixed(6) + ', ' + currentLng.toFixed(6) + ').';
+     btn.textContent = '✔ SALVO!';
+   } else {
+     document.getElementById('status-bar').textContent = '⚠ ' + (data.detail || 'Falha ao salvar a posição.');
+     btn.textContent = rotuloOriginal;
+   }
+ } catch (e) {
+   document.getElementById('status-bar').textContent = '⚠ Falha ao salvar: ' + e.message;
+   btn.textContent = rotuloOriginal;
+ } finally {
+   setTimeout(() => {
+     btn.disabled = false;
+     if (btn.textContent === '✔ SALVO!') btn.textContent = rotuloOriginal;
+   }, 1800);
+ }
+}
 
 // ── Toggle ────────────────────────────────────────────────────────────
 // O HERE não tem mais painel visual (mapa removido a pedido do usuário),
