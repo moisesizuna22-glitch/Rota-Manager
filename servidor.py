@@ -2707,10 +2707,22 @@ async def buscar_lote(request: Request, q: str = "", cidade: str = "",
     if len(linhas) > 1:
         linhas = sorted(linhas, key=lambda l: (-_pontuacao(l), _distancia(l), l[0], l[1] or ""))
 
+    def _distancia_metros(lat_r, lon_r):
+        if perto_lat is None or perto_lon is None or lat_r is None or lon_r is None:
+            return None
+        import math
+        R = 6371000  # raio da Terra em metros
+        p1, p2 = math.radians(perto_lat), math.radians(lat_r)
+        dphi = math.radians(lat_r - perto_lat)
+        dlmb = math.radians(lon_r - perto_lon)
+        a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+        return round(R * 2 * math.atan2(a ** 0.5, (1 - a) ** 0.5))
+
     resultados = [
         {
             "cidade": r[0], "bairro": r[1], "quadra": r[2], "lote": r[3],
             "via": r[4], "busca_end": r[5], "lat": r[6], "lon": r[7],
+            "distancia_m": _distancia_metros(r[6], r[7]),
         }
         for r in linhas if r[6] is not None and r[7] is not None
     ]

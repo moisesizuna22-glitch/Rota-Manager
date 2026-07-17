@@ -6136,11 +6136,19 @@ async function buscarLotePorTexto() {
 
    const rotuloLote = (r) => r.busca_end || ('Q' + r.quadra + ' LT' + r.lote + (r.bairro ? ' — ' + r.bairro : ''));
 
+   const formatarDistancia = (m) => {
+     if (m === null || m === undefined) return '';
+     if (m < 1000) return '≈' + m + ' m do pin';
+     return '≈' + (m / 1000).toFixed(1) + ' km do pin';
+   };
+
    const itemHtml = (r, i) =>
      '<div class="lote-result-item" data-i="' + i + '" data-bairro="' + (r.bairro || '').toLowerCase() + '">' +
      '<b>' + rotuloLote(r) + '</b>' +
      '<br><span class="lote-result-sub">' + (r.cidade || '') + ' · Q' + r.quadra + ' LT' + r.lote +
-     (r.bairro ? ' · ' + r.bairro : '') + '</span>' +
+     (r.bairro ? ' · ' + r.bairro : '') +
+     (r.distancia_m !== null && r.distancia_m !== undefined ? ' · <b>' + formatarDistancia(r.distancia_m) + '</b>' : '') +
+     '</span>' +
      '</div>';
 
    // Se veio mais de um resultado (mesma Q/LT em vários bairros, comum em
