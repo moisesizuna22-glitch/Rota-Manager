@@ -5502,11 +5502,12 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 #lote-search-input::placeholder { color:#64748b; }
 #lote-search-bar { flex-direction:row; }
 #btn-lote-search {
- background:#0f766e; color:#fff; border:none; border-radius:0;
- padding:0 12px; height:34px; font-size:12px; font-weight:bold; cursor:pointer;
+ background:#0f766e; color:#fff; border:none; border-radius:0 8px 8px 0;
+ padding:0 14px; height:34px; font-size:12px; font-weight:bold; cursor:pointer;
 }
 #btn-lote-search:hover { background:#0d9488; }
 #btn-lote-salvar-posicao {
+ display:none; /* escondido por enquanto — reativar removendo essa linha */
  background:#7c3aed; color:#fff; border:none; border-radius:0 8px 8px 0;
  padding:0 10px; height:34px; font-size:11px; font-weight:bold; cursor:pointer; white-space:nowrap;
 }
