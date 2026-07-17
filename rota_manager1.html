@@ -5519,6 +5519,13 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 .lote-result-item b { color:#5eead4; }
 .lote-result-empty, .lote-result-erro { padding:10px 12px; font-size:12px; color:#64748b; }
 .lote-result-erro { color:#f87171; }
+#lote-result-filtro {
+ display:block; width:100%; box-sizing:border-box;
+ background:#0f172a; border:none; border-bottom:1px solid #1e3a5f;
+ color:#5eead4; font-size:12px; padding:8px 12px; outline:none;
+}
+#lote-result-filtro::placeholder { color:#475569; }
+#lote-result-lista { max-height:180px; overflow-y:auto; }
 @keyframes loteHighlightPulse {
  0%   { box-shadow:0 0 0 0 rgba(20,184,166,.5); }
  100% { box-shadow:0 0 0 14px rgba(20,184,166,0); }
@@ -5609,7 +5616,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
  <div id="map-terceiros-wrap">
    <div class="map-label" id="lbl-terceiros"><span class="dot"></span> LOTES — GOIÂNIA / APARECIDA DE GOIÂNIA / SENADOR CANEDO</div>
    <div id="lote-search-bar">
-     <input id="lote-search-input" type="text" placeholder="Buscar quadra/lote... (ex: Q3 LT12)" onkeydown="if(event.key==='Enter'){event.preventDefault();buscarLotePorTexto();}"/>
+     <input id="lote-search-input" type="text" placeholder="Buscar quadra/lote... (ex: nova era Q3 LT12)" onkeydown="if(event.key==='Enter'){event.preventDefault();buscarLotePorTexto();}"/>
      <button class="btn" id="btn-lote-search" type="button" onclick="buscarLotePorTexto()">🔎 LOTE</button>
      <div id="lote-search-resultados"></div>
    </div>
@@ -6122,14 +6129,34 @@ async function buscarLotePorTexto() {
      return;
    }
 
-   box.innerHTML = resultados.map((r, i) => {
-     const rotulo = 'Q' + r.quadra + ' LT' + r.lote + (r.bairro ? ' — ' + r.bairro : '');
-     return '<div class="lote-result-item" data-i="' + i + '">' +
-       '<b>' + (r.cidade || '') + '</b> — Q' + r.quadra + ' LT' + r.lote +
-       (r.bairro ? '<br>' + r.bairro : '') +
-       (r.via ? ' · ' + r.via : '') +
-       '</div>';
-   }).join('');
+   const itemHtml = (r, i) =>
+     '<div class="lote-result-item" data-i="' + i + '" data-bairro="' + (r.bairro || '').toLowerCase() + '">' +
+     '<b>' + (r.cidade || '') + '</b> — Q' + r.quadra + ' LT' + r.lote +
+     (r.bairro ? '<br>' + r.bairro : '') +
+     (r.via ? ' · ' + r.via : '') +
+     '</div>';
+
+   // Se veio mais de um resultado (mesma Q/LT em vários bairros, comum em
+   // Aparecida), mostra um campo pra filtrar a lista na hora pelo bairro,
+   // sem precisar buscar de novo no servidor.
+   const filtroHtml = resultados.length > 1
+     ? '<input id="lote-result-filtro" type="text" placeholder="Filtrar por bairro (' + resultados.length + ' encontrados)..." />'
+     : '';
+
+   box.innerHTML = filtroHtml + '<div id="lote-result-lista">' +
+     resultados.map((r, i) => itemHtml(r, i)).join('') + '</div>';
+
+   const filtroInput = document.getElementById('lote-result-filtro');
+   if (filtroInput) {
+     filtroInput.addEventListener('click', e => e.stopPropagation());
+     filtroInput.addEventListener('input', () => {
+       const termoFiltro = filtroInput.value.trim().toLowerCase();
+       box.querySelectorAll('.lote-result-item').forEach(el => {
+         el.style.display = el.dataset.bairro.includes(termoFiltro) ? '' : 'none';
+       });
+     });
+     filtroInput.focus();
+   }
 
    box.querySelectorAll('.lote-result-item').forEach(el => {
      el.addEventListener('click', () => {
