@@ -5516,6 +5516,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 .lote-result-item { padding:9px 12px; cursor:pointer; border-bottom:1px solid #1e3a5f; color:#e2e8f0; font-size:12px; }
 .lote-result-item:last-child { border-bottom:none; }
 .lote-result-item:hover { background:#1e3a5f; }
+.lote-result-sub { color:#64748b; font-size:11px; }
 .lote-result-item b { color:#5eead4; }
 .lote-result-empty, .lote-result-erro { padding:10px 12px; font-size:12px; color:#64748b; }
 .lote-result-erro { color:#f87171; }
@@ -6129,11 +6130,13 @@ async function buscarLotePorTexto() {
      return;
    }
 
+   const rotuloLote = (r) => r.busca_end || ('Q' + r.quadra + ' LT' + r.lote + (r.bairro ? ' — ' + r.bairro : ''));
+
    const itemHtml = (r, i) =>
      '<div class="lote-result-item" data-i="' + i + '" data-bairro="' + (r.bairro || '').toLowerCase() + '">' +
-     '<b>' + (r.cidade || '') + '</b> — Q' + r.quadra + ' LT' + r.lote +
-     (r.bairro ? '<br>' + r.bairro : '') +
-     (r.via ? ' · ' + r.via : '') +
+     '<b>' + rotuloLote(r) + '</b>' +
+     '<br><span class="lote-result-sub">' + (r.cidade || '') + ' · Q' + r.quadra + ' LT' + r.lote +
+     (r.bairro ? ' · ' + r.bairro : '') + '</span>' +
      '</div>';
 
    // Se veio mais de um resultado (mesma Q/LT em vários bairros, comum em
@@ -6161,7 +6164,7 @@ async function buscarLotePorTexto() {
    box.querySelectorAll('.lote-result-item').forEach(el => {
      el.addEventListener('click', () => {
        const r = resultados[parseInt(el.dataset.i, 10)];
-       _irParaLote(r.lat, r.lon, 'Q' + r.quadra + ' LT' + r.lote + (r.bairro ? ' — ' + r.bairro : ''));
+       _irParaLote(r.lat, r.lon, rotuloLote(r));
      });
    });
  } catch (e) {
