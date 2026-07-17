@@ -288,6 +288,89 @@ def _achatar_pontos(geometry_coords):
     return pontos
 
 
+def _profundidade(v):
+    """Quantos níveis de lista até chegar num número (ponto). Polygon tem
+    profundidade 3 ([[[x,y],...]]), MultiPolygon tem profundidade 4."""
+    d = 0
+    while isinstance(v, list) and v:
+        v = v[0]
+        d += 1
+    return d
+
+
+def _centroide_anel(anel):
+    """Centróide de um anel (lista de pontos [x,y] ou [x,y,z]) via fórmula
+    do polígono (shoelace) — área-ponderado, ao contrário da média simples
+    de vértices, sempre representa o 'centro de massa' real da forma, sem
+    o risco de cair fora do polígono em formatos côncavos/em L/esquina.
+    Retorna (cx, cy, area_absoluta)."""
+    n = len(anel)
+    if n < 3:
+        xs = [p[0] for p in anel]
+        ys = [p[1] for p in anel]
+        return sum(xs) / len(xs), sum(ys) / len(ys), 0.0
+
+    area2 = 0.0
+    cx = 0.0
+    cy = 0.0
+    for i in range(n):
+        x0, y0 = anel[i][0], anel[i][1]
+        x1, y1 = anel[(i + 1) % n][0], anel[(i + 1) % n][1]
+        cruz = x0 * y1 - x1 * y0
+        area2 += cruz
+        cx += (x0 + x1) * cruz
+        cy += (y0 + y1) * cruz
+
+    area = area2 / 2.0
+    if abs(area) < 1e-9:
+        # polígono degenerado (área ~0, ex: linha reta) — cai pra média simples
+        xs = [p[0] for p in anel]
+        ys = [p[1] for p in anel]
+        return sum(xs) / len(xs), sum(ys) / len(ys), 0.0
+
+    return cx / (6 * area), cy / (6 * area), abs(area)
+
+
+def _centroide_local(geometry_coords):
+    """Acha o centróide local (coordenadas de pixel do tile, antes de
+    converter pra lat/lon) de uma geometria Polygon ou MultiPolygon.
+    Usa sempre o ANEL EXTERNO (contorno) de cada polígono — em
+    MultiPolygon, escolhe o polígono de maior área (o lote principal,
+    ignorando fragmentos pequenos de corte na borda do tile)."""
+    if not geometry_coords:
+        return None
+
+    prof = _profundidade(geometry_coords)
+
+    if prof == 3:
+        poligonos = [geometry_coords]          # Polygon: um polígono só
+    elif prof == 4:
+        poligonos = geometry_coords             # MultiPolygon: vários
+    else:
+        poligonos = None
+
+    if poligonos:
+        melhor = None
+        melhor_area = -1.0
+        for poly in poligonos:
+            if not poly or len(poly[0]) < 3:
+                continue
+            anel_externo = poly[0]  # primeiro anel = contorno externo
+            cx, cy, area = _centroide_anel(anel_externo)
+            if area > melhor_area:
+                melhor_area = area
+                melhor = (cx, cy)
+        if melhor is not None:
+            return melhor
+
+    # Fallback (formato inesperado, ou nenhum anel válido) — média simples
+    pontos = _achatar_pontos(geometry_coords)
+    if not pontos:
+        return None
+    return (sum(p[0] for p in pontos) / len(pontos),
+            sum(p[1] for p in pontos) / len(pontos))
+
+
 def _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y):
     bounds = mercantile.bounds(tile_x, tile_y, tile_z)
     lon = bounds.west + frac_x * (bounds.east - bounds.west)
@@ -296,16 +379,14 @@ def _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y):
 
 
 def calcular_centroide(geometry_coords, extent, tile_x, tile_y, tile_z):
-    pontos = []
-    for x_local, y_local in _achatar_pontos(geometry_coords):
-        frac_x = x_local / extent
-        frac_y = y_local / extent
-        lon, lat = _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y)
-        pontos.append((lat, lon))
-    if not pontos:
+    centro_local = _centroide_local(geometry_coords)
+    if centro_local is None:
         return None, None
-    return (sum(p[0] for p in pontos) / len(pontos),
-            sum(p[1] for p in pontos) / len(pontos))
+    x_local, y_local = centro_local
+    frac_x = x_local / extent
+    frac_y = y_local / extent
+    lon, lat = _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y)
+    return lat, lon
 
 
 def indexar():
