@@ -2534,33 +2534,55 @@ async def admin_lotes(request: Request):
 # extrair quadra+lote de qualquer jeito que o usuário digitar.
 import sqlite3 as _sqlite3_busca
 
+# Padrão principal: "Q3 LT12", "Qd 270 lt 09", "Q 26, LT 43", "Q3-LT12"...
+# Captura só dígitos (+ sufixo de 1 letra opcional, ex: "3A") pra não deixar
+# o grupo da quadra "vazar" pra dentro do "LT" quando não tem espaço/vírgula
+# separando (bug antigo: "Q3 LT12" lia lote="2" em vez de "12").
 _RE_TERMO_Q_LT = re.compile(
-    r"Q\w*\.?\s*([^\s,/]+)\s*[,/]?\s*LT\w*\.?\s*([^\s,/]+)", re.IGNORECASE
+    r"Q[A-Za-z]*\.?\s*([0-9]+[A-Za-z]?)\s*[-,/]?\s*L[A-Za-z]*\.?\s*([0-9]+[A-Za-z]?)",
+    re.IGNORECASE,
 )
+# Formato "270-9" (o mesmo usado no busca_end formatado, ex:
+# "AVENIDA C104, 270-9, JARDIM AMÉRICA") — sem prefixo Q/LT.
+_RE_TERMO_HIFEN = re.compile(r"\b(\d+)\s*-\s*(\d+)\b")
 _RE_TERMO_DOIS_NUMEROS = re.compile(r"(\d+[A-Za-z]?)\D+?(\d+[A-Za-z]?)")
+
+
+def _normalizar_num_busca(v):
+    """Tira zero à esquerda ('09' -> '9') pra bater com o jeito que o
+    índice grava e o usuário digita. Mantém sufixo de letra em maiúsculo."""
+    if v is None:
+        return None
+    v = str(v).strip()
+    if not v:
+        return None
+    return str(int(v)) if v.isdigit() else v.upper()
 
 
 def _parse_termo_busca_lote(termo: str):
     """Tenta extrair (quadra, lote, resto) de um texto livre digitado pelo
     usuário. Aceita formatos como 'Q3 LT12', 'quadra 3 lote 12', '3/12',
-    'jardim tropical q3, lt12'. Retorna (None, None, termo) se não achar."""
+    '270-9', 'jardim tropical q3, lt12'. Retorna (None, None, termo) se
+    não achar."""
     termo = (termo or "").strip()
     if not termo:
         return None, None, termo
 
     m = _RE_TERMO_Q_LT.search(termo)
-    if m:
-        quadra, lote = m.group(1), m.group(2)
-        resto = (termo[:m.start()] + " " + termo[m.end():]).strip()
-        return quadra, lote, resto
+    if not m:
+        m = _RE_TERMO_HIFEN.search(termo)
+    if not m:
+        m = _RE_TERMO_DOIS_NUMEROS.search(termo)
+    if not m:
+        return None, None, termo
 
-    m = _RE_TERMO_DOIS_NUMEROS.search(termo)
-    if m:
-        quadra, lote = m.group(1), m.group(2)
-        resto = (termo[:m.start()] + " " + termo[m.end():]).strip()
-        return quadra, lote, resto
-
-    return None, None, termo
+    quadra, lote = m.group(1), m.group(2)
+    resto = (termo[:m.start()] + " " + termo[m.end():]).strip()
+    # Se sobrou algo tipo "AVENIDA C104,  , JARDIM AMÉRICA", o pedaço que
+    # mais importa pro filtro de bairro é o último depois da vírgula.
+    partes = [p.strip() for p in resto.split(",") if p.strip()]
+    resto_filtro = partes[-1] if partes else resto
+    return _normalizar_num_busca(quadra), _normalizar_num_busca(lote), resto_filtro
 
 
 @app.get("/buscar-lote")
@@ -2585,21 +2607,30 @@ async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
 
     try:
         conn = _sqlite3_busca.connect(str(db_path), timeout=10)
-        sql = (
+        base_sql = (
             "SELECT cidade, bairro, quadra, lote, via, busca_end, "
             "centroid_lat, centroid_lon FROM lotes_busca "
             "WHERE quadra = ? COLLATE NOCASE AND lote = ? COLLATE NOCASE"
         )
-        params = [quadra, lote]
+        base_params = [quadra, lote]
         if cidade:
-            sql += " AND cidade = ?"
-            params.append(cidade)
-        if resto:
-            sql += " AND (bairro LIKE ? OR via LIKE ?)"
-            params += [f"%{resto}%", f"%{resto}%"]
-        sql += " ORDER BY cidade, bairro LIMIT 50"
+            base_sql += " AND cidade = ?"
+            base_params.append(cidade)
 
-        linhas = conn.execute(sql, params).fetchall()
+        linhas = []
+        if resto:
+            # Primeiro tenta refinar por bairro/via. Só usa esse resultado
+            # se achou algo — senão cai pro fallback sem filtro, porque
+            # cidade sem bairro cadastrado no tile (ex: Goiânia) nunca
+            # bateria no LIKE e o lote sumiria da busca sem motivo.
+            sql_refinado = base_sql + " AND (bairro LIKE ? OR via LIKE ?) ORDER BY cidade, bairro LIMIT 50"
+            params_refinado = base_params + [f"%{resto}%", f"%{resto}%"]
+            linhas = conn.execute(sql_refinado, params_refinado).fetchall()
+
+        if not linhas:
+            sql_fallback = base_sql + " ORDER BY cidade, bairro LIMIT 50"
+            linhas = conn.execute(sql_fallback, base_params).fetchall()
+
         conn.close()
     except _sqlite3_busca.OperationalError as e:
         raise HTTPException(

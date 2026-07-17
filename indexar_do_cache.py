@@ -43,8 +43,21 @@ DB_PATH = DATA_DIR / "lotes_cache.sqlite3"
 import re
 
 _PADRAO_QUADRA_LOTE = re.compile(
-    r"Q\w*\.?\s*([^\s,]+)\s*,?\s*LT\w*\.?\s*([^\s,]+)", re.IGNORECASE
+    r"Q[A-Za-z]*\.?\s*([0-9]+[A-Za-z]?)\s*[-,/]?\s*L[A-Za-z]*\.?\s*([0-9]+[A-Za-z]?)",
+    re.IGNORECASE,
 )
+
+
+def _normalizar_num_busca(v):
+    """Tira zero à esquerda de valores numéricos ('09' -> '9') pra bater
+    com o jeito que o usuário digita na busca. Mantém sufixo de letra
+    (ex: '3A') em maiúsculo."""
+    if v is None:
+        return None
+    v = str(v).strip()
+    if not v:
+        return None
+    return str(int(v)) if v.isdigit() else v.upper()
 
 
 def _extrair_quadra_lote(sup):
@@ -53,7 +66,7 @@ def _extrair_quadra_lote(sup):
     m = _PADRAO_QUADRA_LOTE.search(sup)
     if not m:
         return None, None
-    return m.group(1), m.group(2)
+    return _normalizar_num_busca(m.group(1)), _normalizar_num_busca(m.group(2))
 
 
 def get_conn():
@@ -249,6 +262,13 @@ def calcular_centroide(geometry_coords, extent, tile_x, tile_y, tile_z):
 def indexar():
     conn = get_conn()
     criar_schema(conn)
+
+    # Limpa antes de reindexar: como agora normalizamos zero à esquerda
+    # ('09' -> '9'), reindexar sem limpar deixaria conviver linha antiga
+    # (não normalizada) e linha nova (normalizada) pra mesma quadra/lote,
+    # já que o índice único não reconheceria elas como o mesmo registro.
+    conn.execute("DELETE FROM lotes_busca")
+    conn.commit()
 
     rows = conn.execute(
         "SELECT cidade, z, x, y, data FROM tiles WHERE data IS NOT NULL"
