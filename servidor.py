@@ -2560,13 +2560,13 @@ def _normalizar_num_busca(v):
 
 
 def _parse_termo_busca_lote(termo: str):
-    """Tenta extrair (quadra, lote, resto) de um texto livre digitado pelo
-    usuário. Aceita formatos como 'Q3 LT12', 'quadra 3 lote 12', '3/12',
-    '270-9', 'jardim tropical q3, lt12'. Retorna (None, None, termo) se
-    não achar."""
+    """Tenta extrair (quadra, lote, resto, resto_filtro) de um texto livre
+    digitado pelo usuário. Aceita formatos como 'Q3 LT12', 'quadra 3 lote
+    12', '3/12', '270-9', 'jardim tropical q3, lt12'. Retorna
+    (None, None, termo, termo) se não achar quadra/lote."""
     termo = (termo or "").strip()
     if not termo:
-        return None, None, termo
+        return None, None, termo, termo
 
     m = _RE_TERMO_Q_LT.search(termo)
     if not m:
@@ -2574,7 +2574,7 @@ def _parse_termo_busca_lote(termo: str):
     if not m:
         m = _RE_TERMO_DOIS_NUMEROS.search(termo)
     if not m:
-        return None, None, termo
+        return None, None, termo, termo
 
     quadra, lote = m.group(1), m.group(2)
     resto = (termo[:m.start()] + " " + termo[m.end():]).strip()
@@ -2582,14 +2582,14 @@ def _parse_termo_busca_lote(termo: str):
     # mais importa pro filtro de bairro é o último depois da vírgula.
     partes = [p.strip() for p in resto.split(",") if p.strip()]
     resto_filtro = partes[-1] if partes else resto
-    return _normalizar_num_busca(quadra), _normalizar_num_busca(lote), resto_filtro
+    return _normalizar_num_busca(quadra), _normalizar_num_busca(lote), resto, resto_filtro
 
 
 @app.get("/buscar-lote")
 async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
     _sessao_ou_401(request)
 
-    quadra, lote, resto = _parse_termo_busca_lote(q)
+    quadra, lote, resto, resto_filtro = _parse_termo_busca_lote(q)
     if not quadra or not lote:
         raise HTTPException(
             status_code=400,
@@ -2618,13 +2618,13 @@ async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
             base_params.append(cidade)
 
         linhas = []
-        if resto:
+        if resto_filtro:
             # Primeiro tenta refinar por bairro/via. Só usa esse resultado
             # se achou algo — senão cai pro fallback sem filtro, porque
             # cidade sem bairro cadastrado no tile (ex: Goiânia) nunca
             # bateria no LIKE e o lote sumiria da busca sem motivo.
             sql_refinado = base_sql + " AND (bairro LIKE ? OR via LIKE ?) ORDER BY cidade, bairro LIMIT 50"
-            params_refinado = base_params + [f"%{resto}%", f"%{resto}%"]
+            params_refinado = base_params + [f"%{resto_filtro}%", f"%{resto_filtro}%"]
             linhas = conn.execute(sql_refinado, params_refinado).fetchall()
 
         if not linhas:
@@ -2638,6 +2638,20 @@ async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
             detail=f"Índice de lotes indisponível ou desatualizado: {e}. "
                    f"Rode a indexação em /admin (acao=indexar).",
         )
+
+    # Quando a mesma quadra/lote existe em mais de uma cidade (ex: "Q212
+    # LT1" existe tanto em Goiânia quanto em Aparecida), a ordem alfabética
+    # de cidade sozinha não diz qual é a certa. Desempata contando quantas
+    # palavras do texto digitado (rua, bairro etc) aparecem no bairro/via
+    # de cada linha, e manda o melhor match pro topo da lista.
+    if len(linhas) > 1 and resto:
+        _tokens = [t for t in re.split(r"[^0-9A-Za-zÀ-ÿ]+", resto.lower()) if len(t) > 2]
+
+        def _pontuacao(linha):
+            texto = f"{linha[1] or ''} {linha[4] or ''}".lower()
+            return sum(1 for t in _tokens if t in texto)
+
+        linhas = sorted(linhas, key=lambda l: (-_pontuacao(l), l[0], l[1] or ""))
 
     resultados = [
         {
