@@ -3867,20 +3867,6 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <canvas id="scan-cam-canvas" style="display:none"></canvas>
       </div>
 
-      <textarea id="scan-texto" placeholder="Texto reconhecido (editável)..." onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); scanExecutarBusca(); }"></textarea>
-      <div class="scan-campos-tags" id="scan-campos-tags"></div>
-      <div id="scan-buscar-row">
-        <button class="btn btn-primary" id="scan-buscar-btn" onclick="scanExecutarBusca()">🔎 Buscar sequência</button>
-        <button class="btn" onclick="scanLimpar()">Limpar</button>
-      </div>
-      <div id="scan-status"></div>
-
-      <div id="scan-resultado-card">
-        <h3>Resultado</h3>
-        <div id="scan-melhor-resultado"></div>
-        <div class="scan-alt-list" id="scan-alt-list"></div>
-      </div>
-
       <div id="scan-lista-wrap">
         <div id="scan-lista-header">
           <span class="title">📋 Lista para gerar planilha</span>
@@ -3894,6 +3880,21 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           <button class="btn" onclick="scanLimparLista()">Limpar lista</button>
         </div>
         <div id="scan-lista-status"></div>
+      </div>
+
+      <textarea id="scan-texto" placeholder="Texto reconhecido (editável)..." onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); scanExecutarBusca(); }"></textarea>
+      <div class="scan-campos-tags" id="scan-campos-tags"></div>
+      <div id="scan-buscar-row">
+        <button class="btn btn-primary" id="scan-buscar-btn" onclick="scanExecutarBusca()">🔎 Buscar sequência</button>
+        <button class="btn" onclick="scanAbrirCameraViva('busca')">📷 Câmera</button>
+        <button class="btn" onclick="scanLimpar()">Limpar</button>
+      </div>
+      <div id="scan-status"></div>
+
+      <div id="scan-resultado-card">
+        <h3>Resultado</h3>
+        <div id="scan-melhor-resultado"></div>
+        <div class="scan-alt-list" id="scan-alt-list"></div>
       </div>
     </div>
   </div>
@@ -8020,8 +8021,12 @@ async function anjunBaixarResultado() {
 // ── Câmera ao vivo com guia de recorte ──────────────────────────────
 let _scanCamStream = null;
 let _scanCamFacing = 'environment';
+let _scanCamModo = 'lista'; // 'lista' = adiciona à lista pra gerar planilha; 'busca' = OCR + busca sequência direto
 
-async function scanAbrirCameraViva() {
+async function scanAbrirCameraViva(modo) {
+  _scanCamModo = modo === 'busca' ? 'busca' : 'lista';
+  const pill = document.querySelector('#scan-cam-topbar .scan-cam-pill');
+  if (pill) pill.textContent = _scanCamModo === 'busca' ? '🔎 Buscar sequência' : '📍 Endereço';
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     // Sem suporte: cai no input de arquivo com câmera nativa do sistema
     document.getElementById('scan-file-camera').click();
@@ -8079,7 +8084,13 @@ function scanMostrarToast(msg) {
 
 function scanAtualizarBadgeCam() {
   const badge = document.getElementById('scan-cam-badge');
-  if (badge) badge.textContent = `📋 ${_scanListaItens.length} ${_scanListaItens.length === 1 ? 'item' : 'itens'}`;
+  if (!badge) return;
+  if (_scanCamModo === 'busca') {
+    badge.style.display = 'none';
+  } else {
+    badge.style.display = '';
+    badge.textContent = `📋 ${_scanListaItens.length} ${_scanListaItens.length === 1 ? 'item' : 'itens'}`;
+  }
 }
 
 async function scanOcrSoTexto(base64) {
@@ -8156,14 +8167,21 @@ async function scanCapturarFotoViva() {
     }
     scanFlashCaptura(true); // leitura boa: flash verde de confirmação
 
-    _scanListaItens.push({
-      id: ++_scanListaSeq,
-      endereco: texto,
-      lat: null, lng: null, fonte: ''
-    });
-    scanAtualizarBadgeCam();
-    scanRenderLista();
-    scanMostrarToast(`✅ Item adicionado (${_scanListaItens.length})`);
+    if (_scanCamModo === 'busca') {
+      document.getElementById('scan-texto').value = texto;
+      scanExecutarBusca();
+      const status = document.getElementById('scan-status');
+      scanMostrarToast(status && status.textContent ? status.textContent : '✅ Buscado');
+    } else {
+      _scanListaItens.push({
+        id: ++_scanListaSeq,
+        endereco: texto,
+        lat: null, lng: null, fonte: ''
+      });
+      scanAtualizarBadgeCam();
+      scanRenderLista();
+      scanMostrarToast(`✅ Item adicionado (${_scanListaItens.length})`);
+    }
   } catch (e) {
     scanMostrarToast('❌ Erro no OCR');
   } finally {
@@ -8225,7 +8243,8 @@ function scanRenderCamposTags(campos) {
 
 function scanExecutarBusca() {
   const status = document.getElementById('scan-status');
-  const texto = document.getElementById('scan-texto').value.trim();
+  const textoEl = document.getElementById('scan-texto');
+  const texto = textoEl.value.trim();
   const card = document.getElementById('scan-resultado-card');
 
   if (!texto) {
@@ -8246,6 +8265,10 @@ function scanExecutarBusca() {
     ? `${matches.length} resultado(s) encontrado(s).`
     : 'Nenhuma correspondência encontrada.';
   scanRenderResultado(matches);
+
+  // Limpa o texto pra já deixar pronto pro próximo endereço.
+  textoEl.value = '';
+  textoEl.focus();
 }
 
 function scanRenderResultado(matches) {
