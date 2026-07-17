@@ -199,6 +199,72 @@ _progresso = {"rodando": False, "log": "", "concluido": False, "erro": None}
 _progresso_lock = threading.Lock()
 
 
+def inspecionar_lote(cidade, quadra, lote, limite=10):
+    """Varre TODOS os tiles cacheados de uma cidade e mostra, pra cada
+    feature cuja quadra/lote (já normalizados) bate com o pedido:
+    - o tile (z/x/y) de onde veio
+    - a geometria bruta (coordenadas locais, antes de qualquer cálculo)
+    - o bounding box dessa geometria
+    - o centróide calculado (local e em lat/lon)
+    Serve pra achar mismatch entre propriedade e geometria, ou lotes
+    duplicados/mal posicionados na base de origem."""
+    quadra_norm = _normalizar_num_busca(quadra)
+    lote_norm = _normalizar_num_busca(lote)
+
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT z, x, y, data FROM tiles WHERE cidade=? AND data IS NOT NULL",
+        (cidade,),
+    ).fetchall()
+    conn.close()
+
+    print(f"Varrendo {len(rows)} tiles de '{cidade}' procurando quadra={quadra_norm!r} lote={lote_norm!r}...")
+    achados = 0
+    for z, x, y, data in rows:
+        try:
+            tile = mapbox_vector_tile.decode(data)
+        except Exception:
+            continue
+        if not tile:
+            continue
+        layer_name = next(iter(tile.keys()))
+        layer = tile[layer_name]
+        extent = layer.get("extent", 4096)
+
+        for feature in layer.get("features", []):
+            props = feature.get("properties", {})
+            f_quadra, f_lote, bairro, via, busca_end = _extrair_campos(props)
+            if f_quadra != quadra_norm or f_lote != lote_norm:
+                continue
+
+            achados += 1
+            geometry = feature.get("geometry", {})
+            coords = geometry.get("coordinates", [])
+            pontos = _achatar_pontos(coords)
+            xs = [p[0] for p in pontos]
+            ys = [p[1] for p in pontos]
+            bbox_local = (min(xs), min(ys), max(xs), max(ys)) if pontos else None
+
+            lat, lon = calcular_centroide(coords, extent, x, y, z)
+
+            print(f"\n--- feature #{achados} (tile z={z} x={x} y={y}, extent={extent}) ---")
+            print(f"  properties brutas: {props}")
+            print(f"  geometry.type: {geometry.get('type')}")
+            print(f"  qtd pontos na geometria (achatados): {len(pontos)}")
+            print(f"  bbox local (pixels do tile): {bbox_local}")
+            print(f"  centróide calculado: lat={lat}, lon={lon}")
+            if len(pontos) <= 30:
+                print(f"  coordenadas locais brutas: {pontos}")
+            else:
+                print(f"  primeiras 10 coordenadas locais: {pontos[:10]} ...")
+
+            if achados >= limite:
+                print(f"\n(parou em {limite} — pode ter mais)")
+                return
+    if achados == 0:
+        print("Nenhuma feature encontrada com essa quadra/lote nos tiles cacheados dessa cidade.")
+
+
 def indexar_em_background():
     """Roda indexar() numa thread separada, guardando o log/progresso em
     memoria pra ser consultado via --status, evitando timeout de proxy em

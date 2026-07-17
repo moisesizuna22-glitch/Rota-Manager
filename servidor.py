@@ -2506,6 +2506,16 @@ async def admin_lotes(request: Request):
                     indexar_do_cache.inspecionar,
                     body["cidade"], int(body["z"]), int(body["x"]), int(body["y"]),
                 )
+        elif acao == "inspecionar_lote":
+            faltando = [k for k in ("cidade", "quadra", "lote") if not body.get(k)]
+            if faltando:
+                raise HTTPException(status_code=400, detail=f"faltando: {', '.join(faltando)}")
+            with redirect_stdout(buffer):
+                await run_in_threadpool(
+                    indexar_do_cache.inspecionar_lote,
+                    body["cidade"], str(body["quadra"]), str(body["lote"]),
+                    int(body.get("limite", 10)),
+                )
         elif acao == "indexar":
             iniciou = indexar_do_cache.indexar_em_background()
             return JSONResponse({
