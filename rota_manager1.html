@@ -6116,7 +6116,11 @@ async function buscarLotePorTexto() {
  } catch (e) { /* sem sessão salva, segue sem header */ }
 
  try {
-   const resp = await fetch('/buscar-lote?q=' + encodeURIComponent(termo), { headers });
+   let url = '/buscar-lote?q=' + encodeURIComponent(termo);
+   if (typeof currentLat === 'number' && typeof currentLng === 'number') {
+     url += '&perto_lat=' + currentLat + '&perto_lon=' + currentLng;
+   }
+   const resp = await fetch(url, { headers });
    const data = await resp.json();
 
    if (!resp.ok) {

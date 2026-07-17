@@ -2624,7 +2624,8 @@ def _parse_termo_busca_lote(termo: str):
 
 
 @app.get("/buscar-lote")
-async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
+async def buscar_lote(request: Request, q: str = "", cidade: str = "",
+                       perto_lat: float | None = None, perto_lon: float | None = None):
     _sessao_ou_401(request)
 
     quadra, lote, resto, resto_filtro = _parse_termo_busca_lote(q)
@@ -2688,8 +2689,23 @@ async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
         def _pontuacao(linha):
             texto = f"{linha[1] or ''} {linha[4] or ''}".lower()
             return sum(1 for t in _tokens if t in texto)
+    else:
+        def _pontuacao(linha):
+            return 0
 
-        linhas = sorted(linhas, key=lambda l: (-_pontuacao(l), l[0], l[1] or ""))
+    # Segundo critério: distância até a coordenada atual do pin (quando
+    # informada). Cobre o caso de cidades sem bairro/via cadastrado no
+    # tile (ex: Goiânia) — ali a pontuação por palavra empata em zero pra
+    # todo mundo, e a proximidade com o pin já colocado é o melhor sinal
+    # que temos pra escolher entre lotes de mesma quadra/lote espalhados
+    # pela cidade.
+    def _distancia(linha):
+        if perto_lat is None or perto_lon is None or linha[6] is None or linha[7] is None:
+            return float("inf")
+        return ((linha[6] - perto_lat) ** 2 + (linha[7] - perto_lon) ** 2) ** 0.5
+
+    if len(linhas) > 1:
+        linhas = sorted(linhas, key=lambda l: (-_pontuacao(l), _distancia(l), l[0], l[1] or ""))
 
     resultados = [
         {
