@@ -2528,6 +2528,96 @@ async def admin_lotes(request: Request):
     return JSONResponse({"ok": True, "log": buffer.getvalue()})
 
 
+# ─── Busca direta de quadra/lote (sem precisar procurar no mapa) ─────────────
+# Consulta a tabela `lotes_busca` já pré-indexada (ver /admin/lotes acao=indexar).
+# Aceita um único campo de texto livre (bom pro celular em campo) e tenta
+# extrair quadra+lote de qualquer jeito que o usuário digitar.
+import sqlite3 as _sqlite3_busca
+
+_RE_TERMO_Q_LT = re.compile(
+    r"Q\w*\.?\s*([^\s,/]+)\s*[,/]?\s*LT\w*\.?\s*([^\s,/]+)", re.IGNORECASE
+)
+_RE_TERMO_DOIS_NUMEROS = re.compile(r"(\d+[A-Za-z]?)\D+?(\d+[A-Za-z]?)")
+
+
+def _parse_termo_busca_lote(termo: str):
+    """Tenta extrair (quadra, lote, resto) de um texto livre digitado pelo
+    usuário. Aceita formatos como 'Q3 LT12', 'quadra 3 lote 12', '3/12',
+    'jardim tropical q3, lt12'. Retorna (None, None, termo) se não achar."""
+    termo = (termo or "").strip()
+    if not termo:
+        return None, None, termo
+
+    m = _RE_TERMO_Q_LT.search(termo)
+    if m:
+        quadra, lote = m.group(1), m.group(2)
+        resto = (termo[:m.start()] + " " + termo[m.end():]).strip()
+        return quadra, lote, resto
+
+    m = _RE_TERMO_DOIS_NUMEROS.search(termo)
+    if m:
+        quadra, lote = m.group(1), m.group(2)
+        resto = (termo[:m.start()] + " " + termo[m.end():]).strip()
+        return quadra, lote, resto
+
+    return None, None, termo
+
+
+@app.get("/buscar-lote")
+async def buscar_lote(request: Request, q: str = "", cidade: str = ""):
+    _sessao_ou_401(request)
+
+    quadra, lote, resto = _parse_termo_busca_lote(q)
+    if not quadra or not lote:
+        raise HTTPException(
+            status_code=400,
+            detail="Não consegui identificar quadra e lote no termo. "
+                   "Tente algo como 'Q3 LT12', '3/12' ou 'jardim tropical q3 lt12'.",
+        )
+
+    db_path = DATA_DIR / "lotes_cache.sqlite3"
+    if not db_path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="Ainda não existe índice de quadra/lote. Rode a indexação em "
+                   "/admin (acao=indexar) primeiro.",
+        )
+
+    try:
+        conn = _sqlite3_busca.connect(str(db_path), timeout=10)
+        sql = (
+            "SELECT cidade, bairro, quadra, lote, via, busca_end, "
+            "centroid_lat, centroid_lon FROM lotes_busca "
+            "WHERE quadra = ? COLLATE NOCASE AND lote = ? COLLATE NOCASE"
+        )
+        params = [quadra, lote]
+        if cidade:
+            sql += " AND cidade = ?"
+            params.append(cidade)
+        if resto:
+            sql += " AND (bairro LIKE ? OR via LIKE ?)"
+            params += [f"%{resto}%", f"%{resto}%"]
+        sql += " ORDER BY cidade, bairro LIMIT 50"
+
+        linhas = conn.execute(sql, params).fetchall()
+        conn.close()
+    except _sqlite3_busca.OperationalError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Índice de lotes indisponível ou desatualizado: {e}. "
+                   f"Rode a indexação em /admin (acao=indexar).",
+        )
+
+    resultados = [
+        {
+            "cidade": r[0], "bairro": r[1], "quadra": r[2], "lote": r[3],
+            "via": r[4], "busca_end": r[5], "lat": r[6], "lon": r[7],
+        }
+        for r in linhas if r[6] is not None and r[7] is not None
+    ]
+    return ok_json({"ok": True, "quadra": quadra, "lote": lote, "resultados": resultados})
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  ROTAS  ──  DELETE
 # ═══════════════════════════════════════════════════════════════════
