@@ -1441,6 +1441,7 @@ header .badge b { color: var(--accent2); }
   }
 
   #admin-novo { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; background: var(--surface); }
+  #admin-backup { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; background: var(--surface); }
   .admin-novo-toggle {
     display: flex; align-items: center; justify-content: space-between;
     cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent2);
@@ -3986,6 +3987,21 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       </div>
 
       <div id="admin-msg" class="admin-msg"></div>
+
+      <div id="admin-backup">
+        <div class="admin-novo-toggle" id="admin-backup-toggle" onclick="toggleBackupPainel()">
+          <span>🗄️ Backup</span><span id="admin-backup-seta">▾</span>
+        </div>
+        <div id="admin-backup-body" style="display:none">
+          <div id="admin-backup-status" style="font-size:13px;color:var(--muted);line-height:1.6">Carregando status...</div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn" id="btn-backup-status" onclick="carregarBackupStatus()">🔄 Atualizar status</button>
+            <button class="btn btn-primary" id="btn-backup-enviar" onclick="enviarBackupAgora()">📧 Enviar backup agora</button>
+            <button class="btn" id="btn-backup-baixar" onclick="baixarBackupZip()">⬇️ Baixar .zip</button>
+          </div>
+          <div id="admin-backup-msg" class="admin-msg"></div>
+        </div>
+      </div>
 
       <div id="admin-filtro">
         <input class="login-input" id="adm-busca" type="text" placeholder="🔎 Buscar por usuário ou email..." autocomplete="off" oninput="filtrarListaAdmin()">
@@ -8718,6 +8734,91 @@ async function carregarListaAdmin() {
     document.getElementById('admin-list').innerHTML =
       '<div id="admin-empty">Não foi possível conectar ao servidor.</div>';
   }
+}
+
+let _backupAberto = false;
+
+function toggleBackupPainel() {
+  _backupAberto = !_backupAberto;
+  document.getElementById('admin-backup-body').style.display = _backupAberto ? 'block' : 'none';
+  document.getElementById('admin-backup-seta').textContent = _backupAberto ? '▴' : '▾';
+  if (_backupAberto) carregarBackupStatus();
+}
+
+function _fmtBackupInfo(nome, info) {
+  if (!info) return `${nome}: —`;
+  const tam = info.tamanho_bytes ? `${(info.tamanho_bytes/1024).toFixed(1)} KB` : '0 KB';
+  return `${nome}: ${info.arquivo_existe ? 'ok' : '⚠️ não existe'} · ${tam} · `
+       + `modificado ${info.modificado_em || '—'} · ${info.snapshots_guardados} snapshot(s) locais`;
+}
+
+async function carregarBackupStatus() {
+  const el = document.getElementById('admin-backup-status');
+  el.textContent = 'Carregando status...';
+  try {
+    const r = await fetch(SERVER + '/admin/backup/status', { headers: authHeaders() });
+    const d = await r.json();
+    if (!d.ok) { el.textContent = d.erro || 'Não foi possível carregar o status.'; return; }
+    const linhas = [
+      _fmtBackupInfo('usuarios.json', d.usuarios),
+      _fmtBackupInfo('historico_rotas.json', d.historico),
+      _fmtBackupInfo('banco_coords.json', d.banco_coords),
+      d.email_backup_configurado
+        ? `📧 Backup por email ativo → ${escHtml(d.email_destino)} (a cada ${d.intervalo_horas}h)`
+        : '📧 Backup por email não configurado (defina BACKUP_EMAIL_DESTINO no Railway)',
+    ];
+    el.innerHTML = linhas.join('<br>');
+  } catch (e) {
+    el.textContent = 'Não foi possível conectar ao servidor.';
+  }
+}
+
+async function enviarBackupAgora() {
+  const msgEl = document.getElementById('admin-backup-msg');
+  const btn = document.getElementById('btn-backup-enviar');
+  btn.disabled = true;
+  msgEl.className = 'admin-msg show';
+  msgEl.textContent = 'Enviando...';
+  try {
+    const r = await fetch(SERVER + '/admin/backup/enviar-agora', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const d = await r.json();
+    msgEl.className = 'admin-msg show ' + (d.ok ? 'ok' : 'erro');
+    msgEl.textContent = d.ok ? (d.mensagem || 'Backup enviado com sucesso!') : (d.erro || 'Falha ao enviar backup.');
+  } catch (e) {
+    msgEl.className = 'admin-msg show erro';
+    msgEl.textContent = 'Não foi possível conectar ao servidor.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function baixarBackupZip() {
+  const url = SERVER + '/admin/backup/baixar';
+  // esse endpoint exige header de autorização, então baixamos via fetch+blob
+  // em vez de simplesmente abrir a URL numa nova aba.
+  (async () => {
+    const msgEl = document.getElementById('admin-backup-msg');
+    try {
+      const r = await fetch(url, { headers: authHeaders() });
+      if (!r.ok) { msgEl.className = 'admin-msg show erro'; msgEl.textContent = 'Falha ao baixar backup.'; return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      const objUrl = URL.createObjectURL(blob);
+      a.href = objUrl;
+      a.download = 'backup_rota_manager.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objUrl);
+    } catch (e) {
+      msgEl.className = 'admin-msg show erro';
+      msgEl.textContent = 'Não foi possível baixar o backup.';
+    }
+  })();
 }
 
 function filtrarListaAdmin() {
