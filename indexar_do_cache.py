@@ -238,6 +238,29 @@ def criar_schema(conn):
     conn.commit()
 
 
+def _achatar_pontos(geometry_coords):
+    """Percorre a geometria (Polygon, MultiPolygon, ou qualquer nível de
+    aninhamento) e devolve uma lista de (x, y) — ignora dimensões extras
+    (ex: z) e não assume uma profundidade fixa de listas."""
+    pontos = []
+
+    def _percorrer(nivel):
+        if not nivel:
+            return
+        primeiro = nivel[0]
+        # Se o primeiro elemento é um número, "nivel" já é um ponto tipo
+        # [x, y] ou [x, y, z] — usa só os dois primeiros valores.
+        if isinstance(primeiro, (int, float)):
+            pontos.append((nivel[0], nivel[1]))
+            return
+        # Senão, "nivel" é uma lista de sub-listas — desce mais um nível.
+        for sub in nivel:
+            _percorrer(sub)
+
+    _percorrer(geometry_coords)
+    return pontos
+
+
 def _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y):
     bounds = mercantile.bounds(tile_x, tile_y, tile_z)
     lon = bounds.west + frac_x * (bounds.east - bounds.west)
@@ -247,12 +270,11 @@ def _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y):
 
 def calcular_centroide(geometry_coords, extent, tile_x, tile_y, tile_z):
     pontos = []
-    for anel in geometry_coords:
-        for x_local, y_local in anel:
-            frac_x = x_local / extent
-            frac_y = y_local / extent
-            lon, lat = _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y)
-            pontos.append((lat, lon))
+    for x_local, y_local in _achatar_pontos(geometry_coords):
+        frac_x = x_local / extent
+        frac_y = y_local / extent
+        lon, lat = _frac_to_lnglat(tile_x, tile_y, tile_z, frac_x, frac_y)
+        pontos.append((lat, lon))
     if not pontos:
         return None, None
     return (sum(p[0] for p in pontos) / len(pontos),
@@ -277,6 +299,7 @@ def indexar():
 
     total_lotes = 0
     sem_match = 0
+    erros_geometria = 0
     exemplos_sem_match = []
     for i, (cidade, z, x, y, data) in enumerate(rows):
         try:
@@ -308,7 +331,14 @@ def indexar():
 
             geometry = feature.get("geometry", {})
             coords = geometry.get("coordinates", [])
-            lat, lon = calcular_centroide(coords, extent, x, y, z)
+            try:
+                lat, lon = calcular_centroide(coords, extent, x, y, z)
+            except Exception as e:
+                erros_geometria += 1
+                if erros_geometria <= 5:
+                    print(f"  aviso: geometria inesperada em {cidade} Q{quadra} LT{lote} "
+                          f"({type(e).__name__}: {e}) — gravado sem coordenada")
+                lat, lon = None, None
 
             cur = conn.execute("""
                 INSERT OR IGNORE INTO lotes_busca
@@ -323,14 +353,15 @@ def indexar():
         if (i + 1) % 20 == 0:
             conn.commit()
             print(f"  ... {i + 1}/{len(rows)} tiles, {total_lotes} lotes indexados ate agora "
-                  f"({sem_match} sem match no padrao Q/LT)")
+                  f"({sem_match} sem match no padrao Q/LT, {erros_geometria} com erro de geometria)")
             if exemplos_sem_match:
                 print(f"      exemplos sem match ate agora: {exemplos_sem_match[:3]}")
 
     conn.commit()
     conn.close()
     print(f"\nConcluido: {total_lotes} lotes indexados em lotes_busca "
-          f"({sem_match} features sem match no padrao Q/LT, ignoradas)")
+          f"({sem_match} features sem match no padrao Q/LT, ignoradas; "
+          f"{erros_geometria} com erro de geometria, gravadas sem coordenada)")
     if exemplos_sem_match:
         print("\nExemplos de 'sup' que NAO bateram no padrao (pra ajustar o regex):")
         for ex in exemplos_sem_match:
