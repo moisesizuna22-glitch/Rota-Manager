@@ -63,12 +63,19 @@ _STREET_HEAD_RE = re.compile(
 )
 
 # Quadra/Lote tolerante ao formato do Anjun, que às vezes usa só "L" no
-# lugar de "LT" (ex.: "Q33 L27"). O tratamento_dados.py original só
-# reconhece "LT/LTE/LTS" — por isso normalizamos aqui pra "QD .. LT .."
-# antes de repassar pra lógica atual, sem precisar tocar nela.
+# lugar de "LT" (ex.: "Q33 L27") e às vezes separa quadra e lote com
+# pontuação/hífen em vez de espaço (ex.: "qd 137. lt 11"). O
+# tratamento_dados.py original só reconhece "LT/LTE/LTS" com espaço puro
+# entre os dois — por isso normalizamos aqui pra "QD .. LT .." antes de
+# repassar pra lógica atual, sem precisar tocar nela.
 _QDLT_RELAXADO_RE = re.compile(
-    r'\bQD?\.?\s*(\d+[A-Z]?)\s*L(?:T[ES]?)?\.?\s*(\d+)\b', re.IGNORECASE
+    r'\bQD?\.?\s*(\d+[A-Z]?)[\.\-,\s]{0,3}L(?:T[ES]?)?\.?\s*(\d+)\b', re.IGNORECASE
 )
+
+# Quadra SOZINHA, sem lote (ex.: "qd 17"). O tratamento_dados.py não tem
+# nenhum tratamento pra QD sem LT — sem isso, esses endereços ficavam sem
+# nenhum número aproveitável.
+_QD_SOZINHO_RE = re.compile(r'\bQD?\.?\s*(\d+[A-Z]?)\b', re.IGNORECASE)
 
 _PREFIXO_RUA_RE = re.compile(
     r'^(RUA|R\.?|AVENIDA|AV\.?|PRA[CÇ]A|P[CÇ]\.?|ALAMEDA|AL\.?|TRAVESSA|TV\.?)\b',
@@ -86,10 +93,31 @@ _FIM_NOME_RUA_RE = re.compile(
 )
 
 
-def _limpar_rua_codificada(texto: str):
+def _numero_do_prefixo(address_bruto: str):
+    """O campo Address do Anjun às vezes traz o número REAL da casa no
+    prefixo, antes do parêntese (ex.: 'R 1035, 212, Goiânia, GO, ...').
+    Quando o texto entre parênteses só tem apto/bloco/edifício e não tem
+    número de casa próprio, esse '212' era descartado — aqui recuperamos
+    ele como fallback. Só aceita se o 2º campo (logo após o nome/código da
+    rua) for só dígitos; senão é cidade/bairro/outra coisa, não número."""
+    prefixo = address_bruto.split('(', 1)[0]
+    campos = [c.strip() for c in prefixo.split(',')]
+    if len(campos) < 2:
+        return None
+    candidato = campos[1]
+    if re.fullmatch(r'\d{1,6}', candidato):
+        return candidato
+    return None
+
+
+def _limpar_rua_codificada(texto: str, numero_prefixo: str = None):
     """Ruas com código numérico logo após o prefixo (ex.: 'Rua 1013',
     'Rua S 6'). Devolve None se o prefixo não bater com esse padrão —
-    nesse caso é rua por extenso, tratada em `_limpar_rua_por_extenso`."""
+    nesse caso é rua por extenso, tratada em `_limpar_rua_por_extenso`.
+
+    `numero_prefixo`: número de casa vindo do prefixo do Address (fora dos
+    parênteses) — usado quando o texto entre parênteses não tem número
+    próprio (só apto/bloco/edifício)."""
     m_head = _STREET_HEAD_RE.match(texto)
     if not m_head:
         return None
@@ -97,29 +125,59 @@ def _limpar_rua_codificada(texto: str):
     cabecalho = texto[:m_head.end()]
     resto = texto[m_head.end():].strip().lstrip(',').strip()
     if not resto:
-        return cabecalho
+        return f"{cabecalho}, {numero_prefixo}" if numero_prefixo else cabecalho
 
     m_qdlt = _QDLT_RELAXADO_RE.search(resto)
     if m_qdlt:
         return f"{cabecalho}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}"
 
+    m_qd_so = _QD_SOZINHO_RE.match(resto)
+    if m_qd_so:
+        return f"{cabecalho}, {m_qd_so.group(1)}"
+
     m_num = re.match(r'^(\d+)\b', resto)
     if m_num:
         return f"{cabecalho}, {m_num.group(1)}"
 
-    # sobrou só ruído (prédio, apto etc.) — mantém junto pro BLDG_RE do
-    # tratamento_dados.py reconhecer nome de edifício/residencial/condomínio
+    # sobrou só ruído (prédio, apto etc.) — se tiver número real vindo do
+    # prefixo do Address, usa ele; senão mantém o ruído junto pro BLDG_RE
+    # do tratamento_dados.py reconhecer nome de edifício/residencial/condomínio
+    if numero_prefixo:
+        return f"{cabecalho}, {numero_prefixo}, {resto}"
     return f"{cabecalho}, {resto}"
 
 
-def _limpar_rua_por_extenso(texto: str) -> str:
+def _limpar_rua_por_extenso(texto: str, numero_prefixo: str = None) -> str:
     """Ruas sem código numérico (ex.: 'Alameda Couto Magalhães', 'Avenida
     Segunda Radial'). Acha o número real do imóvel entre os campos
-    separados por vírgula, ignorando complementos com dígito (apto/bloco)."""
+    separados por vírgula, ignorando complementos com dígito (apto/bloco).
+
+    Ordem de prioridade: QD+LT em qualquer lugar do texto > QD sozinho
+    (sem lote) > número solto após o nome da rua > número vindo do
+    prefixo do Address > deixa o ruído (apto/edifício) pro BLDG_RE do
+    tratamento_dados.py."""
     m_pfx = _PREFIXO_RUA_RE.match(texto)
     prefixo = texto[:m_pfx.end()] if m_pfx else ''
     resto_completo = texto[m_pfx.end():].strip() if m_pfx else texto
 
+    # Prioridade 1: QD + LT em qualquer lugar do resto (tolera pontuação/
+    # hífen entre os dois, ex.: "qd 137. lt 11" ou "- qd 137")
+    m_qdlt = _QDLT_RELAXADO_RE.search(resto_completo)
+    if m_qdlt:
+        nome_rua = resto_completo[:m_qdlt.start()].rstrip(', -').strip()
+        if not nome_rua:
+            nome_rua = resto_completo.split(',')[0].strip()
+        return f"{prefixo} {nome_rua}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}".strip()
+
+    # Prioridade 2: QD sozinha, sem lote (ex.: "qd 17")
+    m_qd_so = _QD_SOZINHO_RE.search(resto_completo)
+    if m_qd_so:
+        nome_rua = resto_completo[:m_qd_so.start()].rstrip(', -').strip()
+        if not nome_rua:
+            nome_rua = resto_completo.split(',')[0].strip()
+        return f"{prefixo} {nome_rua}, {m_qd_so.group(1)}".strip()
+
+    # Prioridade 3: número solto ou nome de prédio/complemento
     m_fim = _FIM_NOME_RUA_RE.search(resto_completo)
     if m_fim:
         nome_rua = resto_completo[:m_fim.start()].rstrip(', ').strip()
@@ -132,41 +190,47 @@ def _limpar_rua_por_extenso(texto: str) -> str:
         nome_rua = resto_completo.split(',')[0].strip()
 
     if not cauda:
+        if numero_prefixo:
+            return f"{prefixo} {nome_rua}, {numero_prefixo}".strip()
         return f"{prefixo} {nome_rua}".strip()
-
-    m_qdlt = _QDLT_RELAXADO_RE.search(cauda)
-    if m_qdlt:
-        return f"{prefixo} {nome_rua}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}"
 
     campos_cauda = [c.strip() for c in cauda.split(',') if c.strip()]
     numero = next((c for c in campos_cauda if re.fullmatch(r'\d+', c)), None)
     if numero:
-        return f"{prefixo} {nome_rua}, {numero}"
+        return f"{prefixo} {nome_rua}, {numero}".strip()
 
-    return f"{prefixo} {nome_rua}, {cauda}"
+    if numero_prefixo:
+        return f"{prefixo} {nome_rua}, {numero_prefixo}, {cauda}".strip()
+    return f"{prefixo} {nome_rua}, {cauda}".strip()
 
 
-def normalizar_detalhe_anjun(detalhe: str) -> str:
+def normalizar_detalhe_anjun(detalhe: str, numero_prefixo: str = None) -> str:
     """Recebe só o trecho de endereço (sem cidade/UF/CEP) e devolve uma
     versão limpa, pronta pro `standardize()` do tratamento_dados.py."""
     if not detalhe or not detalhe.strip():
         return detalhe or ''
     texto = detalhe.strip()
-    codificada = _limpar_rua_codificada(texto)
+    codificada = _limpar_rua_codificada(texto, numero_prefixo)
     if codificada is not None:
         return codificada
-    return _limpar_rua_por_extenso(texto)
+    return _limpar_rua_por_extenso(texto, numero_prefixo)
 
 
 def extrair_endereco_anjun(address_bruto: str) -> str:
     """Tira a duplicação entre o prefixo do campo Address (rua, número,
     cidade, UF) e o texto detalhado entre parênteses: usa o detalhado
-    (mais completo) quando existe; senão usa o próprio prefixo."""
+    (mais completo) quando existe; senão usa o próprio prefixo.
+
+    Quando existe parêntese, também tenta recuperar o número de casa real
+    que às vezes só aparece no prefixo (fora do parêntese) — ver
+    `_numero_do_prefixo`."""
     if not address_bruto or not address_bruto.strip():
         return ''
     m = _RE_PARENTESES.search(address_bruto)
-    detalhe = m.group(1).strip() if (m and m.group(1).strip()) else address_bruto.strip()
-    return normalizar_detalhe_anjun(detalhe)
+    tem_parenteses = bool(m and m.group(1).strip())
+    detalhe = m.group(1).strip() if tem_parenteses else address_bruto.strip()
+    numero_prefixo = _numero_do_prefixo(address_bruto) if tem_parenteses else None
+    return normalizar_detalhe_anjun(detalhe, numero_prefixo)
 
 
 def extrair_bairro_anjun(address_bruto: str) -> str:
