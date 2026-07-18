@@ -3773,10 +3773,6 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
       <span class="nav-label">Histórico</span>
     </button>
-    <button class="nav-item" id="snav-anjun" onclick="sidebarNav('anjun')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-      <span class="nav-label">Anjun</span>
-    </button>
     <button class="nav-item" id="snav-scan" onclick="sidebarNav('scan')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
       <span class="nav-label">Rota Scan</span>
@@ -10452,7 +10448,6 @@ function sidebarNav(page) {
     case 'banco':       abrirBanco(); break;
     case 'scan':        abrirScan(); break;
     case 'extracao':    abrirExtracao(); break;
-    case 'anjun':       abrirAnjun(); break;
     case 'assinatura':  abrirAssinatura(); break;
     case 'admin':       abrirAdmin(); break;
   }
