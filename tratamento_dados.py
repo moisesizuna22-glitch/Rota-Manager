@@ -551,6 +551,10 @@ def load_saida_p2(path: str):
     idx_zip = col_idx([r'zip', r'postal', r'cep'])
     idx_lat = col_idx([r'\blat\b', r'latitude'])
     idx_lon = col_idx([r'\blon\b', r'\blng\b', r'longitude'])
+    # Telefone do destinatário (vem do CSV do Anjun como coluna "Contact",
+    # preservada intacta pelo Passo 1). Não existe coluna de nome no CSV
+    # de origem — só o número mesmo.
+    idx_contato = col_idx([r'contact', r'contato', r'telefone', r'\bphone\b'])
 
     if idx_reformado is None:
         raise ValueError("Coluna ENDERECO_REFORMADO nao encontrada no arquivo.")
@@ -573,6 +577,7 @@ def load_saida_p2(path: str):
             'zip': g(idx_zip),
             'lat': g(idx_lat),
             'lon': g(idx_lon),
+            'contato': g(idx_contato),
         })
 
     return rows, headers
@@ -627,18 +632,33 @@ def consolidate_p2(rows):
         if key_display and bairro_fmt and bairro_fmt not in key_display:
             key_display = f"{key_display}, {bairro_fmt}"
 
-        # Lista detalhada de cada membro do grupo (seq + endereço original),
-        # usada pelo app para permitir desagrupar um item específico.
-        # Usa 'seq' (coluna SEQUENCE) pois é o valor único por linha;
-        # 'stop' pode vir de uma coluna auxiliar com valores repetidos.
+        # Lista detalhada de cada membro do grupo (seq + endereço original
+        # + contato/telefone), usada pelo app para permitir desagrupar um
+        # item específico e exibir o telefone de cada entrega junto com
+        # seu endereço. Usa 'seq' (coluna SEQUENCE) pois é o valor único
+        # por linha; 'stop' pode vir de uma coluna auxiliar com valores
+        # repetidos.
         membros = [
             {
                 'stop': m['seq'] or m['stop'],
                 'original': m['original'] or m['reformado'],
+                'contato': m['contato'],
             }
             for m in members
             if m['seq'] or m['stop'] or m['original'] or m['reformado']
         ]
+
+        # Telefones únicos do grupo, na ordem em que aparecem — quando o
+        # grupo tem uma única parada isso vira "o" telefone da entrega;
+        # quando tem várias, cada uma mantém o seu próprio em 'membros'
+        # e aqui fica a lista consolidada (útil pra exibir no resumo do
+        # grupo sem abrir a lista de membros).
+        contatos_seen = []
+        for m in members:
+            c = (m['contato'] or '').strip()
+            if c and c not in contatos_seen:
+                contatos_seen.append(c)
+        contato_val = ', '.join(contatos_seen)
 
         result.append({
             'seq': seq_val,
@@ -653,6 +673,7 @@ def consolidate_p2(rows):
             'coord': unique_coords[0] if unique_coords else '',
             'count': len(members),
             'membros': membros,
+            'contato': contato_val,
         })
 
     return result
@@ -681,6 +702,7 @@ def write_excel_p2(groups, out_path):
         ('OBSERVACAO', '6C3483', 14),
         ('ENDERECO_ORIGINAL', '8B0000', 44),
         ('BAIRRO', '2E5984', 25),
+        ('CONTATO', '145A32', 18),
         ('MEMBROS_JSON', 'FFFFFF', 10),
     ]
 
@@ -717,7 +739,8 @@ def write_excel_p2(groups, out_path):
             (9, obs, CTR, Font(name='Arial', size=9, bold=grouped), rfill),
             (10, grp['original'], LFT, Font(name='Arial', size=9), rfill),
             (11, grp['bairro'], LFT, Font(name='Arial', size=9), rfill),
-            (12, json.dumps(grp.get('membros', []), ensure_ascii=False), LFT, Font(name='Arial', size=8), rfill),
+            (12, grp.get('contato', ''), CTR, Font(name='Arial', size=9), rfill),
+            (13, json.dumps(grp.get('membros', []), ensure_ascii=False), LFT, Font(name='Arial', size=8), rfill),
         ]
 
         for ci, val, aln, fnt, fill in cells:

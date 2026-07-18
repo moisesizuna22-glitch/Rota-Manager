@@ -1440,6 +1440,10 @@ header .badge b { color: var(--accent2); }
     font-size: 12px; color: var(--muted); font-family: monospace;
     margin-bottom: 12px;
   }
+  #parada-sheet .sheet-contato {
+    font-size: 13px; font-weight: 700; color: #22c55e; font-family: monospace;
+    margin: -6px 0 12px;
+  }
   #parada-sheet .sheet-nota {
     margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
     font-size: 12.5px; color: var(--muted); line-height: 1.5;
@@ -2293,6 +2297,9 @@ opacity: .75;
 font-weight: 500;
 margin-top: 3px;
 }
+.td-addr-contato {
+margin-top: 3px;
+}
 
 /* ── Badge de validação HERE ── */
 .here-badge {
@@ -2379,6 +2386,14 @@ white-space: nowrap;
 .membro-item .membro-orig {
 flex: 1;
 word-break: break-word;
+}
+.membro-contato {
+flex-shrink: 0;
+font-family: var(--mono);
+font-size: 11.5px;
+font-weight: 700;
+color: #22c55e;
+white-space: nowrap;
 }
 .btn-ungroup {
 flex-shrink: 0;
@@ -4068,6 +4083,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           </div>
           <div class="sheet-endereco" id="sheet-endereco"></div>
           <div class="sheet-coords" id="sheet-coords"></div>
+          <div class="sheet-contato" id="sheet-contato" style="display:none;"></div>
           <label class="sheet-select">
             <input type="checkbox" id="sheet-select-check" onchange="toggleSelecaoParadaMapa()">
             Selecionar esta parada para agrupar
@@ -4978,19 +4994,33 @@ tr.appendChild(tdAction);
 // cada um com botão para tirar especificamente aquele item do grupo.
 // Quando não agrupado, mostra o endereço completo (original) numa
 // segunda linha, abaixo do endereço reformado.
+// Telefone de contato do destinatário (coluna CONTATO/Contact do Anjun).
+// Não existe nome do destinatário na fonte de dados — só o número.
+const contatoHtml = (tel) => {
+tel = String(tel || '').trim();
+if (!tel) return '';
+const bonito = formatTelefoneExibicao ? formatTelefoneExibicao(tel) : tel;
+return `<span class="membro-contato" title="Telefone de contato">📞 ${escHtml(bonito)}</span>`;
+};
+
 let membrosHtml = '';
 if (row.group_size > 1) {
 membrosHtml = `<div class="membros-list">` + membros.map((m, mi) => `
        <div class="membro-item">
          ${m.stop ? `<span class="membro-stop">Seq ${escHtml(m.stop)}</span>` : ''}
          <span class="membro-orig">${escHtml(m.original)}</span>
+         ${contatoHtml(m.contato)}
          <button class="btn-ungroup" data-cid="${row._cid}" data-mi="${mi}" title="Tirar este endereço do grupo">✕</button>
        </div>
      `).join('') + `</div>`;
 } else {
 const completo = membros[0] ? String(membros[0].original || '').trim() : '';
+const contatoUnico = contatoHtml(membros[0] ? membros[0].contato : row.contato);
 if (completo && completo.toUpperCase() !== endReformado.toUpperCase()) {
 membrosHtml = `<div class="td-addr-original">${escHtml(completo)}</div>`;
+}
+if (contatoUnico) {
+membrosHtml += `<div class="td-addr-contato">${contatoUnico}</div>`;
 }
 }
 
@@ -5157,7 +5187,8 @@ group_id: _nextGroupId++,
 group_label: standardize(removido.original) || removido.original,
 group_stops: '',
 group_size: 1,
-membros: [{ stop: removido.stop, original: removido.original }],
+membros: [{ stop: removido.stop, original: removido.original, contato: removido.contato }],
+contato: removido.contato,
 _cid: _nextCid++,
 _editado: false,
 };
@@ -5247,7 +5278,7 @@ const membrosCombinados = [];
 for (const r of escolhidos) {
 const ms = Array.isArray(r.membros) && r.membros.length
 ? r.membros
-: [{ stop: r.stop, original: r.endereco_original || r.address }];
+: [{ stop: r.stop, original: r.endereco_original || r.address, contato: r.contato }];
 membrosCombinados.push(...ms);
 }
 
@@ -7050,6 +7081,18 @@ function mostrarParadaSheet(item, el) {
   document.getElementById('sheet-endereco').textContent = endereco;
   document.getElementById('sheet-coords').textContent = `Lat: ${item.lat.toFixed(6)}  ·  Lng: ${item.lon.toFixed(6)}`;
   document.getElementById('sheet-select-check').checked = _selecionados.has(item.row._cid);
+
+  // Telefone de contato do destinatário, quando disponível (coluna
+  // CONTATO/Contact do Anjun) — não existe nome do destinatário na
+  // fonte de dados, só o número.
+  const contatoEl = document.getElementById('sheet-contato');
+  const telParada = (item.row.contato || (Array.isArray(item.row.membros) && item.row.membros[0] ? item.row.membros[0].contato : '') || '').trim();
+  if (telParada) {
+    contatoEl.style.display = '';
+    contatoEl.textContent = '📞 ' + (formatTelefoneExibicao ? formatTelefoneExibicao(telParada) : telParada);
+  } else {
+    contatoEl.style.display = 'none';
+  }
 
   const notaEl = document.getElementById('sheet-nota');
   const membros = Array.isArray(item.row.membros) ? item.row.membros.filter(m => m.original && m.original !== endereco) : [];

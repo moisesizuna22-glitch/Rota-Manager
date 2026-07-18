@@ -1515,6 +1515,7 @@ def ler_processado(user_id: str = ""):
     col_orig    = find_col([r"endere.o_original", r"original"])
     col_membros = find_col([r"membros.?json", r"membros"])
     col_validacao_here = find_col([r"validacao_here", r"validacao.here"])
+    col_contato = find_col([r"\bcontato\b", r"contact", r"telefone", r"\bphone\b"])
 
     rows = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -1530,6 +1531,8 @@ def ler_processado(user_id: str = ""):
         count = int(g(col_count) or 1)
         endereco_original = g(col_orig)
 
+        contato_grupo = g(col_contato)
+
         membros = []
         membros_raw = g(col_membros)
         if membros_raw:
@@ -1537,7 +1540,11 @@ def ler_processado(user_id: str = ""):
                 parsed = json.loads(membros_raw)
                 if isinstance(parsed, list):
                     membros = [
-                        {"stop": str(m.get("stop", "")), "original": str(m.get("original", ""))}
+                        {
+                            "stop": str(m.get("stop", "")),
+                            "original": str(m.get("original", "")),
+                            "contato": str(m.get("contato", "")),
+                        }
                         for m in parsed if isinstance(m, dict)
                     ]
             except Exception:
@@ -1550,7 +1557,8 @@ def ler_processado(user_id: str = ""):
             n = max(len(stops_fallback), len(origs_fallback), 1)
             membros = [
                 {"stop": stops_fallback[i] if i < len(stops_fallback) else "",
-                 "original": origs_fallback[i] if i < len(origs_fallback) else endereco_original}
+                 "original": origs_fallback[i] if i < len(origs_fallback) else endereco_original,
+                 "contato": contato_grupo}
                 for i in range(n)
             ]
 
@@ -1565,6 +1573,7 @@ def ler_processado(user_id: str = ""):
             "group_label":        g(col_addr),
             "endereco_original":  endereco_original,
             "membros":            membros,
+            "contato":            contato_grupo,
             "validacao_here":     g(col_validacao_here),
             "_cid":               str(uuid.uuid4()),
         }
