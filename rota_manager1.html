@@ -2394,6 +2394,16 @@ font-size: 11.5px;
 font-weight: 700;
 color: #22c55e;
 white-space: nowrap;
+text-decoration: none;
+cursor: pointer;
+border-radius: 5px;
+padding: 1px 5px;
+transition: .15s;
+}
+.membro-contato:hover {
+background: rgba(34,197,94,.14);
+color: #16a34a;
+text-decoration: none;
 }
 .btn-ungroup {
 flex-shrink: 0;
@@ -4926,6 +4936,16 @@ document.getElementById('st-coord').textContent = comCoord;
 document.getElementById('stats-bar').classList.add('show');
 }
 
+// Monta o link do WhatsApp (wa.me) pro telefone de contato de uma entrega,
+// já com uma mensagem padrão avisando que o endereço está incompleto.
+// Usado tanto na tabela de rotas quanto no painel de parada do mapa.
+const _MSG_ENDERECO_INCOMPLETO = 'Olá! Aqui é da equipe de entrega. O endereço informado para sua entrega está incompleto — poderia confirmar o endereço completo, por favor?';
+function linkWhatsApp(tel) {
+const digits = String(tel || '').replace(/\D/g, '');
+if (!digits) return '';
+return `https://wa.me/${digits}?text=${encodeURIComponent(_MSG_ENDERECO_INCOMPLETO)}`;
+}
+
 function renderTable(rows) {
 const tbody = document.getElementById('table-body');
 tbody.innerHTML = '';
@@ -4996,11 +5016,16 @@ tr.appendChild(tdAction);
 // segunda linha, abaixo do endereço reformado.
 // Telefone de contato do destinatário (coluna CONTATO/Contact do Anjun).
 // Não existe nome do destinatário na fonte de dados — só o número.
+// Clicar no telefone abre o WhatsApp do destinatário já com uma mensagem
+// avisando que o endereço está incompleto (uso interno da equipe de
+// entrega, pra agilizar o contato quando falta complemento/número).
 const contatoHtml = (tel) => {
 tel = String(tel || '').trim();
 if (!tel) return '';
 const bonito = formatTelefoneExibicao ? formatTelefoneExibicao(tel) : tel;
-return `<span class="membro-contato" title="Telefone de contato">📞 ${escHtml(bonito)}</span>`;
+const link = linkWhatsApp(tel);
+if (!link) return `<span class="membro-contato" title="Telefone de contato">📞 ${escHtml(bonito)}</span>`;
+return `<a class="membro-contato" href="${escHtml(link)}" target="_blank" rel="noopener noreferrer" title="Chamar no WhatsApp — avisa que o endereço está incompleto" onclick="event.stopPropagation()">📞 ${escHtml(bonito)}</a>`;
 };
 
 let membrosHtml = '';
@@ -7084,12 +7109,17 @@ function mostrarParadaSheet(item, el) {
 
   // Telefone de contato do destinatário, quando disponível (coluna
   // CONTATO/Contact do Anjun) — não existe nome do destinatário na
-  // fonte de dados, só o número.
+  // fonte de dados, só o número. Clicar abre o WhatsApp já com uma
+  // mensagem avisando que o endereço está incompleto.
   const contatoEl = document.getElementById('sheet-contato');
   const telParada = (item.row.contato || (Array.isArray(item.row.membros) && item.row.membros[0] ? item.row.membros[0].contato : '') || '').trim();
   if (telParada) {
     contatoEl.style.display = '';
-    contatoEl.textContent = '📞 ' + (formatTelefoneExibicao ? formatTelefoneExibicao(telParada) : telParada);
+    const bonitoParada = formatTelefoneExibicao ? formatTelefoneExibicao(telParada) : telParada;
+    const linkParada = linkWhatsApp(telParada);
+    contatoEl.innerHTML = linkParada
+      ? `<a href="${escHtml(linkParada)}" target="_blank" rel="noopener noreferrer" title="Chamar no WhatsApp — avisa que o endereço está incompleto">📞 ${escHtml(bonitoParada)}</a>`
+      : `📞 ${escHtml(bonitoParada)}`;
   } else {
     contatoEl.style.display = 'none';
   }
