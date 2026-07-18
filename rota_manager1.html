@@ -2290,6 +2290,91 @@ font-weight: 700;
 color: var(--text);
 line-height: 1.35;
 }
+.td-addr-reformado-wrap {
+display: flex;
+align-items: baseline;
+gap: 6px;
+}
+.td-addr-reformado-wrap .td-addr-reformado {
+flex: 1;
+word-break: break-word;
+}
+.btn-edit-nome {
+flex-shrink: 0;
+width: 20px;
+height: 20px;
+border-radius: 5px;
+border: 1px solid var(--border);
+background: var(--surface2);
+color: var(--muted);
+font-size: 11px;
+line-height: 1;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+transition: .15s;
+opacity: 0;
+}
+.td-addr-reformado-wrap:hover .btn-edit-nome {
+opacity: 1;
+}
+.btn-edit-nome:hover {
+background: var(--accent2);
+color: #fff;
+border-color: var(--accent2);
+}
+.td-addr-reformado-wrap.editing .btn-edit-nome { display: none; }
+.input-nome-endereco {
+flex: 1;
+font-size: 14px;
+font-weight: 700;
+color: var(--text);
+background: var(--surface2);
+border: 1px solid var(--accent2);
+border-radius: 6px;
+padding: 4px 8px;
+min-width: 0;
+}
+.btn-nome-ok, .btn-nome-cancel {
+flex-shrink: 0;
+width: 22px;
+height: 22px;
+border-radius: 5px;
+border: 1px solid rgba(255,255,255,.1);
+font-size: 12px;
+line-height: 1;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.btn-nome-ok {
+background: rgba(34,197,94,.15);
+color: #22c55e;
+border-color: rgba(34,197,94,.4);
+}
+.btn-nome-ok:hover { background: #22c55e; color: #fff; }
+.btn-nome-cancel {
+background: rgba(239,68,68,.12);
+color: #ef4444;
+border-color: rgba(239,68,68,.4);
+}
+.btn-nome-cancel:hover { background: #ef4444; color: #fff; }
+.badge-nome-editado {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+margin-top: 4px;
+font-size: 10px;
+font-weight: 700;
+letter-spacing: .03em;
+border-radius: 999px;
+padding: 2px 8px;
+background: rgba(59,130,246,.12);
+color: #3b82f6;
+border: 1px solid rgba(59,130,246,.35);
+}
 .td-addr-original {
 font-size: 13px;
 color: var(--text);
@@ -5100,11 +5185,21 @@ const editouAgoraBadgeHtml = row._editado
   ? `<span class="badge-voce-editou" title="Você confirmou esta coordenada agora, nesta sessão.">✎ Você editou agora</span>`
   : '';
 
+// Badge — marca que o nome/rótulo do endereço foi editado manualmente
+// (diferente da coordenada). Fica visível mesmo depois de recarregar a
+// página, enquanto a rota atual não for reimportada do zero.
+const nomeEditadoBadgeHtml = row._nome_editado
+  ? `<span class="badge-nome-editado" title="Você editou o nome deste endereço.">✎ Nome editado</span>`
+  : '';
+
 tr.insertAdjacentHTML('beforeend', `
        <td class="td-stop">${escHtml(stopsStr || '—')}</td>
        <td class="td-addr">
-         <div class="td-addr-reformado">${escHtml(endReformado)}</div>
-         ${hereBadgeHtml}${confiancaBadgeHtml}${correlacaoBadgeHtml}${editouAgoraBadgeHtml}
+         <div class="td-addr-reformado-wrap" data-cid="${row._cid}">
+           <span class="td-addr-reformado">${escHtml(endReformado)}</span>
+           <button type="button" class="btn-edit-nome" title="Editar nome do endereço">✎</button>
+         </div>
+         ${hereBadgeHtml}${confiancaBadgeHtml}${correlacaoBadgeHtml}${editouAgoraBadgeHtml}${nomeEditadoBadgeHtml}
          ${membrosHtml}
        </td>
        <td class="td-grupo">${grupoHtml}</td>
@@ -5117,6 +5212,72 @@ tbody.appendChild(tr);
 document.getElementById('table-section').classList.add('show');
 updateCountBadge(rows.length);
 }
+
+// ── Edição inline do nome/rótulo do endereço, direto na lista ──────────
+// Clique no ✎ (ou o botão vira ✓/✕ durante a edição). Enter salva,
+// Esc cancela. Só muda o rótulo exibido/exportado (group_label) — não
+// mexe no endereço original usado pra geocodificação/banco de
+// coordenadas, pra não quebrar o casamento de endereços repetidos.
+function entrarEdicaoNomeEndereco(wrap) {
+if (!wrap) return;
+const cid = wrap.dataset.cid;
+const row = _allRows.find(r => String(r._cid) === String(cid));
+if (!row) return;
+const atual = row.group_label || standardize(row.address) || row.address || '';
+wrap.classList.add('editing');
+wrap.innerHTML = `
+    <input type="text" class="input-nome-endereco" value="${escHtml(atual)}">
+    <button type="button" class="btn-nome-ok" title="Salvar">✓</button>
+    <button type="button" class="btn-nome-cancel" title="Cancelar">✕</button>
+  `;
+const input = wrap.querySelector('.input-nome-endereco');
+input.focus();
+input.select();
+input.addEventListener('keydown', (ev) => {
+if (ev.key === 'Enter') { ev.preventDefault(); salvarNomeEndereco(cid, input.value); }
+else if (ev.key === 'Escape') { ev.preventDefault(); cancelarEdicaoNomeEndereco(); }
+});
+}
+
+function salvarNomeEndereco(cid, novoValor) {
+const row = _allRows.find(r => String(r._cid) === String(cid));
+if (!row) return;
+const valor = String(novoValor || '').trim();
+if (valor) {
+row.group_label = valor;
+row._nome_editado = true;
+}
+const q = document.getElementById('filter-input').value.trim();
+if (q) filtrarTabela(); else renderTable(_allRows);
+updateStats(_allRows);
+autoSaveDraft();
+}
+
+function cancelarEdicaoNomeEndereco() {
+const q = document.getElementById('filter-input').value.trim();
+if (q) filtrarTabela(); else renderTable(_allRows);
+}
+
+// Delegação de evento: botão ✎ entra em modo de edição do nome do endereço
+document.getElementById('table-body').addEventListener('click', (e) => {
+const btnEdit = e.target.closest('.btn-edit-nome');
+if (btnEdit) {
+entrarEdicaoNomeEndereco(btnEdit.closest('.td-addr-reformado-wrap'));
+return;
+}
+const btnOk = e.target.closest('.btn-nome-ok');
+if (btnOk) {
+const wrap = btnOk.closest('.td-addr-reformado-wrap');
+const input = wrap ? wrap.querySelector('.input-nome-endereco') : null;
+if (wrap && input) salvarNomeEndereco(wrap.dataset.cid, input.value);
+return;
+}
+const btnCancel = e.target.closest('.btn-nome-cancel');
+if (btnCancel) {
+cancelarEdicaoNomeEndereco();
+return;
+}
+});
 
 // Delegação de evento: botão "✕" tira um endereço específico do grupo
 document.getElementById('table-body').addEventListener('click', (e) => {
