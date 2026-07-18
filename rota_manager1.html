@@ -954,6 +954,26 @@ header .badge b { color: var(--accent2); }
   .scan-carimbo .scan-carimbo-num {
     font-family: 'JetBrains Mono', monospace, monospace;
     font-weight: 800; font-size: 52px; line-height: 1; margin: 4px 0;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px;
+  }
+  .scan-seq-chip {
+    cursor: pointer;
+    border-radius: 10px;
+    padding: 0 6px;
+    transition: all .15s;
+  }
+  .scan-seq-chip:hover { background: rgba(43,181,131,0.15); }
+  .scan-seq-chip.chosen {
+    color: var(--muted);
+    text-decoration: line-through;
+    opacity: .55;
+    background: rgba(141,147,173,0.12);
+  }
+  .scan-seq-chip.chosen::after {
+    content: " ✓";
+    font-size: 22px;
+    vertical-align: middle;
+    text-decoration: none;
   }
   .scan-match-addr { font-size: 13px; color: var(--text); text-align: center; padding: 0 6px 2px; }
   .scan-match-detail {
@@ -974,11 +994,14 @@ header .badge b { color: var(--accent2); }
   .scan-alt-item:hover { border-color: var(--accent2); }
   .scan-alt-item .scan-alt-seq {
     font-family: 'JetBrains Mono', monospace, monospace;
-    font-weight: 700; font-size: 14px;
+    font-weight: 700; font-size: 12px;
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    color: var(--text);
+    min-width: 34px; min-height: 34px; padding: 4px 6px;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 3px 6px;
+    flex-shrink: 0; color: var(--text);
   }
+  .scan-alt-item .scan-seq-chip { font-size: 12px; padding: 0 4px; border-radius: 6px; }
+  .scan-alt-item .scan-seq-chip.chosen::after { font-size: 13px; }
   .scan-alt-item .scan-alt-addr { font-size: 12px; color: var(--muted); line-height: 1.4; flex: 1; word-break: break-word; }
   .scan-alt-item .scan-alt-pct {
     font-family: 'JetBrains Mono', monospace, monospace;
@@ -8286,33 +8309,82 @@ function scanRenderResultado(matches) {
 
   const top = matches[0];
   const topRow = top.item;
-  const topSeq = topRow.stop || topRow.group_stops || '—';
   const topAddr = topRow.endereco_original || topRow.address || topRow.group_label || '';
   const topPct = Math.round(Math.min(top.pct, 1) * 100);
 
   melhor.innerHTML =
-    `<div class="scan-carimbo" onclick="scanIrParaLinha('${topRow._cid}')">
+    `<div class="scan-carimbo" data-carimbo-cid="${topRow._cid}">
       <div class="scan-carimbo-label">Sequência</div>
-      <div class="scan-carimbo-num">#${escHtml(String(topSeq))}</div>
+      <div class="scan-carimbo-num">${scanRenderSeqChips(topRow)}</div>
     </div>
     <div class="scan-match-addr">${escHtml(topAddr)}</div>
     ${top.detalhes.length ? `<div class="scan-match-detail">${escHtml(top.detalhes.join(' · '))}</div>` : ''}
     <div class="scan-confidence"><i style="width:${topPct}%"></i></div>`;
 
+  // Clicar em qualquer área do carimbo fora dos números leva até a linha na tabela.
+  const carimboEl = melhor.querySelector('.scan-carimbo');
+  if (carimboEl) {
+    carimboEl.addEventListener('click', (ev) => {
+      if (ev.target.closest('.scan-seq-chip')) return;
+      scanIrParaLinha(topRow._cid);
+    });
+  }
+
   const outros = matches.slice(1).filter(m => m.pct >= 0.3);
   altList.innerHTML = outros.length
     ? '<h3>Outras possibilidades</h3>' + outros.map(m => {
         const row = m.item;
-        const seq = row.stop || row.group_stops || '—';
         const addr = row.endereco_original || row.address || row.group_label || '';
         const pct = Math.round(m.pct * 100);
-        return `<div class="scan-alt-item" onclick="scanIrParaLinha('${row._cid}')">
-          <div class="scan-alt-seq">#${escHtml(String(seq))}</div>
+        return `<div class="scan-alt-item" data-alt-cid="${row._cid}">
+          <div class="scan-alt-seq">${scanRenderSeqChips(row)}</div>
           <div class="scan-alt-addr">${escHtml(addr)}</div>
           <div class="scan-alt-pct">${pct}%</div>
         </div>`;
       }).join('')
     : '';
+  altList.querySelectorAll('.scan-alt-item').forEach(el => {
+    const cid = el.dataset.altCid;
+    el.addEventListener('click', (ev) => {
+      if (ev.target.closest('.scan-seq-chip')) return;
+      scanIrParaLinha(cid);
+    });
+  });
+}
+
+// Monta os "chips" clicáveis de números de sequência de um endereço.
+// Quando o endereço agrupa vários pacotes (mesmo local), cada número pode
+// ser marcado individualmente como "já usado/nomeado" — o estado fica salvo
+// na própria linha (row._stopsEscolhidos) e persiste entre buscas.
+function scanRenderSeqChips(row) {
+  const seqRaw = row.stop || row.group_stops || '—';
+  const nums = String(seqRaw).split(',').map(s => s.trim()).filter(Boolean);
+  if (!nums.length) return `#—`;
+  const escolhidos = new Set((row._stopsEscolhidos || []).map(String));
+  return nums.map(n => {
+    const chosen = escolhidos.has(String(n));
+    return `<span class="scan-seq-chip${chosen ? ' chosen' : ''}" data-cid="${row._cid}" data-num="${escHtml(n)}" onclick="scanToggleStopEscolhido(event, '${row._cid}', '${escHtml(n)}')">#${escHtml(n)}</span>`;
+  }).join('');
+}
+
+// Marca/desmarca um número de sequência como já escolhido pra esse local.
+// Assim, ao puxar outro pacote no mesmo endereço, o número já usado aparece
+// diferente (riscado) e o usuário sabe que aquele pacote já foi nomeado.
+function scanToggleStopEscolhido(ev, cid, num) {
+  if (ev) ev.stopPropagation();
+  const row = _allRows.find(r => String(r._cid) === String(cid));
+  if (!row) return;
+  if (!Array.isArray(row._stopsEscolhidos)) row._stopsEscolhidos = [];
+  const nStr = String(num);
+  const idx = row._stopsEscolhidos.findIndex(x => String(x) === nStr);
+  if (idx >= 0) row._stopsEscolhidos.splice(idx, 1);
+  else row._stopsEscolhidos.push(nStr);
+
+  // Atualiza visualmente todos os chips desse cid/número já renderizados na tela.
+  document.querySelectorAll(`.scan-seq-chip[data-cid="${CSS.escape(String(cid))}"][data-num="${CSS.escape(nStr)}"]`)
+    .forEach(el => el.classList.toggle('chosen', idx < 0));
+
+  try { autoSaveDraft(); } catch (e) { /* sem rascunho ativo — ignora */ }
 }
 
 function scanLimpar() {
