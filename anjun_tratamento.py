@@ -64,13 +64,15 @@ _STREET_HEAD_RE = re.compile(
 
 # Quadra/Lote tolerante ao formato do Anjun, que às vezes usa só "L" no
 # lugar de "LT" (ex.: "Q33 L27"), às vezes separa quadra e lote com
-# pontuação/hífen em vez de espaço (ex.: "qd 137. lt 11"), e às vezes usa
-# quadra em LETRA em vez de número (ex.: "Qd G lt 07"). O
+# pontuação/hífen em vez de espaço (ex.: "qd 137. lt 11"), às vezes usa
+# quadra em LETRA em vez de número (ex.: "Qd G lt 07"), e às vezes vem
+# por extenso em vez de abreviado (ex.: "Quadra 25 lote 2"). O
 # tratamento_dados.py original só reconhece "LT/LTE/LTS" com espaço puro
 # e quadra numérica — por isso normalizamos aqui pra "QD .. LT .." antes
 # de repassar pra lógica atual, sem precisar tocar nela.
 _QDLT_RELAXADO_RE = re.compile(
-    r'\bQD?\.?\s*(\d+[A-Z]?|[A-Z])[\.\-,\s]{0,3}L(?:T[ES]?)?\.?\s*(\d+)\b', re.IGNORECASE
+    r'\b(?:QUADRA|QD?)\.?\s*(\d+[A-Z]?|[A-Z])[\.\-,\s]{0,3}(?:LOTES?|L(?:T[ES]?)?)\.?\s*(\d+)\b',
+    re.IGNORECASE,
 )
 
 # Quadra SOZINHA, sem lote (ex.: "qd 17"). Usada só pra saber ONDE o nome
@@ -109,6 +111,36 @@ def _numero_do_prefixo(address_bruto: str):
     candidato = campos[1]
     if re.fullmatch(r'\d{1,6}', candidato):
         return candidato
+    return None
+
+
+def _rua_do_prefixo(address_bruto: str):
+    """Extrai o nome/código da rua do prefixo do Address (o trecho ANTES do
+    parêntese) — ex.: 'R 1008' em 'R 1008, Goiânia, GO, 74820-210, (...)'.
+    Usado como âncora quando o texto entre parênteses vem 'invertido':
+    quadra/lote ANTES do nome da rua, ou sem nenhum prefixo de rua
+    reconhecível logo no início (ex.: '(Quadra 25 lote 2 rua 1008
+    panificadora império...)'). Nesses casos o prefixo do Address é a
+    única fonte confiável do nome/código da rua na ordem certa."""
+    primeiro_campo = address_bruto.split('(', 1)[0].split(',', 1)[0].strip()
+    if _STREET_HEAD_RE.match(primeiro_campo) or _PREFIXO_RUA_RE.match(primeiro_campo):
+        return primeiro_campo
+    return None
+
+
+def _limpar_texto_invertido(texto: str, rua_ancora: str, numero_prefixo: str = None):
+    """Caso do texto entre parênteses vir com quadra/lote (ou qualquer
+    outra coisa) ANTES do nome da rua — ex.: 'Quadra 25 lote 2 rua 1008
+    panificadora império' — em vez do padrão usual 'rua, número'. Aqui o
+    nome da rua real já veio de `rua_ancora` (prefixo do Address), então
+    só precisamos achar QD+LT em qualquer posição do texto entre
+    parênteses. Devolve None se não achar nada aproveitável, pra quem
+    chamou cair de volta no fluxo normal."""
+    if numero_prefixo:
+        return f"{rua_ancora}, {numero_prefixo}"
+    m_qdlt = _QDLT_RELAXADO_RE.search(texto)
+    if m_qdlt:
+        return f"{rua_ancora}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}"
     return None
 
 
@@ -234,6 +266,18 @@ def extrair_endereco_anjun(address_bruto: str) -> str:
     tem_parenteses = bool(m and m.group(1).strip())
     detalhe = m.group(1).strip() if tem_parenteses else address_bruto.strip()
     numero_prefixo = _numero_do_prefixo(address_bruto) if tem_parenteses else None
+
+    if tem_parenteses and not (_STREET_HEAD_RE.match(detalhe) or _PREFIXO_RUA_RE.match(detalhe)):
+        # Texto entre parênteses não começa com prefixo de rua reconhecível
+        # (RUA/AV/... ) — sinal de padrão invertido, tipo "Quadra 25 lote 2
+        # rua 1008 panificadora império..." (quadra/lote ANTES da rua).
+        # Usa o nome/código da rua do prefixo do Address como âncora.
+        rua_ancora = _rua_do_prefixo(address_bruto)
+        if rua_ancora:
+            resultado = _limpar_texto_invertido(detalhe, rua_ancora, numero_prefixo)
+            if resultado is not None:
+                return resultado
+
     return normalizar_detalhe_anjun(detalhe, numero_prefixo)
 
 
