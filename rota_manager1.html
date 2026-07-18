@@ -2382,6 +2382,17 @@ opacity: .75;
 font-weight: 500;
 margin-top: 3px;
 }
+.td-addr-original-wrap {
+display: flex;
+align-items: baseline;
+gap: 6px;
+margin-top: 3px;
+}
+.td-addr-original-wrap .td-addr-original {
+flex: 1;
+margin-top: 0;
+word-break: break-word;
+}
 .td-addr-contato {
 margin-top: 3px;
 }
@@ -2471,6 +2482,57 @@ white-space: nowrap;
 .membro-item .membro-orig {
 flex: 1;
 word-break: break-word;
+}
+.membro-orig-wrap {
+flex: 1;
+display: flex;
+align-items: baseline;
+gap: 5px;
+min-width: 0;
+}
+.membro-orig-wrap .membro-orig {
+flex: 1;
+}
+.btn-edit-orig {
+flex-shrink: 0;
+width: 18px;
+height: 18px;
+border-radius: 5px;
+border: 1px solid var(--border);
+background: var(--surface2);
+color: var(--muted);
+font-size: 10px;
+line-height: 1;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+transition: .15s;
+opacity: 0;
+}
+.membro-orig-wrap:hover .btn-edit-orig,
+.td-addr-original-wrap:hover .btn-edit-orig {
+opacity: 1;
+}
+.btn-edit-orig:hover {
+background: var(--accent2);
+color: #fff;
+border-color: var(--accent2);
+}
+.membro-orig-wrap.editing .btn-edit-orig,
+.td-addr-original-wrap.editing .btn-edit-orig {
+display: none;
+}
+.input-original-endereco {
+flex: 1;
+font-size: 13px;
+font-weight: 500;
+color: var(--text);
+background: var(--surface2);
+border: 1px solid var(--accent2);
+border-radius: 6px;
+padding: 3px 7px;
+min-width: 0;
 }
 .membro-contato {
 flex-shrink: 0;
@@ -5118,7 +5180,10 @@ if (row.group_size > 1) {
 membrosHtml = `<div class="membros-list">` + membros.map((m, mi) => `
        <div class="membro-item">
          ${m.stop ? `<span class="membro-stop">Seq ${escHtml(m.stop)}</span>` : ''}
-         <span class="membro-orig">${escHtml(m.original)}</span>
+         <span class="membro-orig-wrap" data-cid="${row._cid}" data-mi="${mi}">
+           <span class="membro-orig">${escHtml(m.original)}</span>
+           <button type="button" class="btn-edit-orig" title="Editar este endereço">✎</button>
+         </span>
          ${contatoHtml(m.contato)}
          <button class="btn-ungroup" data-cid="${row._cid}" data-mi="${mi}" title="Tirar este endereço do grupo">✕</button>
        </div>
@@ -5127,7 +5192,10 @@ membrosHtml = `<div class="membros-list">` + membros.map((m, mi) => `
 const completo = membros[0] ? String(membros[0].original || '').trim() : '';
 const contatoUnico = contatoHtml(membros[0] ? membros[0].contato : row.contato);
 if (completo && completo.toUpperCase() !== endReformado.toUpperCase()) {
-membrosHtml = `<div class="td-addr-original">${escHtml(completo)}</div>`;
+membrosHtml = `<div class="td-addr-original-wrap" data-cid="${row._cid}" data-mi="0">
+    <span class="td-addr-original">${escHtml(completo)}</span>
+    <button type="button" class="btn-edit-orig" title="Editar este endereço">✎</button>
+  </div>`;
 }
 if (contatoUnico) {
 membrosHtml += `<div class="td-addr-contato">${contatoUnico}</div>`;
@@ -5258,18 +5326,79 @@ const q = document.getElementById('filter-input').value.trim();
 if (q) filtrarTabela(); else renderTable(_allRows);
 }
 
+// ── Edição inline do endereço ORIGINAL (linha de baixo / cada item do
+// grupo) — igual em espírito à edição do nome/rótulo acima, mas mexe em
+// row.membros[mi].original e recalcula row.endereco_original (o texto
+// consolidado usado por outras telas). Também não toca em row.address.
+function entrarEdicaoOriginal(wrap) {
+if (!wrap) return;
+const cid = wrap.dataset.cid;
+const mi  = parseInt(wrap.dataset.mi, 10) || 0;
+const row = _allRows.find(r => String(r._cid) === String(cid));
+if (!row || !Array.isArray(row.membros) || !row.membros[mi]) return;
+const atual = row.membros[mi].original || '';
+wrap.classList.add('editing');
+wrap.innerHTML = `
+    <input type="text" class="input-original-endereco" value="${escHtml(atual)}">
+    <button type="button" class="btn-nome-ok" title="Salvar">✓</button>
+    <button type="button" class="btn-nome-cancel" title="Cancelar">✕</button>
+  `;
+const input = wrap.querySelector('.input-original-endereco');
+input.focus();
+input.select();
+input.addEventListener('keydown', (ev) => {
+if (ev.key === 'Enter') { ev.preventDefault(); salvarOriginalEndereco(cid, mi, input.value); }
+else if (ev.key === 'Escape') { ev.preventDefault(); cancelarEdicaoNomeEndereco(); }
+});
+}
+
+function salvarOriginalEndereco(cid, mi, novoValor) {
+const row = _allRows.find(r => String(r._cid) === String(cid));
+if (!row || !Array.isArray(row.membros) || !row.membros[mi]) return;
+const valor = String(novoValor || '').trim();
+if (valor) {
+row.membros[mi].original = valor;
+// Recalcula o endereço original consolidado (join único de todos os
+// membros), igual ao que já acontece ao agrupar/desagrupar manualmente.
+const origsVistos = [];
+for (const m of row.membros) {
+if (m.original && !origsVistos.includes(m.original)) origsVistos.push(m.original);
+}
+row.endereco_original = origsVistos.join(' | ');
+}
+const q = document.getElementById('filter-input').value.trim();
+if (q) filtrarTabela(); else renderTable(_allRows);
+updateStats(_allRows);
+autoSaveDraft();
+}
+
 // Delegação de evento: botão ✎ entra em modo de edição do nome do endereço
+// ou do endereço original, e os botões ✓/✕ salvam/cancelam qualquer um
+// dos dois modos (identificados pelo tipo do wrap mais próximo).
 document.getElementById('table-body').addEventListener('click', (e) => {
-const btnEdit = e.target.closest('.btn-edit-nome');
-if (btnEdit) {
-entrarEdicaoNomeEndereco(btnEdit.closest('.td-addr-reformado-wrap'));
+const btnEditNome = e.target.closest('.btn-edit-nome');
+if (btnEditNome) {
+entrarEdicaoNomeEndereco(btnEditNome.closest('.td-addr-reformado-wrap'));
+return;
+}
+const btnEditOrig = e.target.closest('.btn-edit-orig');
+if (btnEditOrig) {
+entrarEdicaoOriginal(btnEditOrig.closest('.membro-orig-wrap') || btnEditOrig.closest('.td-addr-original-wrap'));
 return;
 }
 const btnOk = e.target.closest('.btn-nome-ok');
 if (btnOk) {
-const wrap = btnOk.closest('.td-addr-reformado-wrap');
-const input = wrap ? wrap.querySelector('.input-nome-endereco') : null;
-if (wrap && input) salvarNomeEndereco(wrap.dataset.cid, input.value);
+const wrapNome = btnOk.closest('.td-addr-reformado-wrap');
+if (wrapNome) {
+const input = wrapNome.querySelector('.input-nome-endereco');
+if (input) salvarNomeEndereco(wrapNome.dataset.cid, input.value);
+return;
+}
+const wrapOrig = btnOk.closest('.membro-orig-wrap') || btnOk.closest('.td-addr-original-wrap');
+if (wrapOrig) {
+const input = wrapOrig.querySelector('.input-original-endereco');
+if (input) salvarOriginalEndereco(wrapOrig.dataset.cid, parseInt(wrapOrig.dataset.mi, 10) || 0, input.value);
+}
 return;
 }
 const btnCancel = e.target.closest('.btn-nome-cancel');
