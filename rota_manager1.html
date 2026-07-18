@@ -4470,6 +4470,9 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
 📂 Importar rota.xlsx
 </button>
+<button class="btn" onclick="document.getElementById('file-input-anjun-rota').click()">
+🧾 Importar Rota Anjun
+</button>
 <div class="filter-wrap">
 <span style="color:var(--muted);font-size:13px">🔍</span>
 <input class="filter-input" id="filter-input" placeholder="Filtrar endereços..." oninput="filtrarTabela()">
@@ -4521,6 +4524,9 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
 Buscar &amp; Processar
 </button>
+<button class="drop-btn" onclick="document.getElementById('file-input-anjun-rota').click()">
+🧾 Importar Rota Anjun
+</button>
 <button class="btn-clear-import" onclick="limparImportacao()">
 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
 Limpar
@@ -4531,6 +4537,7 @@ Limpar
 
 
 <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(event)">
+<input type="file" id="file-input-anjun-rota" accept=".csv,.xlsx,.xls" onchange="handleFileAnjunRota(event)">
 
 <!-- Loading -->
 <div id="loading">
@@ -7269,6 +7276,92 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 hideLoading();
 aplicarVisibilidadeDropZone();
 if (err && err.name === 'AbortError') return; // cancelado pelo usuário, sem alerta
+alert('❌ Erro: ' + err.message);
+}
+}
+
+// ── Importar Rota Anjun: fluxo paralelo, não mexe no handleFile/
+// processarComServidor acima. Recebe o CSV/xlsx bruto do Anjun, o servidor
+// faz o tratamento Anjun (limpeza/deduplicação do endereço) + a mesma
+// lógica de agrupamento de sempre, e devolve já pronto pra lista.
+function handleFileAnjunRota(event) {
+const file = event.target.files[0];
+if (!file) return;
+event.target.value = '';
+
+if (!_serverOnline) {
+alert('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
+return;
+}
+
+processarComServidorAnjunRota(file);
+}
+
+async function processarComServidorAnjunRota(file) {
+showLoading(`Enviando ${file.name}...`, 0);
+_fileName = file.name;
+_loadingAbort = new AbortController();
+const sinal = _loadingAbort.signal;
+
+try {
+// 1) Upload + tratamento Anjun + agrupamento, tudo num só endpoint
+setLoadingStage(2, 'Organizando rota do Anjun...');
+const fd = new FormData();
+fd.append('arquivo', file, file.name);
+const imp = await fetch(SERVER + '/anjun-rota/importar', { method: 'POST', body: fd, headers: authHeaders(), signal: sinal });
+if (imp.status === 403) {
+  let motivo = '';
+  try { motivo = (await imp.json()).erro || ''; } catch (e) {}
+  hideLoading();
+  mostrarSemAcesso(motivo);
+  return;
+}
+const pd = await imp.json();
+if (!pd.ok) throw new Error(pd.erro || 'Erro ao importar a Rota Anjun');
+gamiProcessarResposta(pd);
+await sleep(900);
+
+// 2) Busca o resultado já carregado na sessão
+setLoadingStage(3, 'Confirmando geolocalização...');
+const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: sinal });
+const dado = await res.json();
+if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
+
+    _headers = dado.headers || [];
+    _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+    await sleep(500);
+
+// 3) Popula a tabela
+    setLoadingStage(4, 'Preparando visualização...');
+    await sleep(500);
+    clearDraft();
+
+    const hUp = _headers.map(x => String(x||'').toUpperCase().trim());
+    _colLat  = hUp.findIndex(h => /LATITUDE|LAT/.test(h));
+    _colLon  = hUp.findIndex(h => /LONGITUDE|LON|LNG/.test(h));
+    _colCoor = hUp.findIndex(h => /COORDENADAS|COORD/.test(h));
+    if (_colLat  < 0) _colLat  = null;
+    if (_colLon  < 0) _colLon  = null;
+    if (_colCoor < 0) _colCoor = null;
+
+    hideLoading();
+    renderTable(_allRows);
+    updateStats(_allRows);
+
+    document.getElementById('file-badge').innerHTML =
+      `🧾 <b>Rota Anjun</b> — ${_allRows.length} endereços`;
+    document.getElementById('file-badge').classList.add('show');
+    document.getElementById('table-section').classList.add('show');
+    document.getElementById('drop-zone').style.display = 'none';
+    document.getElementById('import-page').style.display = 'none';
+    document.getElementById('toolbar').style.display = 'flex';
+    document.getElementById('bottom-nav').classList.add('show');
+    document.body.classList.add('has-bottom-nav');
+
+} catch(err) {
+hideLoading();
+aplicarVisibilidadeDropZone();
+if (err && err.name === 'AbortError') return;
 alert('❌ Erro: ' + err.message);
 }
 }

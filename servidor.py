@@ -59,6 +59,7 @@ ARQ_PROCESSADO = "rota_processada_final.xlsx"
 ARQ_VALIDADO   = "rota_validada_here.xlsx"
 TRATAMENTO_PY  = "tratamento_dados.py"
 ANJUN_SCRIPT   = "csv_para_rota_xlsx.py"
+ANJUN_TRATAMENTO_PY = "anjun_tratamento.py"
 
 HERE_API_KEY   = os.environ.get("HERE_API_KEY", "P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M").strip()
 HERE_CIDADE_UF = os.environ.get("HERE_CIDADE_UF", "Goiânia - GO, Brasil").strip()
@@ -1486,14 +1487,17 @@ def processar_pagamento_confirmado(order_nsu: str, transaction_nsu: str = "", re
 #  LER PLANILHA PROCESSADA
 # ═══════════════════════════════════════════════════════════════════
 
-def ler_processado(user_id: str = ""):
+def ler_processado(user_id: str = "", caminho: "Path | None" = None):
     try:
         from openpyxl import load_workbook
     except ImportError:
         raise RuntimeError("openpyxl não instalado.")
-    path = Path(ARQ_VALIDADO) if Path(ARQ_VALIDADO).exists() else Path(ARQ_PROCESSADO)
+    if caminho is not None:
+        path = Path(caminho)
+    else:
+        path = Path(ARQ_VALIDADO) if Path(ARQ_VALIDADO).exists() else Path(ARQ_PROCESSADO)
     if not path.exists():
-        raise FileNotFoundError(f"{ARQ_PROCESSADO} não encontrado.")
+        raise FileNotFoundError(f"{path} não encontrado.")
     wb = load_workbook(path, data_only=True)
     ws = wb.active
     headers = [str(c.value or "").strip() for c in ws[1]]
@@ -2549,6 +2553,99 @@ async def pipeline(request: Request):
     except Exception as e:
         print(f"  [PIPELINE] ❌ {e}")
         return err_json(str(e))
+
+# ─── Importar Rota Anjun: fluxo paralelo ao /upload + /pipeline ──────
+# Recebe o CSV/xlsx bruto do Anjun, faz o tratamento Anjun (limpeza e
+# deduplicação do endereço) e, em seguida, reaproveita a MESMA lógica de
+# agrupamento/consolidação do tratamento_dados.py (anjun_tratamento.py
+# importa tratamento_dados.py, não duplica nada dele) — depois já manda
+# pra lista, sem precisar reimportar manualmente pelo botão principal.
+# Não altera /upload, /pipeline nem tratamento_dados.py.
+@app.post("/anjun-rota/importar")
+async def anjun_rota_importar(request: Request, arquivo: UploadFile = File(...)):
+    sess = _sessao_com_acesso_ou_403(request)
+
+    if not Path(ANJUN_TRATAMENTO_PY).exists():
+        return err_json(f"{ANJUN_TRATAMENTO_PY} não encontrado na pasta do servidor.")
+
+    contents = await arquivo.read()
+    if len(contents) <= 4:
+        return err_json("Arquivo vazio ou inválido.")
+
+    uid = sess["user_id"]
+    sufixo_original = Path(arquivo.filename or "entrada.csv").suffix.lower() or ".csv"
+    entrada_csv = DATA_DIR / f"anjunrota_entrada_{uid}.csv"
+    saida_xlsx  = DATA_DIR / f"anjunrota_saida_{uid}.xlsx"
+
+    if sufixo_original == ".xls":
+        return err_json(
+            "Arquivo .xls (formato antigo do Excel) não é suportado. "
+            "Salve como .xlsx ou .csv e envie de novo."
+        )
+
+    if sufixo_original == ".xlsx":
+        # anjun_tratamento.py só sabe ler CSV — converte o xlsx enviado
+        # antes, reaproveitando o mesmo conversor do painel Anjun.
+        xlsx_tmp = DATA_DIR / f"anjunrota_entrada_{uid}_tmp.xlsx"
+        xlsx_tmp.write_bytes(contents)
+        try:
+            _anjun_xlsx_para_csv(xlsx_tmp, entrada_csv)
+        except Exception as e:
+            return err_json(f"Não consegui ler o xlsx enviado: {e}")
+        finally:
+            xlsx_tmp.unlink(missing_ok=True)
+    else:
+        entrada_csv.write_bytes(contents)
+
+    print(f"  [ANJUN-ROTA] {entrada_csv.name} salvo ({len(contents)} bytes) — usuário: {sess['usuario']}")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, ANJUN_TRATAMENTO_PY, str(entrada_csv), str(saida_xlsx)],
+            capture_output=True, text=True, timeout=180,
+        )
+        if result.returncode != 0:
+            erro = result.stderr or result.stdout or "Erro desconhecido"
+            print(f"  [ANJUN-ROTA] ❌ {erro}")
+            return err_json(erro)
+        if result.stdout:
+            print(result.stdout)
+        if not saida_xlsx.exists():
+            return err_json("O tratamento rodou mas não gerou o arquivo de saída.")
+    except subprocess.TimeoutExpired:
+        return err_json("Timeout: o tratamento demorou mais que o esperado.")
+    except Exception as e:
+        print(f"  [ANJUN-ROTA] ❌ {e}")
+        return err_json(str(e))
+
+    # guarda o hash do arquivo original pra dar XP uma única vez por rota
+    # (mesma lógica anti-fraude do /upload principal)
+    sess["_rota_hash"] = gamification.calcular_hash_rota(contents)
+
+    try:
+        rows, headers = ler_processado(uid, caminho=saida_xlsx)
+    except Exception as e:
+        return err_json(f"Erro ao ler o resultado: {e}")
+
+    sess["dados"] = (rows, headers)
+    adicionar_ao_historico(saida_xlsx.name, rows, headers, uid)
+    if not sess.get("is_admin"):
+        usuario_consumir_credito_avulso_se_necessario(sess["usuario"])
+        registrar_importacao_hoje(sess["usuario"])
+    print(f"  [ANJUN-ROTA] ✅ {len(rows)} endereços carregados")
+
+    xp_resultado = None
+    rota_hash = sess.get("_rota_hash")
+    if rota_hash:
+        paradas = len(rows)
+        pacotes = sum(int(r.get("group_size") or 1) for r in rows)
+        xp_resultado = _conceder_xp_rota(uid, paradas, pacotes, rota_hash)
+        sess["_rota_hash"] = None
+
+    resposta = {"ok": True, "total": len(rows)}
+    if xp_resultado:
+        resposta["gamificacao"] = xp_resultado
+    return ok_json(resposta)
 
 @app.post("/rota/otimizar")
 async def rota_otimizar(request: Request):
