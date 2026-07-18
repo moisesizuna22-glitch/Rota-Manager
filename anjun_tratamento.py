@@ -63,19 +63,21 @@ _STREET_HEAD_RE = re.compile(
 )
 
 # Quadra/Lote tolerante ao formato do Anjun, que às vezes usa só "L" no
-# lugar de "LT" (ex.: "Q33 L27") e às vezes separa quadra e lote com
-# pontuação/hífen em vez de espaço (ex.: "qd 137. lt 11"). O
+# lugar de "LT" (ex.: "Q33 L27"), às vezes separa quadra e lote com
+# pontuação/hífen em vez de espaço (ex.: "qd 137. lt 11"), e às vezes usa
+# quadra em LETRA em vez de número (ex.: "Qd G lt 07"). O
 # tratamento_dados.py original só reconhece "LT/LTE/LTS" com espaço puro
-# entre os dois — por isso normalizamos aqui pra "QD .. LT .." antes de
-# repassar pra lógica atual, sem precisar tocar nela.
+# e quadra numérica — por isso normalizamos aqui pra "QD .. LT .." antes
+# de repassar pra lógica atual, sem precisar tocar nela.
 _QDLT_RELAXADO_RE = re.compile(
-    r'\bQD?\.?\s*(\d+[A-Z]?)[\.\-,\s]{0,3}L(?:T[ES]?)?\.?\s*(\d+)\b', re.IGNORECASE
+    r'\bQD?\.?\s*(\d+[A-Z]?|[A-Z])[\.\-,\s]{0,3}L(?:T[ES]?)?\.?\s*(\d+)\b', re.IGNORECASE
 )
 
-# Quadra SOZINHA, sem lote (ex.: "qd 17"). O tratamento_dados.py não tem
-# nenhum tratamento pra QD sem LT — sem isso, esses endereços ficavam sem
-# nenhum número aproveitável.
-_QD_SOZINHO_RE = re.compile(r'\bQD?\.?\s*(\d+[A-Z]?)\b', re.IGNORECASE)
+# Quadra SOZINHA, sem lote (ex.: "qd 17"). Usada só pra saber ONDE o nome
+# da rua termina — uma quadra incompleta (sem lote) nunca é usada como
+# número: nesse caso a gente prefere o número real do endereço (ver
+# `numero_prefixo`), porque "QD 17" sozinho não serve pra geocodificar.
+_QD_SOZINHO_RE = re.compile(r'\bQD?\.?\s*(\d+[A-Z]?|[A-Z])\b', re.IGNORECASE)
 
 _PREFIXO_RUA_RE = re.compile(
     r'^(RUA|R\.?|AVENIDA|AV\.?|PRA[CÇ]A|P[CÇ]\.?|ALAMEDA|AL\.?|TRAVESSA|TV\.?)\b',
@@ -115,9 +117,11 @@ def _limpar_rua_codificada(texto: str, numero_prefixo: str = None):
     'Rua S 6'). Devolve None se o prefixo não bater com esse padrão —
     nesse caso é rua por extenso, tratada em `_limpar_rua_por_extenso`.
 
-    `numero_prefixo`: número de casa vindo do prefixo do Address (fora dos
-    parênteses) — usado quando o texto entre parênteses não tem número
-    próprio (só apto/bloco/edifício)."""
+    Ordem de prioridade: número real do prefixo do Address (o que de fato
+    geocodifica) > QD+LT completo (só quando não há número real) > número
+    solto logo após o código da rua > ruído (prédio/apto/QD incompleta),
+    deixado pro BLDG_RE do tratamento_dados.py tentar achar nome de
+    edifício/residencial/condomínio."""
     m_head = _STREET_HEAD_RE.match(texto)
     if not m_head:
         return None
@@ -127,23 +131,24 @@ def _limpar_rua_codificada(texto: str, numero_prefixo: str = None):
     if not resto:
         return f"{cabecalho}, {numero_prefixo}" if numero_prefixo else cabecalho
 
+    # Prioridade 1: número real vindo do prefixo do Address — sempre
+    # prevalece sobre QD/LT (completa ou não), pois é o que geocodifica.
+    if numero_prefixo:
+        return f"{cabecalho}, {numero_prefixo}"
+
+    # Prioridade 2: QD + LT completo, só usado quando não há número real.
     m_qdlt = _QDLT_RELAXADO_RE.search(resto)
     if m_qdlt:
         return f"{cabecalho}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}"
 
-    m_qd_so = _QD_SOZINHO_RE.match(resto)
-    if m_qd_so:
-        return f"{cabecalho}, {m_qd_so.group(1)}"
-
+    # Prioridade 3: número solto logo após o código da rua
     m_num = re.match(r'^(\d+)\b', resto)
     if m_num:
         return f"{cabecalho}, {m_num.group(1)}"
 
-    # sobrou só ruído (prédio, apto etc.) — se tiver número real vindo do
-    # prefixo do Address, usa ele; senão mantém o ruído junto pro BLDG_RE
-    # do tratamento_dados.py reconhecer nome de edifício/residencial/condomínio
-    if numero_prefixo:
-        return f"{cabecalho}, {numero_prefixo}, {resto}"
+    # sobrou só ruído (prédio, apto, QD incompleta etc.) — mantém junto
+    # pro BLDG_RE do tratamento_dados.py reconhecer nome de edifício/
+    # residencial/condomínio; QD sozinha nunca é usada como número aqui.
     return f"{cabecalho}, {resto}"
 
 
@@ -152,36 +157,28 @@ def _limpar_rua_por_extenso(texto: str, numero_prefixo: str = None) -> str:
     Segunda Radial'). Acha o número real do imóvel entre os campos
     separados por vírgula, ignorando complementos com dígito (apto/bloco).
 
-    Ordem de prioridade: QD+LT em qualquer lugar do texto > QD sozinho
-    (sem lote) > número solto após o nome da rua > número vindo do
-    prefixo do Address > deixa o ruído (apto/edifício) pro BLDG_RE do
-    tratamento_dados.py."""
+    Ordem de prioridade: número real do prefixo do Address (o que de fato
+    geocodifica) > QD+LT completo em qualquer lugar do texto (só quando
+    não há número real) > número solto após o nome da rua > deixa o
+    ruído (apto/edifício/QD incompleta) pro BLDG_RE do tratamento_dados.py.
+    QD sozinha (sem lote) NUNCA é usada como número — só serve pra saber
+    onde o nome da rua termina."""
     m_pfx = _PREFIXO_RUA_RE.match(texto)
     prefixo = texto[:m_pfx.end()] if m_pfx else ''
     resto_completo = texto[m_pfx.end():].strip() if m_pfx else texto
 
-    # Prioridade 1: QD + LT em qualquer lugar do resto (tolera pontuação/
-    # hífen entre os dois, ex.: "qd 137. lt 11" ou "- qd 137")
     m_qdlt = _QDLT_RELAXADO_RE.search(resto_completo)
-    if m_qdlt:
-        nome_rua = resto_completo[:m_qdlt.start()].rstrip(', -').strip()
-        if not nome_rua:
-            nome_rua = resto_completo.split(',')[0].strip()
-        return f"{prefixo} {nome_rua}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}".strip()
-
-    # Prioridade 2: QD sozinha, sem lote (ex.: "qd 17")
-    m_qd_so = _QD_SOZINHO_RE.search(resto_completo)
-    if m_qd_so:
-        nome_rua = resto_completo[:m_qd_so.start()].rstrip(', -').strip()
-        if not nome_rua:
-            nome_rua = resto_completo.split(',')[0].strip()
-        return f"{prefixo} {nome_rua}, {m_qd_so.group(1)}".strip()
-
-    # Prioridade 3: número solto ou nome de prédio/complemento
+    m_qd_so = None if m_qdlt else _QD_SOZINHO_RE.search(resto_completo)
     m_fim = _FIM_NOME_RUA_RE.search(resto_completo)
-    if m_fim:
-        nome_rua = resto_completo[:m_fim.start()].rstrip(', ').strip()
-        cauda = resto_completo[m_fim.start():].strip()
+
+    # Onde o nome da rua termina: no primeiro marcador que aparecer (QD
+    # completo, QD sozinha, número solto, ou palavra de prédio/complemento).
+    candidatos_corte = [m.start() for m in (m_qdlt, m_qd_so, m_fim) if m]
+    corte = min(candidatos_corte) if candidatos_corte else None
+
+    if corte is not None:
+        nome_rua = resto_completo[:corte].rstrip(', -').strip()
+        cauda = resto_completo[corte:].strip()
     else:
         nome_rua = resto_completo.rstrip(', ').strip()
         cauda = ''
@@ -189,18 +186,25 @@ def _limpar_rua_por_extenso(texto: str, numero_prefixo: str = None) -> str:
     if not nome_rua:
         nome_rua = resto_completo.split(',')[0].strip()
 
+    # Prioridade 1: número real do prefixo do Address
+    if numero_prefixo:
+        return f"{prefixo} {nome_rua}, {numero_prefixo}".strip()
+
+    # Prioridade 2: QD + LT completo (só quando não há número real)
+    if m_qdlt:
+        return f"{prefixo} {nome_rua}, QD {m_qdlt.group(1)} LT {m_qdlt.group(2)}".strip()
+
     if not cauda:
-        if numero_prefixo:
-            return f"{prefixo} {nome_rua}, {numero_prefixo}".strip()
         return f"{prefixo} {nome_rua}".strip()
 
+    # Prioridade 3: número solto entre os campos da cauda (ex.: "Solar X,
+    # 352, ..."). QD sozinha (se foi ela quem cortou a cauda) fica pra
+    # trás como ruído — nunca é lida como número aqui.
     campos_cauda = [c.strip() for c in cauda.split(',') if c.strip()]
     numero = next((c for c in campos_cauda if re.fullmatch(r'\d+', c)), None)
     if numero:
         return f"{prefixo} {nome_rua}, {numero}".strip()
 
-    if numero_prefixo:
-        return f"{prefixo} {nome_rua}, {numero_prefixo}, {cauda}".strip()
     return f"{prefixo} {nome_rua}, {cauda}".strip()
 
 
