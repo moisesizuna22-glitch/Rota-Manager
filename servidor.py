@@ -2736,14 +2736,46 @@ from starlette.concurrency import run_in_threadpool
 from lotes_terceiros_cache import get_tile as _lotes_get_tile
 from lotes_terceiros_cache import LOTES_TERCEIROS_CIDADES as _LOTES_CIDADES
 
+# ─── Rate limit dos tiles de quadra/lote ────────────────────────────
+# Exigir login já derruba scraping anônimo; isso aqui é a segunda camada,
+# pra tornar impraticável alguém com conta válida varrer um município
+# inteiro de tile em tile. Janela deslizante em memória — mesmo padrão
+# de _sessoes (single-instance; se algum dia rodar multi-instance no
+# Railway, precisa virar Redis/DB compartilhado, senão cada instância
+# conta separado).
+_LOTES_RATE_LIMIT = 240   # tiles por janela — dá folga generosa pra navegação normal no mapa
+_LOTES_RATE_WINDOW = 300  # segundos (5 min)
+_lotes_rate_lock = threading.Lock()
+_lotes_rate_hits: dict[str, list[float]] = {}
+
+def _lotes_rate_check(usuario: str):
+    agora = time.time()
+    corte = agora - _LOTES_RATE_WINDOW
+    with _lotes_rate_lock:
+        hits = _lotes_rate_hits.setdefault(usuario, [])
+        while hits and hits[0] < corte:
+            hits.pop(0)
+        if len(hits) >= _LOTES_RATE_LIMIT:
+            raise HTTPException(status_code=429, detail="Muitas requisições de mapa em pouco tempo. Aguarde um pouco e tente de novo.")
+        hits.append(agora)
+
 
 @app.get("/api/lotes-terceiros/{cidade}/{z}/{x}/{y}.pbf")
-async def lotes_terceiros_tile(cidade: str, z: int, x: int, y: int):
+async def lotes_terceiros_tile(cidade: str, z: int, x: int, y: int, request: Request):
     """Repassa um vector tile (.pbf) de quadra/lote de Aparecida de Goiânia,
     Senador Canedo ou Goiânia — lendo do cache permanente sempre que possível
-    e só caindo pro Route Planner se o tile nunca foi visto antes."""
+    e só caindo pro Route Planner se o tile nunca foi visto antes.
+
+    Exige sessão válida (evita scraping anônimo do dataset inteiro) e aplica
+    rate limit por usuário (evita que uma conta válida varra um município
+    inteiro de tile em tile em pouco tempo)."""
+    sess = _sessao_ou_401(request)
+    _lotes_rate_check(sess["usuario"])
+
     if cidade not in _LOTES_CIDADES:
         raise HTTPException(status_code=400, detail="Cidade inválida (use 'aparecida', 'canedo' ou 'goiania').")
+    if not (13 <= z <= 17):
+        raise HTTPException(status_code=400, detail="Zoom fora do intervalo permitido.")
 
     try:
         data = await run_in_threadpool(_lotes_get_tile, cidade, z, x, y)

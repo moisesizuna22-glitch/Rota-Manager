@@ -6418,6 +6418,14 @@ function initTerceirosMap() {
    style: 'mapbox://styles/mapbox/light-v11',
    center: [currentLng, currentLat],
    zoom: 17,
+   // Os tiles de /api/lotes-terceiros/... agora exigem sessão — o Mapbox GL
+   // não anexa nosso header de auth sozinho, então injeta aqui.
+   transformRequest: (url, resourceType) => {
+     if (url.includes('/api/lotes-terceiros/')) {
+       return { url, headers: authHeaders() };
+     }
+     return { url };
+   },
  });
 
  terceirosMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
