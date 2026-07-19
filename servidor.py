@@ -734,25 +734,48 @@ def atualizar_rows_historico(nome_arquivo: str, rows: list, user_id: str = "") -
 def _normalizar_endereco(end: str) -> str:
     return re.sub(r"\s+", " ", (end or "").strip().lower())
 
+def _dist_metros(lat1, lon1, lat2, lon2):
+    """Distância aproximada em metros entre dois pontos (haversine) — mesma
+    fórmula usada na busca de quadra/lote, só que como helper reaproveitável
+    aqui pro consenso do banco de coordenadas."""
+    import math
+    R = 6371000
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return R * 2 * math.atan2(a ** 0.5, (1 - a) ** 0.5)
+
+# Tolerância pra considerar duas coordenadas "o mesmo lugar" (nível de
+# precisão de endereço/prédio, não de quadra inteira).
+BANCO_COORDS_TOLERANCIA_M = 40
+
 def banco_coords_carregar() -> dict:
     """
     Formato do arquivo:
         {
-          "global":      { chave: {lat, lon, endereco_original, salvo_em, fonte, usuario} },
+          "global":      { chave: {lat, lon, endereco_original, salvo_em, fonte,
+                                    usuario, confirmacoes, pendente?} },
           "overrides":   { user_id: { chave: {lat, lon, endereco_original, salvo_em} } },
           "correlacoes": { chave: {grupo_id, endereco_original, quando, por} }
         }
-    "global" é o banco confirmado por API (HERE/Google) — permanente e
-    compartilhado por todo mundo, o "ciclo" que vai pegando os prédios de
-    Goiânia aos poucos. "overrides" é a correção manual de um usuário
-    específico (arrastou o pin no mapa) — vale só enquanto a rota que
-    contém aquele endereço estiver no histórico dele; quando ela sai do
-    histórico (apagada ou substituída por nova importação), o override
-    é descartado e ele volta a ver o valor global normal. "correlacoes"
-    é a marcação manual de "esses textos são o mesmo lugar" (usuário
-    agrupou 2+ paradas no mapa ou na lista) — é só uma DICA de consenso,
-    nunca sobrescreve coordenada de ninguém sozinha (ver
-    banco_coords_correlacionar).
+    "global" é o banco compartilhado por todo mundo — alimentado tanto por
+    confirmação de API (HERE/Google) quanto por correção manual (arrastar o
+    pin), o "ciclo" que vai pegando os prédios de Goiânia aos poucos.
+    "confirmacoes" conta quantas contas distintas já bateram no valor atual;
+    "pendente" (opcional) guarda um valor DIFERENTE que outro usuário propôs
+    mas que ainda não foi corroborado por uma segunda conta — só substitui o
+    valor ativo quando alguém mais confirma o mesmo ponto (dentro da
+    tolerância de BANCO_COORDS_TOLERANCIA_M), pra 1 correção errada não
+    estragar um valor que outras pessoas já estão usando. "overrides" é a
+    view PESSOAL de cada usuário (o que ele vê na hora, mesmo antes de
+    qualquer promoção pro global) — vale só enquanto a rota que contém
+    aquele endereço estiver no histórico dele; quando ela sai do histórico
+    (apagada ou substituída por nova importação), o override é descartado e
+    ele volta a ver o valor global normal. "correlacoes" é a marcação manual
+    de "esses textos são o mesmo lugar" (usuário agrupou 2+ paradas no mapa
+    ou na lista) — é só uma DICA de consenso, nunca sobrescreve coordenada
+    de ninguém sozinha (ver banco_coords_correlacionar).
     """
     banco = _carregar_com_recuperacao(
         BANCO_COORDS_FILE, {"global": {}, "overrides": {}, "correlacoes": {}}
@@ -773,11 +796,74 @@ def banco_coords_salvar(banco: dict):
         dados_novos_vazios=vazio,
     )
 
+def banco_coords_promover_manual(banco: dict, chave: str, endereco_original: str, lat: float, lon: float, user_id: str) -> str:
+    """Tenta promover uma correção manual (pin arrastado) pro banco global
+    compartilhado. Modifica banco["global"] in-place. Retorna uma palavra
+    descrevendo o que aconteceu, só pra compor a mensagem de retorno:
+
+    - "novo": não havia valor global pra esse endereço — vira o valor global
+      direto, ninguém mais estava confiando em outra coisa.
+    - "proprio": o valor global atual já era desse mesmo usuário — atualiza
+      direto (ele tá corrigindo o próprio ajuste, não pisando no de outro).
+    - "confirmado": o novo ponto bate (dentro da tolerância) com o valor
+      global já existente — reforça a confiança, sem precisar mudar nada.
+    - "promovido": o novo ponto diverge do valor global atual, MAS uma
+      segunda conta diferente já tinha proposto esse mesmo ponto antes
+      (ficou "pendente") — agora com 2 contas concordando, vira o valor
+      ativo pra todo mundo.
+    - "pendente_novo": o novo ponto diverge do valor global atual e é o
+      primeiro (ou outro) a discordar — fica marcado como "pendente" nesse
+      endereço, mas NÃO troca o valor que os outros já estão usando; só
+      troca se uma segunda conta confirmar esse mesmo ponto depois.
+    """
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    globais = banco["global"]
+    atual = globais.get(chave)
+
+    if atual is None:
+        globais[chave] = {
+            "endereco_original": endereco_original.strip(),
+            "lat": round(lat, 6), "lon": round(lon, 6),
+            "salvo_em": agora, "fonte": "manual",
+            "usuario": user_id, "confirmacoes": 1,
+        }
+        return "novo"
+
+    mesmo_dono = atual.get("usuario") == user_id and atual.get("fonte") == "manual"
+    bate = _dist_metros(atual["lat"], atual["lon"], lat, lon) <= BANCO_COORDS_TOLERANCIA_M
+
+    if mesmo_dono or bate:
+        atual["lat"] = round(lat, 6)
+        atual["lon"] = round(lon, 6)
+        atual["salvo_em"] = agora
+        atual["fonte"] = atual.get("fonte") or "manual"
+        if bate and not mesmo_dono:
+            atual["confirmacoes"] = atual.get("confirmacoes", 1) + 1
+        atual.pop("pendente", None)
+        return "confirmado" if (bate and not mesmo_dono) else "proprio"
+
+    # Diverge de um valor que outra conta/fonte já confia — não troca sozinho.
+    pendente = atual.get("pendente")
+    if pendente and pendente.get("usuario") != user_id and \
+       _dist_metros(pendente["lat"], pendente["lon"], lat, lon) <= BANCO_COORDS_TOLERANCIA_M:
+        globais[chave] = {
+            "endereco_original": endereco_original.strip(),
+            "lat": round(lat, 6), "lon": round(lon, 6),
+            "salvo_em": agora, "fonte": "manual",
+            "usuario": user_id, "confirmacoes": 2,
+        }
+        return "promovido"
+
+    atual["pendente"] = {"lat": round(lat, 6), "lon": round(lon, 6), "usuario": user_id, "quando": agora}
+    return "pendente_novo"
+
 def banco_coords_salvar_coord(endereco: str, lat: float, lon: float, user_id: str) -> tuple[bool, str, dict]:
-    """Correção manual (usuário arrastou o pin no mapa) — vale só pra ele,
-    nunca sobrescreve o valor global confirmado por API. Não é permanente:
-    fica só enquanto a rota que contém esse endereço estiver no histórico
-    dele (veja banco_coords_limpar_overrides_usuario)."""
+    """Correção manual (usuário arrastou o pin no mapa). Sempre atualiza a
+    view pessoal do usuário na hora (vale só enquanto a rota que contém esse
+    endereço estiver no histórico dele — veja banco_coords_limpar_overrides_usuario);
+    também tenta promover pro banco global compartilhado, ver
+    banco_coords_promover_manual pras regras de quando isso é imediato ou
+    fica pendente até uma segunda pessoa confirmar."""
     chave = _normalizar_endereco(endereco)
     if not chave:
         return False, "Endereço vazio.", {}
@@ -789,6 +875,7 @@ def banco_coords_salvar_coord(endereco: str, lat: float, lon: float, user_id: st
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     banco = banco_coords_carregar()
     user_id = user_id or "(desconhecido)"
+
     overrides_usuario = banco["overrides"].setdefault(user_id, {})
     entrada = overrides_usuario.get(chave) or {"endereco_original": endereco.strip()}
     entrada["lat"] = round(lat, 6)
@@ -796,9 +883,21 @@ def banco_coords_salvar_coord(endereco: str, lat: float, lon: float, user_id: st
     entrada["endereco_original"] = entrada.get("endereco_original") or endereco.strip()
     entrada["salvo_em"] = agora
     overrides_usuario[chave] = entrada
+
+    resultado = banco_coords_promover_manual(banco, chave, endereco, lat, lon, user_id)
+
     banco_coords_salvar(banco)
-    print(f"  [BANCO_COORDS] override de {user_id!r} em {chave!r} → ({lat:.6f}, {lon:.6f})")
-    return True, "Coordenada salva (só pra você, enquanto essa rota estiver no seu histórico).", {"lat": entrada["lat"], "lon": entrada["lon"]}
+    print(f"  [BANCO_COORDS] override de {user_id!r} em {chave!r} → ({lat:.6f}, {lon:.6f}) [{resultado}]")
+
+    mensagens = {
+        "novo":          "Coordenada salva — já entrou pro banco compartilhado.",
+        "proprio":       "Coordenada atualizada — já valia pra todo mundo, agora com o valor novo.",
+        "confirmado":    "Coordenada salva e confirmada — reforça o valor que já era compartilhado.",
+        "promovido":     "Coordenada confirmada por uma segunda pessoa — agora vale pra todo mundo.",
+        "pendente_novo": "Coordenada salva (já vale pra você) — precisa outra pessoa confirmar o mesmo ponto antes de virar o valor compartilhado de todos.",
+    }
+    msg = mensagens.get(resultado, "Coordenada salva.")
+    return True, msg, {"lat": entrada["lat"], "lon": entrada["lon"]}
 
 def banco_coords_salvar_global(endereco: str, lat: float, lon: float, fonte: str, usuario: str = "") -> dict:
     """Coordenada confirmada por API (HERE ou Google) — fica permanente no
