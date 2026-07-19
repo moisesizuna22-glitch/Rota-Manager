@@ -10899,19 +10899,26 @@ function gamiMostrarToast(msg, icone) {
   toast._t = setTimeout(() => toast.classList.remove('show'), 3200);
 }
 
-// Chamado pelo /pipeline e pelo /coords/salvar quando a resposta trouxer
-// o campo "gamificacao" (ver servidor.py: _conceder_xp_rota / _conceder_xp_endereco)
+// Chamado pelo /pipeline e pelo /coords/salvar. Cuida da gamificação (campo
+// "gamificacao", ver servidor.py: _conceder_xp_rota / _conceder_xp_endereco)
+// e, só no caso do /coords/salvar, também mostra o status da coordenada
+// (campo "msg" — "já vale pra todo mundo" / "aguardando confirmação de mais
+// alguém" / etc, ver banco_coords_promover_manual). /pipeline nunca manda
+// "msg", então isso não interfere no fluxo de upload de rota.
 function gamiProcessarResposta(resp) {
-  if (!resp || !resp.gamificacao) return;
+  if (!resp) return;
   const g = resp.gamificacao;
-  if (g.xp_ganho > 0) {
+  if (g && g.xp_ganho > 0) {
     if (g.subiu_de_nivel) {
       abrirLevelUp(g);
     } else {
-      gamiMostrarToast(`+${g.xp_ganho} XP`, 'xp_moeda.png');
+      const extra = resp.msg ? ` — ${resp.msg}` : '';
+      gamiMostrarToast(`+${g.xp_ganho} XP${extra}`, 'xp_moeda.png');
     }
+  } else if (resp.msg) {
+    gamiMostrarToast(resp.msg);
   }
-  if (g.novos_itens && g.novos_itens.length) {
+  if (g && g.novos_itens && g.novos_itens.length) {
     g.novos_itens.forEach(item => gamiMostrarToast(`Novo item: ${item.nome}!`, item.icone));
   }
   // atualiza o painel se o modal de perfil estiver aberto
