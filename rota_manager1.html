@@ -1391,13 +1391,9 @@ header .badge b { color: var(--accent2); }
   .mapa-popup { font-family: var(--font); font-size: 12px; max-width: 220px; }
   .mapa-popup b { display: block; margin-bottom: 2px; color: var(--accent2, #2563eb); }
 
-  #mapa-header .agrupar-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    height: 34px; padding: 0 12px; flex-shrink: 0;
-    background: none; border: 1px solid var(--border); border-radius: 8px;
-    color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 700;
-    transition: var(--btn-transition);
-  }
+  /* Estrutura vem de .btn.btn-secondary; aqui só a altura travada à linha do
+     header e o visual "fantasma" (sem fundo até o hover) */
+  #mapa-header .agrupar-btn { height: 34px; padding: 0 12px; background: none; color: var(--muted); }
   #mapa-header .agrupar-btn:not(:disabled):hover { color: var(--text); background: var(--surface2); }
   #mapa-header .agrupar-btn .badge {
     min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
@@ -1901,13 +1897,9 @@ header .badge b { color: var(--accent2); }
     padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px;
   }
   .plano-beneficio::before { content: "✓"; color: var(--accent2); font-weight: 700; }
-  .plano-btn {
-    width: 100%; padding: 12px; border: none; border-radius: 8px;
-    background: var(--accent2); color: #fff; font-size: 14px; font-weight: 700;
-    cursor: pointer; transition: filter .15s;
-  }
-  .plano-btn:hover { filter: brightness(1.12); }
-  .plano-btn:disabled { opacity: .5; cursor: default; filter: none; }
+  /* Cor/hover/disabled já são .btn-blue (mesma cor indigo); só o layout
+     full-width fica como modificador */
+  .plano-btn { width: 100%; padding: 12px; }
   #assinatura-empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
 
   @media (max-width: 640px) {
@@ -1921,24 +1913,9 @@ header .badge b { color: var(--accent2); }
 }
 
 /* botão histórico no header */
-  .btn-hist {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    padding: 5px 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    transition: border-color .15s, color .15s;
-    white-space: nowrap;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
-  }
+  /* Estrutura vem de .btn.btn-secondary; aqui só o contraste contra o header
+     (surface2 + texto discreto) e a cor de destaque no hover */
+  .btn-hist { background: var(--surface2); color: var(--muted); padding: 5px 12px; white-space: nowrap; }
   .btn-hist:hover { border-color: var(--accent2); color: var(--accent2); }
 
   @media (max-width: 640px) {
@@ -3095,24 +3072,8 @@ flex-shrink: 0;
 }
 .toggle-pass:hover { color: var(--text); }
 
-.btn-login {
-width: 100%;
-padding: 12px;
-border: none;
-border-radius: 3px;
-background: var(--accent);
-color: #1a1205;
-font-size: 13px;
-font-weight: 800;
-cursor: pointer;
-transition: var(--btn-transition);
-margin-top: 6px;
-letter-spacing: .07em;
-text-transform: uppercase;
-box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 4px rgba(0,0,0,.4);
-}
-.btn-login:hover { filter: brightness(1.1); }
-.btn-login:disabled { opacity: .5; cursor: default; filter: none; }
+/* Layout apenas — cor/tipografia/sombra/disabled vêm de .btn.btn-primary */
+.btn-login { width: 100%; margin-top: 6px; }
 
 .login-error {
 background: rgba(239,68,68,.12);
@@ -3449,33 +3410,12 @@ display: flex; align-items: center;
   flex-direction: column;
   gap: 8px;
 }
-.btn-profile-save {
-  background: var(--accent);
-  color: #000;
-  border: none;
-  border-radius: 8px;
-  padding: 11px 14px;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: filter .15s;
-  width: 100%;
-}
-.btn-profile-save:hover { filter: brightness(1.1); }
-.btn-profile-save:disabled { opacity: .5; cursor: default; }
-.btn-logout {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: var(--btn-transition);
-  width: 100%;
-  text-align: center;
-}
+/* Layout apenas — cor/tipografia/sombra/disabled vêm de .btn.btn-primary */
+.btn-profile-save { width: 100%; }
+
+/* Estrutura vem de .btn.btn-secondary; aqui só o visual "fantasma" (sem
+   fundo, texto discreto) e a cor de perigo no hover, específicos do logout */
+.btn-logout { width: 100%; justify-content: center; background: none; color: var(--muted); }
 .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
 
 @media (max-width: 640px) {
@@ -3834,7 +3774,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <button class="toggle-pass" onclick="toggleSenha('in-pass',this)" title="Mostrar/ocultar senha">👁</button>
 </div>
 </div>
-<button class="btn-login" id="btn-entrar" onclick="fazerLogin()">Entrar</button>
+<button class="btn btn-primary btn-login" id="btn-entrar" onclick="fazerLogin()">Entrar</button>
 <div style="text-align:center;margin-top:10px">
 <a href="javascript:void(0)" onclick="abrirRecuperarSenha()" style="font-size:12px;color:#9ca3af;text-decoration:underline;cursor:pointer">Esqueci minha senha</a>
 </div>
@@ -3880,7 +3820,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 </div>
 <div style="font-size:11px;color:var(--muted);margin-top:4px">DDD + 9 + número · pode adicionar depois</div>
 </div>
-<button class="btn-login" id="btn-cadastrar" onclick="cadastrar()">Cadastrar</button>
+<button class="btn btn-primary btn-login" id="btn-cadastrar" onclick="cadastrar()">Cadastrar</button>
 </div>
 
 <!-- Formulário Confirmar código (etapa 2 do cadastro) -->
@@ -3893,8 +3833,8 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <input class="login-input" id="confirmar-codigo" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')confirmarCodigo()">
 </div>
 </div>
-<button class="btn-login" id="btn-confirmar-codigo" onclick="confirmarCodigo()">Confirmar e criar conta</button>
-<button class="btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarConfirmacao()">‹ Voltar</button>
+<button class="btn btn-primary btn-login" id="btn-confirmar-codigo" onclick="confirmarCodigo()">Confirmar e criar conta</button>
+<button class="btn btn-primary btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarConfirmacao()">‹ Voltar</button>
 </div>
 
 <!-- Formulário Recuperar senha — etapa 1: usuário ou email -->
@@ -3907,8 +3847,8 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <input class="login-input" id="rec-identificador" type="text" placeholder="Usuário ou email" autocomplete="username" onkeydown="if(event.key==='Enter')solicitarRecuperacao()">
 </div>
 </div>
-<button class="btn-login" id="btn-rec-solicitar" onclick="solicitarRecuperacao()">Enviar código</button>
-<button class="btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarRecuperacao()">‹ Voltar</button>
+<button class="btn btn-primary btn-login" id="btn-rec-solicitar" onclick="solicitarRecuperacao()">Enviar código</button>
+<button class="btn btn-primary btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarRecuperacao()">‹ Voltar</button>
 </div>
 
 <!-- Formulário Recuperar senha — etapa 2: código -->
@@ -3921,8 +3861,8 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <input class="login-input" id="rec-codigo" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')confirmarCodigoRecuperacao()">
 </div>
 </div>
-<button class="btn-login" id="btn-rec-confirmar" onclick="confirmarCodigoRecuperacao()">Confirmar código</button>
-<button class="btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarRecuperacao()">‹ Voltar</button>
+<button class="btn btn-primary btn-login" id="btn-rec-confirmar" onclick="confirmarCodigoRecuperacao()">Confirmar código</button>
+<button class="btn btn-primary btn-login" style="background:transparent;color:#9ca3af;margin-top:6px" onclick="cancelarRecuperacao()">‹ Voltar</button>
 </div>
 
 <!-- Formulário Recuperar senha — etapa 3: nova senha -->
@@ -3943,7 +3883,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <button class="toggle-pass" onclick="toggleSenha('rec-nova-pass2',this)" title="Mostrar/ocultar senha">👁</button>
 </div>
 </div>
-<button class="btn-login" id="btn-rec-redefinir" onclick="redefinirSenha()">Redefinir senha</button>
+<button class="btn btn-primary btn-login" id="btn-rec-redefinir" onclick="redefinirSenha()">Redefinir senha</button>
 </div>
 </div>
 </div>
@@ -4196,7 +4136,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     <div id="mapa-header">
       <span class="title">🗺 Mapa da rota</span>
       <span class="subtitle" id="mapa-subtitle"></span>
-      <button class="agrupar-btn" id="mapa-agrupar-btn" onclick="agruparSelecionados()" disabled title="Marque ao menos 2 paradas para agrupar">
+      <button class="btn btn-secondary agrupar-btn" id="mapa-agrupar-btn" onclick="agruparSelecionados()" disabled title="Marque ao menos 2 paradas para agrupar">
         🔗 Agrupar <span class="badge" id="mapa-agrupar-badge">0</span>
       </button>
       <button class="close-btn" onclick="fecharMapaRotas()" aria-label="Fechar">
@@ -4315,13 +4255,13 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 </button>
 <div class="logo"><span class="logo-emoji">🗺</span> ROTA<span>MANAGER</span></div>
 <div class="spacer"></div>
-  <button class="btn-hist" id="btn-banco" onclick="abrirBanco()" style="display:none">
+  <button class="btn btn-secondary btn-hist" id="btn-banco" onclick="abrirBanco()" style="display:none">
     📌 <span class="label">Banco</span>
   </button>
-  <button class="btn-hist" id="btn-admin" onclick="abrirAdmin()" style="display:none">
+  <button class="btn btn-secondary btn-hist" id="btn-admin" onclick="abrirAdmin()" style="display:none">
     🛠 <span class="label">Admin</span>
   </button>
-  <button class="btn-hist" id="btn-theme-toggle-header" onclick="toggleTheme()" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+  <button class="btn btn-secondary btn-hist" id="btn-theme-toggle-header" onclick="toggleTheme()" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
     <svg id="theme-icon-header" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     <span class="label" id="theme-toggle-header-label">Claro</span>
   </button>
@@ -4374,7 +4314,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <div class="profile-field-hint">Se vazio, usa o nome de usuário da sua conta.</div>
         <div class="profile-field-msg" id="personagem-nome-msg"></div>
       </div>
-      <button class="btn-profile-save" id="btn-personagem-nome-save" style="margin-top:4px" onclick="salvarNomePersonagem()">💾 Salvar nome</button>
+      <button class="btn btn-primary btn-profile-save" id="btn-personagem-nome-save" style="margin-top:4px" onclick="salvarNomePersonagem()">💾 Salvar nome</button>
     </div>
     <div class="gami-panel">
       <div class="gami-row">
@@ -4430,8 +4370,8 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       </div>
     </div>
     <div class="profile-modal-actions">
-      <button class="btn-profile-save" id="btn-profile-save" onclick="salvarPerfil()">💾 Salvar alterações</button>
-      <button class="btn-logout" onclick="fazerLogout()">Sair da conta</button>
+      <button class="btn btn-primary btn-profile-save" id="btn-profile-save" onclick="salvarPerfil()">💾 Salvar alterações</button>
+      <button class="btn btn-secondary btn-logout" onclick="fazerLogout()">Sair da conta</button>
     </div>
     </div>
 
@@ -9879,7 +9819,7 @@ function renderAssinatura(planos, status) {
       <div class="plano-preco">R$ <b>${fmtPreco(p.preco)}</b></div>
       <div class="plano-periodo">${periodo}</div>
       <div class="plano-beneficio">${escHtml(p.beneficio)}</div>
-      <button class="plano-btn" onclick="${acao}">Assinar ${escHtml(p.nome.split(' ').pop().toUpperCase())} →</button>
+      <button class="btn btn-blue plano-btn" onclick="${acao}">Assinar ${escHtml(p.nome.split(' ').pop().toUpperCase())} →</button>
     </div>`;
   }).join('');
 
