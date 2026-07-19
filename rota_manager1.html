@@ -675,7 +675,17 @@ header .badge b { color: var(--accent2); }
     justify-content: flex-end;
   }
   #scan-overlay.show { display: flex; }
-  #scan-panel {
+  #buscaseq-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 500;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+  #buscaseq-overlay.show { display: flex; }
+  #scan-panel, #buscaseq-panel {
     background: var(--surface);
     border-left: 2px solid var(--border);
     width: 400px;
@@ -685,15 +695,15 @@ header .badge b { color: var(--accent2); }
     flex-direction: column;
     box-shadow: -4px 0 32px rgba(0,0,0,.5);
   }
-  #scan-header {
+  #scan-header, #buscaseq-header {
     display: flex;
     align-items: center;
     padding: 16px 18px;
     border-bottom: 1px solid var(--border);
     gap: 10px;
   }
-  #scan-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #scan-body { flex: 1; overflow-y: auto; padding: 14px; }
+  #scan-header .title, #buscaseq-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
+  #scan-body, #buscaseq-body { flex: 1; overflow-y: auto; padding: 14px; }
   #scan-capture-area {
     border: 2px dashed var(--border);
     border-radius: 10px;
@@ -3724,6 +3734,10 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
       <span class="nav-label">Lista de Rotas</span>
     </button>
+    <button class="nav-item" id="snav-buscaseq" onclick="sidebarNav('buscaseq')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span class="nav-label">Buscar Sequência</span>
+    </button>
     <button class="nav-item" id="snav-historico" onclick="sidebarNav('historico')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
       <span class="nav-label">Histórico</span>
@@ -3994,25 +4008,6 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <input type="file" id="scan-file-camera" accept="image/*" capture="environment" style="display:none" onchange="scanArquivoSelecionado(event)">
       <input type="file" id="scan-file-galeria" accept="image/*" style="display:none" onchange="scanArquivoSelecionado(event)">
 
-      <div id="scan-cam-overlay">
-        <div id="scan-cam-video-wrap">
-          <video id="scan-cam-video" autoplay playsinline muted></video>
-          <div id="scan-cam-guide"></div>
-          <div id="scan-cam-hint">Encaixe a linha aqui dentro</div>
-          <div id="scan-cam-topbar">
-            <span class="scan-cam-pill active" style="flex:none; padding-left:14px; padding-right:14px;">📍 Endereço</span>
-          </div>
-          <div id="scan-cam-badge">📋 0 itens</div>
-          <div id="scan-cam-toast"></div>
-        </div>
-        <div id="scan-cam-controls">
-          <button id="scan-cam-close" onclick="scanFecharCameraViva()">✕</button>
-          <button id="scan-cam-shutter" onclick="scanCapturarFotoViva()" aria-label="Capturar"></button>
-          <button id="scan-cam-flip" onclick="scanAlternarCamera()">🔄</button>
-        </div>
-        <canvas id="scan-cam-canvas" style="display:none"></canvas>
-      </div>
-
       <div id="scan-lista-wrap">
         <div id="scan-lista-header">
           <span class="title">📋 Lista para gerar planilha</span>
@@ -4027,7 +4022,43 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         </div>
         <div id="scan-lista-status"></div>
       </div>
+    </div>
+  </div>
+</div>
 
+<!-- Câmera ao vivo compartilhada pelo Rota Scan e pela Busca de Sequência —
+     fica fora dos dois painéis (que são display:none quando fechados) pra
+     funcionar não importa qual dos dois a abriu. -->
+<div id="scan-cam-overlay">
+  <div id="scan-cam-video-wrap">
+    <video id="scan-cam-video" autoplay playsinline muted></video>
+    <div id="scan-cam-guide"></div>
+    <div id="scan-cam-hint">Encaixe a linha aqui dentro</div>
+    <div id="scan-cam-topbar">
+      <span class="scan-cam-pill active" style="flex:none; padding-left:14px; padding-right:14px;">📍 Endereço</span>
+    </div>
+    <div id="scan-cam-badge">📋 0 itens</div>
+    <div id="scan-cam-toast"></div>
+  </div>
+  <div id="scan-cam-controls">
+    <button id="scan-cam-close" onclick="scanFecharCameraViva()">✕</button>
+    <button id="scan-cam-shutter" onclick="scanCapturarFotoViva()" aria-label="Capturar"></button>
+    <button id="scan-cam-flip" onclick="scanAlternarCamera()">🔄</button>
+  </div>
+  <canvas id="scan-cam-canvas" style="display:none"></canvas>
+</div>
+
+<!-- ══ BUSCAR SEQUÊNCIA — separado do Rota Scan: é usado o tempo todo
+     durante a rota (achar de qual parada é um pacote), enquanto o Rota
+     Scan é usado uma vez, antes de sair, pra montar a rota. ══ -->
+<div id="buscaseq-overlay" onclick="fecharBuscaSequencia(event)">
+  <div id="buscaseq-panel">
+    <div id="buscaseq-header">
+      <span>🔎</span>
+      <span class="title">Buscar Sequência</span>
+      <button class="close-btn" onclick="fecharBuscaSequencia()">✕</button>
+    </div>
+    <div id="buscaseq-body">
       <textarea id="scan-texto" placeholder="Texto reconhecido (editável)..." onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); scanExecutarBusca(); }"></textarea>
       <div class="scan-campos-tags" id="scan-campos-tags"></div>
       <div id="scan-buscar-row">
@@ -8194,6 +8225,16 @@ function fecharScan(e) {
   _fecharOverlayAnimado('scan-overlay', 'scan-panel', 'animate__slideOutRight');
 }
 
+function abrirBuscaSequencia() {
+  _abrirOverlayAnimado('buscaseq-overlay', 'buscaseq-panel', 'animate__slideInRight');
+}
+
+function fecharBuscaSequencia(e) {
+  if (e && e.target !== document.getElementById('buscaseq-overlay')) return;
+  scanFecharCameraViva();
+  _fecharOverlayAnimado('buscaseq-overlay', 'buscaseq-panel', 'animate__slideOutRight');
+}
+
 // ══════════════════════════════════════════════════════════
 //  EXTRAÇÃO DE PRINTS (OCR 100% client-side via Tesseract.js)
 //  Porta em JS do parser heurístico usado no protótipo Android
@@ -10562,6 +10603,7 @@ function sidebarNav(page) {
   closeMobileSidebar();
   switch(page) {
     case 'lista':       irParaLista(); break;
+    case 'buscaseq':    abrirBuscaSequencia(); break;
     case 'historico':   abrirHistorico(); break;
     case 'banco':       abrirBanco(); break;
     case 'scan':        abrirScan(); break;
