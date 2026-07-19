@@ -610,13 +610,14 @@ header .badge b { color: var(--accent2); }
   #banco-overlay.show { display: flex; }
   #banco-panel {
     background: var(--surface);
-    border-left: 2px solid var(--border);
+    border: 3px solid var(--accent);
+    border-right: none; border-top: none; border-bottom: none;
     width: 380px;
     max-width: 95vw;
     height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    box-shadow: -3px 0 0 0 #0d0f08, -7px 0 32px rgba(0,0,0,.5);
   }
   #banco-header {
     display: flex;
@@ -688,13 +689,14 @@ header .badge b { color: var(--accent2); }
   #buscaseq-overlay.show { display: flex; }
   #scan-panel, #buscaseq-panel {
     background: var(--surface);
-    border-left: 2px solid var(--border);
+    border: 3px solid var(--accent);
+    border-right: none; border-top: none; border-bottom: none;
     width: 400px;
     max-width: 95vw;
     height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    box-shadow: -3px 0 0 0 #0d0f08, -7px 0 32px rgba(0,0,0,.5);
   }
   #scan-header, #buscaseq-header {
     display: flex;
@@ -1053,13 +1055,14 @@ header .badge b { color: var(--accent2); }
   #anjun-overlay.show { display: flex; }
   #anjun-panel {
     background: var(--surface);
-    border-left: 2px solid var(--border);
+    border: 3px solid var(--accent);
+    border-right: none; border-top: none; border-bottom: none;
     width: 400px;
     max-width: 95vw;
     height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    box-shadow: -3px 0 0 0 #0d0f08, -7px 0 32px rgba(0,0,0,.5);
   }
   #anjun-header {
     display: flex;
@@ -1143,13 +1146,14 @@ header .badge b { color: var(--accent2); }
   #extracao-overlay.show { display: flex; }
   #extracao-panel {
     background: var(--surface);
-    border-left: 2px solid var(--border);
+    border: 3px solid var(--accent);
+    border-right: none; border-top: none; border-bottom: none;
     width: 420px;
     max-width: 95vw;
     height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    box-shadow: -3px 0 0 0 #0d0f08, -7px 0 32px rgba(0,0,0,.5);
   }
   #extracao-header {
     display: flex;
@@ -1267,13 +1271,14 @@ header .badge b { color: var(--accent2); }
   #hist-overlay.show { display: flex; }
   #hist-panel {
     background: var(--surface);
-    border-left: 2px solid var(--border);
+    border: 3px solid var(--accent);
+    border-right: none; border-top: none; border-bottom: none;
     width: 340px;
     max-width: 95vw;
     height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    box-shadow: -3px 0 0 0 #0d0f08, -7px 0 32px rgba(0,0,0,.5);
   }
   @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
   #hist-header {
@@ -1578,12 +1583,12 @@ header .badge b { color: var(--accent2); }
   #export-overlay.show { display: flex; }
   #export-modal {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--accent);
-    border-radius: 4px;
+    border: 3px solid var(--accent);
+    border-radius: 0;
+    clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
     width: 600px;
     max-width: 92vw;
-    box-shadow: 0 12px 48px rgba(0,0,0,.5);
+    box-shadow: 0 0 0 3px #0d0f08, 0 12px 48px rgba(0,0,0,.5);
     overflow: hidden;
   }
   #export-modal-header {
@@ -1698,13 +1703,13 @@ header .badge b { color: var(--accent2); }
   #export-review-overlay.show { display: flex; }
   #export-review-modal {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--accent);
-    border-radius: 4px;
+    border: 3px solid var(--accent);
+    border-radius: 0;
+    clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
     width: 640px;
     max-width: 92vw;
     max-height: 88vh;
-    box-shadow: 0 12px 48px rgba(0,0,0,.5);
+    box-shadow: 0 0 0 3px #0d0f08, 0 12px 48px rgba(0,0,0,.5);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1829,13 +1834,14 @@ header .badge b { color: var(--accent2); }
   #assinatura-overlay.show { display: flex; }
   #assinatura-panel {
     background: var(--surface);
-    border-left: 2px solid var(--border);
+    border: 3px solid var(--accent);
+    border-right: none; border-top: none; border-bottom: none;
     width: 380px;
     max-width: 95vw;
     height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 32px rgba(0,0,0,.5);
+    box-shadow: -3px 0 0 0 #0d0f08, -7px 0 32px rgba(0,0,0,.5);
   }
   #assinatura-header {
     display: flex;
@@ -2997,12 +3003,13 @@ padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right
 
 .login-card {
 background: var(--surface);
-border: 1px solid var(--border);
-border-radius: 12px;
+border: 3px solid var(--accent);
+border-radius: 0;
+clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
 padding: 36px 32px;
 width: 100%;
 max-width: 380px;
-box-shadow: 0 8px 40px rgba(0,0,0,.6);
+box-shadow: 0 0 0 3px #0d0f08, 0 8px 40px rgba(0,0,0,.6);
 position: relative;
 overflow: hidden;
 }
@@ -3243,9 +3250,10 @@ display: flex; align-items: center;
 }
 .profile-modal {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  border: 3px solid var(--accent);
+  border-radius: 0;
+  clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
+  box-shadow: 0 0 0 3px #0d0f08, 0 20px 60px rgba(0,0,0,.6);
   width: 100%;
   max-width: 440px;
   max-height: calc(100vh - 32px);
@@ -3529,7 +3537,7 @@ display: flex; align-items: center;
 .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
 
 @media (max-width: 640px) {
-.login-card { padding: 28px 20px; border-radius: 12px; }
+.login-card { padding: 28px 20px; }
 .login-logo { font-size: 22px; }
 .btn-login { padding: 11px; }
 }
