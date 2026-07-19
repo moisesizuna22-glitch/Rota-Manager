@@ -534,14 +534,14 @@ header .badge b { color: var(--accent2); }
     font-weight: 700;
     padding: 3px 10px;
     border-radius: 999px;
-    background: rgba(56,132,255,.12);
-    color: #6ea8ff;
-    border: 1px solid rgba(56,132,255,.4);
+    background: rgba(79,154,144,.14);
+    color: #7fc4bb;
+    border: 1px solid rgba(79,154,144,.4);
     vertical-align: middle;
     cursor: pointer;
     line-height: 1.4;
   }
-  .badge-correlacao:hover { background: rgba(56,132,255,.22); }
+  .badge-correlacao:hover { background: rgba(79,154,144,.24); }
   [data-theme="light"] .badge-correlacao { background: rgba(107,93,14,.1); color: #6b5d0e; border-color: rgba(107,93,14,.35); }
   [data-theme="light"] .badge-correlacao:hover { background: rgba(107,93,14,.18); }
 
@@ -561,7 +561,7 @@ header .badge b { color: var(--accent2); }
     border-radius: 3px;
     background: var(--accent);
     color: #1a1205;
-    border: 1px solid #ffcf66;
+    border: 1px solid #e6ef9c;
     vertical-align: middle;
     cursor: default;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 0 rgba(199,211,74,.6);
@@ -594,7 +594,7 @@ header .badge b { color: var(--accent2); }
   }
   tbody tr.voce-editou .td-addr-reformado { color: var(--accent); }
 
-  .td-coord.do-banco { color: #4ade80; font-weight: 700; }
+  .td-coord.do-banco { color: #7bc26a; font-weight: 700; }
 
   /* ── Painel Banco de Coordenadas ── */
   #banco-overlay {
@@ -1493,7 +1493,7 @@ header .badge b { color: var(--accent2); }
     font-size: 12px; padding: 0; min-height: 0;
   }
   .admin-msg.show { padding: 8px 0; }
-  .admin-msg.ok    { color: #4ade80; }
+  .admin-msg.ok    { color: #7bc26a; }
   .admin-msg.erro  { color: var(--danger); }
 
   #admin-filtro {
@@ -1535,7 +1535,7 @@ header .badge b { color: var(--accent2); }
     display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px;
     padding: 2px 9px; letter-spacing: .02em;
   }
-  .admin-acesso-ok       { color: #4ade80; border: 1px solid #4ade80; background: rgba(74,222,128,.08); }
+  .admin-acesso-ok       { color: #7bc26a; border: 1px solid #7bc26a; background: rgba(123,194,106,.08); }
   .admin-acesso-expirado { color: var(--accent);  border: 1px solid var(--accent);  background: rgba(199,211,74,.08); }
   .admin-acesso-sem      { color: var(--muted); border: 1px solid var(--border); }
   .admin-item-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
@@ -1852,8 +1852,8 @@ header .badge b { color: var(--accent2); }
   .assinatura-pendente button:hover { border-color: var(--danger); color: var(--danger); }
 
   .assinatura-ativa {
-    background: rgba(74,222,128,.08);
-    border: 1px solid #4ade80;
+    background: rgba(123,194,106,.08);
+    border: 1px solid #7bc26a;
     border-radius: 8px;
     padding: 12px 14px;
     font-size: 12px;
@@ -1861,7 +1861,7 @@ header .badge b { color: var(--accent2); }
     margin-bottom: 16px;
     line-height: 1.5;
   }
-  .assinatura-ativa b { color: #4ade80; }
+  .assinatura-ativa b { color: #7bc26a; }
   .assinatura-limite-ok,
   .assinatura-limite-atingido {
     margin-top: 8px;
@@ -2229,10 +2229,10 @@ transition: background .1s, border-color .1s;
 }
 tbody tr:hover { background: rgba(255,255,255,.03); }
 tbody tr.grouped {
-background: rgba(245, 158, 11, .06);
+background: rgba(199,211,74,.06);
 border-left: 4px solid var(--accent);
 }
-tbody tr.grouped:hover { background: rgba(245, 158, 11, .09); }
+tbody tr.grouped:hover { background: rgba(199,211,74,.09); }
 
 td {
 padding: 9px 14px;
@@ -2243,8 +2243,20 @@ td:first-child { text-align: center; }
 .td-stop {
 font-family: var(--mono);
 font-size: 12px;
-color: var(--muted);
-width: 60px;
+font-weight: 700;
+color: var(--accent);
+background: var(--surface2);
+border: 1px solid var(--border);
+border-radius: var(--radius-sm);
+padding: 3px 8px;
+display: inline-block;
+text-align: center;
+width: auto;
+}
+tr.grouped .td-stop {
+color: var(--accent2);
+border-color: rgba(79,154,144,.4);
+background: rgba(79,154,144,.1);
 }
 .td-addr {
 max-width: 320px;
@@ -2341,9 +2353,9 @@ font-weight: 700;
 letter-spacing: .03em;
 border-radius: 999px;
 padding: 2px 8px;
-background: rgba(59,130,246,.12);
-color: #3b82f6;
-border: 1px solid rgba(59,130,246,.35);
+background: rgba(79,154,144,.14);
+color: #4f9a90;
+border: 1px solid rgba(79,154,144,.35);
 }
 .td-addr-original {
 font-size: 13px;
@@ -2414,7 +2426,7 @@ padding: 2px 8px;
 border-radius: 999px;
 font-size: 11px;
 font-weight: 700;
-background: rgba(245, 158, 11, .15);
+background: rgba(199,211,74,.15);
 color: var(--accent);
 border: 1px solid rgba(199,211,74,.3);
 }
@@ -2532,7 +2544,7 @@ cursor: pointer;
 accent-color: var(--accent);
 }
 tbody tr.tr-selecionada {
-background: rgba(245, 158, 11, .10) !important;
+background: rgba(199,211,74,.10) !important;
 }
 
 /* ── Barra de navegação inferior (Lista / Agrupar / Exportar) ── */
@@ -2588,7 +2600,7 @@ stroke-linejoin: round;
 .bn-item.active { color: var(--accent2); }
 .bn-item:disabled { color: var(--muted); opacity: .55; cursor: default; }
 .bn-item:not(:disabled):hover { color: var(--accent2); }
-.bn-item.bn-sucesso { color: #4ade80 !important; }
+.bn-item.bn-sucesso { color: #7bc26a !important; }
 .bn-badge {
 position: absolute;
 top: 4px;
@@ -2825,10 +2837,11 @@ width: auto;
 padding: 0;
 }
 
-/* Seq: rótulo inline, discreto, acima do endereço (destaque maior quando agrupado) */
+/* Seq: chip pequeno acima do endereço (destaque maior quando agrupado) */
 td.td-stop {
 width: auto;
-padding: 0 0 6px;
+padding: 3px 8px;
+margin: 0 0 6px;
 font-size: 11px;
 }
 td.td-stop::before { content: 'SEQ '; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
@@ -3445,7 +3458,7 @@ display: flex; align-items: center;
 .profile-field-input.error { border-color: var(--danger); }
 .profile-field-hint { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .profile-field-msg { font-size: 11px; margin-top: 4px; min-height: 15px; }
-.profile-field-msg.ok  { color: #4ade80; }
+.profile-field-msg.ok  { color: #7bc26a; }
 .profile-field-msg.err { color: var(--danger); }
 .profile-modal-actions {
   padding: 16px 20px;
