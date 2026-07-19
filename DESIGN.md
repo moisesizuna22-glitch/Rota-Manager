@@ -149,17 +149,21 @@ Light theme remaps every neutral (`bg-light` `#eeece0`, `surface-light` `#f8f7ef
 **Display Font:** Oswald (with Inter, system-ui fallback)
 **Body Font:** Inter (with Segoe UI, system-ui fallback)
 **Label/Mono Font:** JetBrains Mono
+**Pixel Font:** Press Start 2P (`--pixel`, falls back to `--mono`) — reserved for ceremonial gamification numbers only (level, XP, the level-up screen). Never body text, never labels: it's illegible below ~13px and only earns its place where the moment is rare and big.
 
-**Character:** Oswald's condensed, uppercase-tracked weight carries the industrial/dispatch-board voice — it's used ceremonially, never for body copy. Inter stays invisible and efficient for everything a user actually reads at length. JetBrains Mono signals "this is raw data" (coordinates, hashes) the moment it appears, which is exactly its job.
+**Character:** Oswald's condensed, uppercase-tracked weight carries the industrial/dispatch-board voice — it's used ceremonially, never for body copy. Inter stays invisible and efficient for everything a user actually reads at length. JetBrains Mono signals "this is raw data" (coordinates, hashes) the moment it appears, which is exactly its job. Press Start 2P exists purely to make level/XP moments read as *game* rather than *stat* — it shows up in exactly two places (the gami-panel hero and the level-up overlay) and nowhere else.
 
 ### Hierarchy
 - **Display** (700, 1.75rem representative / ranges 18–32px across contexts, line-height 1.1, letter-spacing 0.06–0.12em, uppercase): login logo, section headers (`#admin-header .title`, `#mapa-header .title`), pricing numbers, level titles. Always uppercase, always tracked wide.
 - **Label** (700, 11px, letter-spacing 0.06em, uppercase): field labels, nav section labels, button text, stat captions (`.gami-label`, `.nav-section-label`). This is the system's most-repeated type style — treat it as the default UI voice, not body text.
 - **Body** (400, 14px, line-height 1.5): general copy, modal text, form values. Caps at conversational line lengths inside modals (~60–70ch).
 - **Mono** (500, 12px): coordinate readouts (`#coord-display`), status codes, anything that reads as machine output rather than authored copy.
+- **Pixel** (13–22px only, never smaller): `.gami-title`, `.gami-num`, `.gami-rank-level`, `.levelup-level`. The one place the system trades legibility-at-small-sizes for game feel — kept to numbers/short words at sizes where it stays readable.
 
 ### Named Rules
 **The All-Caps Ceremony Rule.** Display and Label type are never sentence case. If a heading or button needs lowercase for readability, it isn't a Display/Label use — it belongs in Body.
+
+**The Pixel-Font Scarcity Rule.** Press Start 2P is rationed on purpose — it goes on the level number and XP figures, never on addresses, buttons, or anything a courier needs to read fast. Legibility in a driver's hand still wins outside those two ceremonial spots.
 
 ## 4. Elevation
 
@@ -204,7 +208,10 @@ Flat by default, shadow on state change. Depth at rest comes from the two-step t
 - **Style:** icon + label rows on a near-black sidebar void, 0.65 white-alpha at rest, full white on hover, solid Sidebar Active Teal fill with a soft teal glow shadow on the active route. Collapses to icon-only at 60px with label opacity/width transitions, not a hard cut.
 
 ### Gamification Panel (signature component)
-The system's actual differentiator, and now the most visually prominent panel in the courier shell rather than a quiet stat box. A 16×16 pixelated avatar grid with a circular level badge overlapping its bottom-right corner; an amber-lime-to-pale-lime gradient XP fill inside a Panel Olive Raised track; three stat boxes (paradas/pacotes/endereços) in the nested-surface style; locked badge/item slots rendered at 35% opacity and grayscale until earned; the panel itself carries a top accent seam (`inset 0 2px 0` amber-lime) and a faint gradient wash so it reads as a character-sheet module. Plain XP gains and unlocked items still fire a small toast that reuses the card vocabulary (Panel Olive, amber-lime border, drop shadow) — but a level-up escalates to `#levelup-overlay`, a full-screen "save screen" moment (avatar, new level number, XP gained, any new badge), the one place in the app gamification is allowed to take over the whole viewport. It reuses the same `_abrirOverlayAnimado`/zoom-in pattern as every other modal, so it's structurally just another panel, not a bespoke game-UI system.
+The system's actual differentiator, and now the most visually prominent panel in the courier shell rather than a quiet stat box. A 16×16 pixelated avatar grid — 108px, centered, not a 56px corner icon — with a chamfered level badge overlapping its bottom-right corner; a striped amber-lime XP fill inside a Panel Olive track; three squared stat boxes (paradas/pacotes/endereços); locked badge/item slots rendered at 35% opacity and grayscale until earned. Level and XP numbers set in the Pixel font (see Typography), everything else stays in Display/Body. Plain XP gains and unlocked items still fire a small toast — but a level-up escalates to `#levelup-overlay`, a full-screen "save screen" moment (132px glowing avatar, new level number, XP gained, any new badge), the one place in the app gamification is allowed to take over the whole viewport.
+
+### Pixel Frame (`.pixel-frame`)
+A chamfered-corner border — corners cut at 45°, not rounded — used wherever a surface should read as a game window instead of a UI card: the gami-panel, the level-up overlay, the whole route-list container on desktop (one frame around the list, not per row — impractical in a dense table), and each stop card individually on the mobile card layout (where every row already is its own discrete box). Built with `clip-path: polygon(...)` plus a doubled border (accent + near-black), `border-radius: 0` always — chamfer and rounding never mix on the same element. This is deliberately rationed to gamification-adjacent and courier-facing surfaces; the admin panel's tables/cards stay plain rectangles, same as the "no level/XP data in admin" rule — the frame is part of the game metaphor, and admin stays outside it by the same logic.
 
 ## 6. Do's and Don'ts
 
@@ -215,6 +222,7 @@ The system's actual differentiator, and now the most visually prominent panel in
 - **Do** treat the pixel-art gamification assets as earned insignia — crisp, `image-rendering: pixelated`, tiered by real accomplishment (level, XP milestones).
 - **Do** keep the level-up overlay reserved for actual level-ups only — plain XP gain and item unlocks stay a toast; escalating every gamification event to full-screen would cheapen the one moment that's supposed to feel rare.
 - **Do** keep the admin panel free of level/XP/avatar data — it's account and plan management, deliberately outside the game metaphor.
+- **Do** keep the pixel frame's chamfer and `border-radius: 0` — never round a chamfered element, and never chamfer an admin surface.
 - **Do** verify contrast for anything read outdoors: this app's baseline assumption is a driver squinting at a phone in sunlight, not an office monitor.
 
 ### Don't:

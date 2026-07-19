@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
 
 <style>
 /* ===================== DESIGN TOKENS ===================== */
@@ -30,6 +30,7 @@
   --font:      'Inter', 'Segoe UI', system-ui, sans-serif;
   --mono:      'JetBrains Mono', 'Consolas', monospace;
   --display:   'Oswald', 'Inter', system-ui, sans-serif;
+  --pixel:     'Press Start 2P', var(--mono);
   --steel:     linear-gradient(180deg, #232f1c 0%, #1b2418 100%);
   /* sidebar */
   --sidebar-bg: #0f120b;
@@ -2203,8 +2204,21 @@ transition: background .15s;
 .btn-clear-import:hover { background: var(--border); }
 #file-input { display: none; }
 
-/* ── Tabela ── */
-#table-section { flex: 1; overflow: auto; display: none; padding: 0 0 40px; -webkit-overflow-scrolling: touch; }
+/* ── Tabela ──
+   Moldura chanfrada ao redor da lista inteira, pra ler como uma "janela
+   de jogo" só — não cada linha individualmente (impraticável numa tabela
+   densa; isso fica pro card mobile, ver a regra tbody tr no breakpoint). */
+#table-section {
+  flex: 1; overflow: auto; display: none; -webkit-overflow-scrolling: touch;
+  margin: 14px; padding: 0 0 40px;
+  background: var(--surface);
+  border: 3px solid var(--accent);
+  clip-path: polygon(
+    14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px),
+    calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px
+  );
+  box-shadow: 0 0 0 3px #0d0f08;
+}
 #table-section.show { display: block; }
 
 table {
@@ -2801,7 +2815,9 @@ flex-wrap: wrap;
 .check-all-mobile { display: flex; margin-left: 0; }
 
 /* ── Tabela → cards empilhados (sem scroll horizontal) ── */
-#table-section { padding: 0 0 90px; }
+/* Sem moldura externa no mobile — cada card de parada já tem a sua
+   própria (ver tbody tr abaixo); dobrar o efeito só rouba espaço de tela. */
+#table-section { margin: 0; padding: 0 0 90px; border: none; clip-path: none; box-shadow: none; background: transparent; }
 
 table, thead, tbody, tr, td, th { display: block; width: 100%; }
 table { font-size: 13px; min-width: 0; }
@@ -2813,8 +2829,9 @@ tbody tr {
 position: relative;
 width: auto;
 background: var(--surface);
-border: 1px solid var(--border);
-border-radius: 12px;
+border: 2px solid var(--border);
+border-radius: 0;
+clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
 margin: 10px 12px;
 padding: 12px 48px 12px 52px;
 box-shadow: 0 1px 8px rgba(0,0,0,.25);
@@ -3294,54 +3311,72 @@ display: flex; align-items: center;
   margin-top: 2px;
 }
 
-/* ── Gamificação ── */
-.gami-panel {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(199,211,74,.06) 0%, transparent 60%);
-  box-shadow: inset 0 2px 0 rgba(199,211,74,.35);
+/* ── Gamificação ──
+   .pixel-frame: moldura chanfrada estilo caixa de diálogo de RPG retrô —
+   cantos cortados em vez de arredondados, dupla borda (tinta + acento).
+   Reaproveitada em qualquer painel que precise "parecer um jogo". */
+.pixel-frame, .gami-panel {
+  border-radius: 0;
+  clip-path: polygon(
+    10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
+    calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px
+  );
+  border: 3px solid var(--accent);
+  box-shadow: 0 0 0 3px #0d0f08, 0 10px 26px rgba(0,0,0,.4);
 }
-.gami-row { display: flex; gap: 12px; align-items: center; }
-.gami-avatar-wrap { position: relative; width: 56px; height: 56px; flex-shrink: 0; }
+.gami-panel {
+  margin: 14px;
+  padding: 20px 18px 18px;
+  background: var(--surface2);
+  position: relative;
+}
+.gami-row { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.gami-avatar-wrap { position: relative; width: 108px; height: 108px; flex-shrink: 0; }
 .gami-avatar-grid {
-  width: 56px; height: 56px;
+  width: 108px; height: 108px;
   display: grid;
   grid-template-columns: repeat(16, 1fr);
   grid-template-rows: repeat(16, 1fr);
-  border-radius: 10px;
+  border-radius: 0;
   overflow: hidden;
-  background: var(--surface2);
+  background: var(--surface);
+  border: 2px solid var(--border);
   image-rendering: pixelated;
 }
 .gami-avatar-grid div { width: 100%; height: 100%; }
 .gami-level-badge {
-  position: absolute; bottom: -4px; right: -4px;
+  position: absolute; bottom: -8px; right: -8px;
   background: var(--accent); color: #14170f;
-  font-weight: 800; font-size: 10px;
-  width: 20px; height: 20px; border-radius: 50%;
+  font-family: var(--pixel); font-size: 11px;
+  width: 30px; height: 30px;
+  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
   display: flex; align-items: center; justify-content: center;
-  border: 2px solid var(--surface);
+  border: 2px solid var(--surface2);
+  box-shadow: 0 0 0 2px var(--text);
 }
-.gami-info { flex: 1; min-width: 0; }
-.gami-title { font-size: 13px; font-weight: 700; color: var(--text); margin: 0 0 6px; }
-.gami-xp-bg { background: var(--surface2); border-radius: 6px; height: 7px; overflow: hidden; }
+.gami-info { flex: 1; min-width: 0; width: 100%; }
+.gami-title {
+  font-family: var(--pixel); font-size: 15px; line-height: 1.6;
+  color: var(--text); margin: 0 0 12px;
+}
+.gami-xp-bg { background: var(--surface); border: 1px solid var(--border); border-radius: 0; height: 12px; overflow: hidden; }
 .gami-xp-fill {
   height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--accent), #e6ef9c);
+  background: repeating-linear-gradient(90deg, var(--accent) 0 6px, #e6ef9c 6px 12px);
   transition: width .6s ease;
 }
-.gami-xp-label { font-size: 10.5px; color: var(--muted); margin-top: 4px; display: flex; justify-content: space-between; }
+.gami-xp-label { font-family: var(--pixel); font-size: 9px; color: var(--muted); margin-top: 8px; display: flex; justify-content: space-between; }
 .gami-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
-.gami-stat-box { background: var(--surface2); border-radius: 10px; padding: 8px 6px; text-align: center; }
-.gami-stat-box .gami-num { font-size: 15px; font-weight: 800; color: var(--text); }
-.gami-stat-box .gami-label { font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+.gami-stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 0; padding: 10px 6px; text-align: center; }
+.gami-stat-box .gami-num { font-family: var(--pixel); font-size: 13px; color: var(--text); }
+.gami-stat-box .gami-label { font-size: 9.5px; color: var(--muted); margin-top: 6px; }
 .gami-section-title {
-  font-size: 10.5px; color: var(--muted); text-transform: uppercase;
-  letter-spacing: .04em; margin: 14px 0 6px;
+  font-family: var(--display); font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .08em; margin: 16px 0 8px; font-weight: 600;
 }
 .gami-icon-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .gami-icon-slot {
-  width: 32px; height: 32px; border-radius: 8px; background: var(--surface2);
+  width: 32px; height: 32px; border-radius: 0; background: var(--surface);
   border: 1px solid var(--border); display: flex; align-items: center;
   justify-content: center; overflow: hidden; position: relative;
 }
@@ -3352,10 +3387,10 @@ display: flex; align-items: center;
 .gami-ranking-loading { font-size: 12px; color: var(--muted); padding: 8px 0; }
 .gami-rank-row {
   display: flex; align-items: center; gap: 10px;
-  background: var(--surface2); border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 0;
   padding: 7px 10px;
 }
-.gami-rank-row.me { border: 1px solid var(--accent); }
+.gami-rank-row.me { border-color: var(--accent); }
 .gami-rank-pos {
   width: 20px; flex-shrink: 0; text-align: center;
   font-size: 12px; font-weight: 800; color: var(--muted);
@@ -3368,8 +3403,8 @@ display: flex; align-items: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gami-rank-level {
-  font-size: 10.5px; font-weight: 800; color: #14170f;
-  background: var(--accent); border-radius: 5px; padding: 2px 7px;
+  font-family: var(--pixel); font-size: 9px; color: #14170f;
+  background: var(--accent); border-radius: 0; padding: 3px 6px;
   flex-shrink: 0;
 }
 .gami-rank-xp { font-size: 10px; color: var(--muted); flex-shrink: 0; min-width: 52px; text-align: right; }
@@ -3393,11 +3428,14 @@ display: flex; align-items: center;
 }
 #levelup-overlay.show { display: flex; }
 #levelup-panel {
-  width: 340px; max-width: 92vw; padding: 36px 28px 30px;
+  width: 360px; max-width: 92vw; padding: 40px 28px 32px;
   background: radial-gradient(circle at 50% 32%, var(--surface2) 0%, var(--surface) 70%);
-  border: 1px solid var(--border); border-top: 3px solid var(--accent);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  border: 3px solid var(--accent);
+  clip-path: polygon(
+    14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px),
+    calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px
+  );
+  box-shadow: 0 0 0 3px #0d0f08, 0 20px 60px rgba(0,0,0,.55);
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px;
 }
 .levelup-eyebrow {
@@ -3405,14 +3443,15 @@ display: flex; align-items: center;
   letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
 }
 .levelup-avatar-grid {
-  width: 84px; height: 84px; margin: 8px 0 4px; display: grid;
+  width: 132px; height: 132px; margin: 10px 0 8px; display: grid;
   grid-template-columns: repeat(16, 1fr); grid-template-rows: repeat(16, 1fr);
-  border-radius: 10px; overflow: hidden; image-rendering: pixelated;
-  box-shadow: 0 0 0 3px var(--accent), 0 0 34px rgba(199,211,74,.4);
+  border-radius: 0; overflow: hidden; image-rendering: pixelated;
+  box-shadow: 0 0 0 4px var(--accent), 0 0 40px rgba(199,211,74,.45);
 }
 .levelup-level {
-  font-family: var(--display); font-size: 30px; font-weight: 700;
-  letter-spacing: .04em; color: var(--accent); margin: 2px 0;
+  font-family: var(--pixel); font-size: 22px; line-height: 1.6;
+  color: var(--accent); margin: 6px 0;
+  text-shadow: 2px 2px 0 #0d0f08;
 }
 .levelup-sub { font-size: 12.5px; color: var(--muted); max-width: 26ch; line-height: 1.5; }
 .levelup-badges { display: flex; gap: 8px; margin-top: 6px; min-height: 28px; }
