@@ -10744,10 +10744,30 @@ const GAMI_SPRITE = [
   0,0,3,3,0,0,0,0,0,0,3,3,0,0,0,0,
 ];
 
-function gamiRenderAvatar(genero) {
+// O avatar principal agora É o retrato da classe atual (dwarf → rogue →
+// knight → templar → barbarian → wizard → grão-mestre), reaproveitando os
+// mesmos arquivos de badge_nivelX_*.png que já existiam como "selo" — em
+// vez de um selo separado do boneco, o boneco evolui pra ser o selo. O
+// grid genérico (GAMI_SPRITE/GAMI_PALETAS) vira só um fallback pra quando
+// não há nenhum tier ainda (não deveria acontecer: dwarf já desbloqueia
+// no nível 1) ou se a imagem falhar ao carregar.
+function gamiRenderAvatar(genero, tierBadgeUrl) {
   const grid = document.getElementById('gami-avatar-grid');
   if (!grid) return;
   grid.innerHTML = '';
+  if (tierBadgeUrl) {
+    const img = document.createElement('img');
+    img.src = tierBadgeUrl;
+    img.alt = 'Seu personagem';
+    img.style.cssText = 'width:100%;height:100%;grid-column:1/-1;grid-row:1/-1;image-rendering:pixelated;object-fit:contain;';
+    img.onerror = () => { grid.innerHTML = ''; _gamiPintarGradeGenerica(grid, genero); };
+    grid.appendChild(img);
+    return;
+  }
+  _gamiPintarGradeGenerica(grid, genero);
+}
+
+function _gamiPintarGradeGenerica(grid, genero) {
   const paleta = GAMI_PALETAS[genero] || GAMI_PALETAS.masculino;
   const cores = { 0: 'transparent', 1: paleta.pele, 2: paleta.roupa, 3: paleta.cabelo };
   GAMI_SPRITE.forEach(v => {
@@ -10866,9 +10886,13 @@ function gamiRenderPerfil(d) {
   document.getElementById('gami-stat-pacotes').textContent = p.total_pacotes;
   document.getElementById('gami-stat-enderecos').textContent = p.total_enderecos_corrigidos;
 
-  gamiRenderAvatar(p.avatar && p.avatar.genero);
+  const badgesDesbloqueadas = d.badges_desbloqueadas || [];
+  const tierAtual = badgesDesbloqueadas.length
+    ? iconBase + badgesDesbloqueadas[badgesDesbloqueadas.length - 1]
+    : null;
+  gamiRenderAvatar(p.avatar && p.avatar.genero, tierAtual);
 
-  const badges = (d.badges_desbloqueadas || []).map(icone => ({ _icone: icone, _titulo: 'Badge desbloqueada' }));
+  const badges = badgesDesbloqueadas.map(icone => ({ _icone: icone, _titulo: 'Badge desbloqueada' }));
   gamiRenderIconRow('gami-badge-row', badges, iconBase, () => true);
 
   const itens = (d.itens_desbloqueados || []).map(i => ({ _icone: i.icone, _titulo: i.nome }));
@@ -10951,9 +10975,15 @@ function gamiProcessarResposta(resp) {
 
 // Level-up é o único momento da gamificação que toma a tela inteira —
 // XP avulso e itens desbloqueados continuam como toast (ver acima).
-function abrirLevelUp(g) {
+async function abrirLevelUp(g) {
   document.getElementById('levelup-nivel').textContent = (g.perfil && g.perfil.nivel) || '';
   document.getElementById('levelup-sub').textContent = `+${g.xp_ganho} XP`;
+  // Recarrega o perfil ANTES de clonar o avatar: #gami-avatar-grid pode
+  // ainda estar com o retrato do tier antigo (só foi pintado no login,
+  // não muda sozinho quando o nível sobe) — se esse level-up cruzou um
+  // limiar de tier (ex: virou nível 10 = knight), sem isso o "boneco
+  // evoluiu" mostraria a classe de ANTES na própria tela de comemoração.
+  await gamiCarregarPerfil();
   const origem = document.getElementById('gami-avatar-grid');
   const destino = document.getElementById('levelup-avatar-grid');
   if (origem && destino) destino.innerHTML = origem.innerHTML;
