@@ -64,6 +64,17 @@ ANJUN_TRATAMENTO_PY = "anjun_tratamento.py"
 HERE_API_KEY   = os.environ.get("HERE_API_KEY", "P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M").strip()
 HERE_CIDADE_UF = os.environ.get("HERE_CIDADE_UF", "Goiânia - GO, Brasil").strip()
 
+# Chave do Google Maps JS/Places pro navegador (mapa visual + autosuggest) —
+# diferente da GOOGLE_GEOCODING_API_KEY abaixo, que é server-side/geocoding
+# só. Cai pro valor que já estava hardcoded no frontend se a env var não
+# estiver configurada, pra não quebrar o deploy atual.
+GOOGLE_MAPS_BROWSER_KEY = os.environ.get("GOOGLE_MAPS_BROWSER_KEY", "AIzaSyAaESp78MrYmySlHiupJKjjgCi0-1dfWnE").strip()
+
+# Token público do Mapbox (prefixo "pk." já indica que é pra rodar no
+# navegador — diferente das chaves acima). Ainda assim só é liberado via
+# /api/config, igual as outras, pra manter um único caminho de distribuição.
+MAPBOX_BROWSER_TOKEN = os.environ.get("MAPBOX_BROWSER_TOKEN", "pk.eyJ1IjoibW9pc2Vzc2VuanVpem8iLCJhIjoiY21xOHRzOXZyMDFidTJyb2x0Zml5a2FxNyJ9.EHf8W94vDiim9_EDVGlP1g").strip()
+
 OSRM_BASE_URL  = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org")
 
 ORS_API_KEY    = os.environ.get("ORS_API_KEY", "").strip()
@@ -1792,6 +1803,19 @@ async def auth_status(request: Request):
                     pass
 
     return ok_json({"ok": True, "tem_acesso": tem_acesso, "is_admin": is_admin, "aviso_trial": aviso_trial})
+
+@app.get("/api/config")
+async def api_config(request: Request):
+    """Chaves de mapa/geocoding pro frontend (popup de correção, mapa de
+    rotas, scan/OCR) — liberadas só pra quem está logado, nunca hardcoded
+    no HTML/JS servido."""
+    _sessao_ou_401(request)
+    return ok_json({
+        "ok": True,
+        "hereApiKey": HERE_API_KEY,
+        "googleMapsKey": GOOGLE_MAPS_BROWSER_KEY,
+        "mapboxToken": MAPBOX_BROWSER_TOKEN,
+    })
 
 @app.get("/api/perfil/me")
 async def perfil_gamificacao_me(request: Request):

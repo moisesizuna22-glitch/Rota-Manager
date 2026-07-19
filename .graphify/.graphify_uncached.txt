@@ -1,0 +1,5 @@
+C:\Users\moise\OneDrive\Documents\GitHub\Rota-Manager\GAMIFICACAO_README.md
+C:\Users\moise\OneDrive\Documents\GitHub\Rota-Manager\LEIA-ME-seguranca.md
+C:\Users\moise\OneDrive\Documents\GitHub\Rota-Manager\README.md
+C:\Users\moise\OneDrive\Documents\GitHub\Rota-Manager\requirements.txt
+C:\Users\moise\OneDrive\Documents\GitHub\Rota-Manager\rota_manager1.html

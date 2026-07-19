@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "rota_manager1.html"
+        ],
+        "createdAt": "2026-07-19T01:58:19.660Z",
+        "reason": "border-left used as table row status indicator (needs-coordinate, just-edited), not a decorative card stripe"
+      }
+    ]
+  }
+}

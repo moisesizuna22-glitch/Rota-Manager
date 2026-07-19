@@ -1,0 +1,122 @@
+{
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/anjun_tratamento.py": {
+    "mtime": 1784391455650.1787,
+    "hash": "0f1dc11b910e428138e3a82b1960179d"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/csv_para_rota_xlsx.py": {
+    "mtime": 1783556506000,
+    "hash": "4b84c5c3d1ac1c46d2ae394a2e926475"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/gamification.py": {
+    "mtime": 1783558372943.3909,
+    "hash": "f93b1c09321a608d6fe2243e62eb1063"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/indexar_do_cache.py": {
+    "mtime": 1784274890923.0513,
+    "hash": "2a5fafdd0ce5591b8a03815ac2640c09"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/lotes_terceiros_cache.py": {
+    "mtime": 1784246805017.1873,
+    "hash": "672bf5b5a1a472b23730e0775a412deb"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/servidor.py": {
+    "mtime": 1784388511113.6516,
+    "hash": "2442658a70fff06ea4d3f67b61df836f"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/tratamento_dados.py": {
+    "mtime": 1784385801491.672,
+    "hash": "69d2c7205d53be21f058e729d3442a24"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/warmup_lotes.py": {
+    "mtime": 1783640500437.6526,
+    "hash": "e8219b3dbf3fffca16a0e07a51137aa0"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/GAMIFICACAO_README.md": {
+    "mtime": 1783556506000,
+    "hash": "60afdb7961d65695770f9a1236c769ae"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/LEIA-ME-seguranca.md": {
+    "mtime": 1781470940858.9114,
+    "hash": "a2323763062f4949cab1b1a87eeb738d"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/README.md": {
+    "mtime": 1781452064328.1665,
+    "hash": "9fd5f97b38cdac40bb6ba616910df73e"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/requirements.txt": {
+    "mtime": 1784241702803.015,
+    "hash": "353768392419a9fab89bcfa841be879c"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/rota_manager1.html": {
+    "mtime": 1784392046443.897,
+    "hash": "ec05eb9fd98c65cb4554b086d459b287"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/CREDITS.txt": {
+    "mtime": 1783556507000,
+    "hash": "8017e95befcc78a3c837ba374cb03570"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel10_knight.png": {
+    "mtime": 1783556507000,
+    "hash": "89de5d92cb69f4f8b23753b96f7e48c7"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel15_templar.png": {
+    "mtime": 1783556507000,
+    "hash": "dec7d92d2e0440a8d8e99179c66db48a"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel1_dwarf.png": {
+    "mtime": 1783556507000,
+    "hash": "4f9e02d881b950c7b391b82465dd6e96"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel20_barbarian.png": {
+    "mtime": 1783556507000,
+    "hash": "ccb1594fb9f4f90c217abd39dc66c3ee"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel30_wizard.png": {
+    "mtime": 1783556507000,
+    "hash": "7423290963697f97505f15c4b805e7a8"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel40_grao_mestre.png": {
+    "mtime": 1783556507000,
+    "hash": "209ee53fbb77c78b62032a360c2b8458"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/badge_nivel5_rogue.png": {
+    "mtime": 1783556507000,
+    "hash": "051bc62587f540bfbc3ac63ac2a45890"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_bolsa_moedas.png": {
+    "mtime": 1783556507000,
+    "hash": "fec0e812a1841f00144f4fe56888cd6f"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_cacador_demonios.png": {
+    "mtime": 1783556507000,
+    "hash": "99b0434114b979e6d8eaabeb64eeb517"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_cajado_dourado.png": {
+    "mtime": 1783556507000,
+    "hash": "1d81bca208aa9551b734bba9e30f4a78"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_espada_cristal.png": {
+    "mtime": 1783556507000,
+    "hash": "72d266eeb20ed0d4a8bb495ae3adf036"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_moeda_bronze.png": {
+    "mtime": 1783556507000,
+    "hash": "1dd309306092c903f8a057ca4e922215"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_pergaminho_cartografo.png": {
+    "mtime": 1783556507000,
+    "hash": "3d9724e0cffe290f3ac334673915ee78"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_pocao_energia.png": {
+    "mtime": 1783556507000,
+    "hash": "b9b6f5180eaffa62ba59058b23dff532"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/item_trofeu_dragao.png": {
+    "mtime": 1783556507000,
+    "hash": "7de00f27be8711d61247ff039ca91a98"
+  },
+  "C:/Users/moise/OneDrive/Documents/GitHub/Rota-Manager/static/icons/xp_moeda.png": {
+    "mtime": 1783556507000,
+    "hash": "e819e8765b465f0b13b408d5703201c5"
+  }
+}

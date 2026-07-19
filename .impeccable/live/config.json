@@ -1,0 +1,6 @@
+{
+  "files": ["rota_manager1.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

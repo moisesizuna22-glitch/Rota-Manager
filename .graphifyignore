@@ -1,0 +1,6 @@
+static/icons/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg

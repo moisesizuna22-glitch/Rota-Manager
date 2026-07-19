@@ -7,7 +7,6 @@
 <title>Rota Manager</title>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
@@ -47,6 +46,7 @@
   --radius-xl: 1rem;
   --radius-full: 9999px;
   --transition: 180ms cubic-bezier(0.16,1,0.3,1);
+  --btn-transition: background .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s, filter .15s, transform .15s;
   --glass: rgba(18,21,42,.82);
   --glass-border: rgba(255,255,255,.1);
 }
@@ -59,7 +59,7 @@
   --accent2:   #4338ca;
   --green:     #0d9265;
   --text:      #161a2b;
-  --muted:     #677088;
+  --muted:     #5b6478;
   --danger:    #c4264f;
   --sidebar-bg: #11142a;
   --sidebar-hover: rgba(255,255,255,0.08);
@@ -92,6 +92,27 @@ input, select, textarea { font: inherit; color: inherit; }
 *::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9999px; }
+
+/* ===================== REDUCED MOTION ===================== */
+/* Global kill switch: every decorative animation/transition on the page goes
+   instant. The two loading indicators that tell a user "still working" (spin,
+   anjun-progress-slide) are exempted below and just slowed instead, since
+   removing them entirely would leave no signal that the pipeline is running. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .loading-ring::after { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
+  #anjun-progress-fill.indeterminado { animation-duration: 2.2s !important; animation-iteration-count: infinite !important; }
+}
+
+/* Painéis/modais recebem foco programaticamente ao abrir (ver
+   _a11yAbrirModal); o container em si não precisa do anel de foco
+   do navegador, só os controles reais lá dentro. */
+[role="dialog"]:focus { outline: none; }
 
 /* ===================== APP SHELL ===================== */
 #app-shell {
@@ -604,10 +625,13 @@ header .badge b { color: var(--accent2); }
     gap: 10px;
   }
   #banco-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #banco-header .close-btn {
+  /* Botão de fechar (✕) — base compartilhada por todo painel/modal que usa
+     class="close-btn" (histórico, banco, admin, assinatura, scan, extração,
+     anjun). A variante em caixa com ícone SVG (mapa, exportação) fica abaixo. */
+  .close-btn {
     background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
   }
-  #banco-header .close-btn:hover { color: var(--text); }
+  .close-btn:hover { color: var(--text); }
   #banco-list { flex: 1; overflow-y: auto; padding: 10px; }
   #banco-search {
     margin: 10px;
@@ -669,10 +693,6 @@ header .badge b { color: var(--accent2); }
     gap: 10px;
   }
   #scan-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #scan-header .close-btn {
-    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
-  }
-  #scan-header .close-btn:hover { color: var(--text); }
   #scan-body { flex: 1; overflow-y: auto; padding: 14px; }
   #scan-capture-area {
     border: 2px dashed var(--border);
@@ -1038,10 +1058,6 @@ header .badge b { color: var(--accent2); }
     gap: 10px;
   }
   #anjun-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #anjun-header .close-btn {
-    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
-  }
-  #anjun-header .close-btn:hover { color: var(--text); }
   #anjun-body { flex: 1; overflow-y: auto; padding: 14px; }
   #anjun-drop-area {
     border: 2px dashed var(--border);
@@ -1132,10 +1148,6 @@ header .badge b { color: var(--accent2); }
     gap: 10px;
   }
   #extracao-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #extracao-header .close-btn {
-    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
-  }
-  #extracao-header .close-btn:hover { color: var(--text); }
   #extracao-body { flex: 1; overflow-y: auto; padding: 14px; }
   #extracao-drop-area {
     border: 2px dashed var(--border);
@@ -1261,10 +1273,6 @@ header .badge b { color: var(--accent2); }
     gap: 10px;
   }
   #hist-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #hist-header .close-btn {
-    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
-  }
-  #hist-header .close-btn:hover { color: var(--text); }
   #hist-list { flex: 1; overflow-y: auto; padding: 10px; }
   .hist-item {
     background: var(--surface2);
@@ -1349,14 +1357,21 @@ header .badge b { color: var(--accent2); }
   }
   #mapa-header .title { font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--display); letter-spacing: .03em; }
   #mapa-header .subtitle { flex: 1; font-size: 12px; color: var(--muted); }
-  #mapa-header .close-btn {
+  /* Variante em caixa com ícone SVG (mapa + exportação): mesma base do
+     .close-btn de texto acima, só ganha caixa/borda/hover próprios;
+     tamanho e radius continuam por painel logo abaixo. */
+  #mapa-header .close-btn,
+  #export-modal-header .close-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 34px; height: 34px; flex-shrink: 0;
-    background: none; border: 1px solid transparent; border-radius: 6px;
-    color: var(--muted); cursor: pointer; line-height: 1; transition: .15s;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    transition: var(--btn-transition);
   }
-  #mapa-header .close-btn svg { width: 18px; height: 18px; }
-  #mapa-header .close-btn:hover { color: var(--text); border-color: var(--border); background: var(--surface2); }
+  #mapa-header .close-btn svg,
+  #export-modal-header .close-btn svg { width: 18px; height: 18px; }
+  #mapa-header .close-btn:hover,
+  #export-modal-header .close-btn:hover { border-color: var(--border); background: var(--surface2); }
+  #mapa-header .close-btn { width: 34px; height: 34px; border-radius: 6px; }
   #mapa-body { flex: 1; position: relative; }
   #mapa-rotas-map { position: absolute; inset: 0; }
   .mapa-marker {
@@ -1381,7 +1396,7 @@ header .badge b { color: var(--accent2); }
     height: 34px; padding: 0 12px; flex-shrink: 0;
     background: none; border: 1px solid var(--border); border-radius: 8px;
     color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 700;
-    transition: .15s;
+    transition: var(--btn-transition);
   }
   #mapa-header .agrupar-btn:not(:disabled):hover { color: var(--text); background: var(--surface2); }
   #mapa-header .agrupar-btn .badge {
@@ -1598,14 +1613,7 @@ header .badge b { color: var(--accent2); }
     letter-spacing: .04em;
     color: var(--muted);
   }
-  #export-modal-header .close-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px;
-    background: none; border: 1px solid transparent; border-radius: 3px;
-    color: var(--muted); cursor: pointer; line-height: 1; transition: .15s;
-  }
-  #export-modal-header .close-btn svg { width: 18px; height: 18px; }
-  #export-modal-header .close-btn:hover { color: var(--text); border-color: var(--border); background: var(--surface2); }
+  #export-modal-header .close-btn { width: 30px; height: 30px; border-radius: 3px; }
   #export-modal-body {
     display: flex;
     gap: 14px;
@@ -1764,24 +1772,9 @@ header .badge b { color: var(--accent2); }
     padding: 3px 0;
   }
   .export-review-item-edit-wrap input:focus { outline: none; }
-  .export-review-item-btn {
-    background: none;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    line-height: 1;
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    color: var(--muted);
-    font-size: 13px;
-  }
-  .export-review-item-btn.ok { color: var(--accent2); border-color: rgba(91,155,213,.4); }
-  .export-review-item-btn.ok:hover { background: rgba(91,155,213,.15); }
-  .export-review-item-btn.cancel:hover { color: var(--danger); border-color: var(--danger); background: rgba(220,60,60,.12); }
+  /* Mesmo par .row-confirm-btn (ver base perto de .btn-edit-inline), só maior
+     pra caber melhor na linha de revisão de exportação. */
+  .export-review-item-btn { width: 28px; height: 28px; }
   #export-review-footer {
     display: flex;
     gap: 10px;
@@ -1799,7 +1792,7 @@ header .badge b { color: var(--accent2); }
     letter-spacing: .05em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: .15s;
+    transition: var(--btn-transition);
   }
   #export-review-cancelar {
     background: var(--surface2);
@@ -1843,10 +1836,6 @@ header .badge b { color: var(--accent2); }
     gap: 10px;
   }
   #assinatura-header .title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
-  #assinatura-header .close-btn {
-    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
-  }
-  #assinatura-header .close-btn:hover { color: var(--text); }
   #assinatura-body { flex: 1; overflow-y: auto; padding: 16px 14px; }
 
   .assinatura-pendente {
@@ -1976,7 +1965,7 @@ font-weight: 700;
 letter-spacing: .04em;
 text-transform: uppercase;
 cursor: pointer;
-transition: .15s;
+transition: var(--btn-transition);
 display: inline-flex;
 align-items: center;
 gap: 6px;
@@ -2299,32 +2288,33 @@ gap: 6px;
 flex: 1;
 word-break: break-word;
 }
-.btn-edit-nome {
+/* Ícone de editar (✎) inline, revela no hover do wrap, some durante a
+   edição — .nome é o endereço reformatado (20px); .orig (endereço original
+   / membro do grupo, 18px) reusa a mesma base logo abaixo. */
+.btn-edit-inline {
 flex-shrink: 0;
-width: 20px;
-height: 20px;
 border-radius: 5px;
 border: 1px solid var(--border);
 background: var(--surface2);
 color: var(--muted);
-font-size: 11px;
 line-height: 1;
 cursor: pointer;
 display: flex;
 align-items: center;
 justify-content: center;
-transition: .15s;
+transition: var(--btn-transition);
 opacity: 0;
 }
-.td-addr-reformado-wrap:hover .btn-edit-nome {
-opacity: 1;
-}
-.btn-edit-nome:hover {
+.btn-edit-inline:hover {
 background: var(--accent2);
 color: #fff;
 border-color: var(--accent2);
 }
-.td-addr-reformado-wrap.editing .btn-edit-nome { display: none; }
+.btn-edit-inline.nome { width: 20px; height: 20px; font-size: 11px; }
+.td-addr-reformado-wrap:hover .btn-edit-inline.nome {
+opacity: 1;
+}
+.td-addr-reformado-wrap.editing .btn-edit-inline.nome { display: none; }
 .input-nome-endereco {
 flex: 1;
 font-size: 14px;
@@ -2336,7 +2326,10 @@ border-radius: 6px;
 padding: 4px 8px;
 min-width: 0;
 }
-.btn-nome-ok, .btn-nome-cancel {
+/* Confirmar/cancelar uma edição inline — compartilhado entre o rename de
+   endereço na tabela e a revisão de exportação (que usa .export-review-item-btn
+   só como modificador de tamanho, 28px em vez de 22px). */
+.row-confirm-btn {
 flex-shrink: 0;
 width: 22px;
 height: 22px;
@@ -2349,18 +2342,18 @@ display: flex;
 align-items: center;
 justify-content: center;
 }
-.btn-nome-ok {
+.row-confirm-btn.ok {
 background: rgba(34,197,94,.15);
 color: #22c55e;
 border-color: rgba(34,197,94,.4);
 }
-.btn-nome-ok:hover { background: #22c55e; color: #fff; }
-.btn-nome-cancel {
+.row-confirm-btn.ok:hover { background: #22c55e; color: #fff; }
+.row-confirm-btn.cancel {
 background: rgba(239,68,68,.12);
 color: #ef4444;
 border-color: rgba(239,68,68,.4);
 }
-.btn-nome-cancel:hover { background: #ef4444; color: #fff; }
+.row-confirm-btn.cancel:hover { background: #ef4444; color: #fff; }
 .badge-nome-editado {
 display: inline-flex;
 align-items: center;
@@ -2493,34 +2486,13 @@ min-width: 0;
 .membro-orig-wrap .membro-orig {
 flex: 1;
 }
-.btn-edit-orig {
-flex-shrink: 0;
-width: 18px;
-height: 18px;
-border-radius: 5px;
-border: 1px solid var(--border);
-background: var(--surface2);
-color: var(--muted);
-font-size: 10px;
-line-height: 1;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-transition: .15s;
-opacity: 0;
-}
-.membro-orig-wrap:hover .btn-edit-orig,
-.td-addr-original-wrap:hover .btn-edit-orig {
+.btn-edit-inline.orig { width: 18px; height: 18px; font-size: 10px; }
+.membro-orig-wrap:hover .btn-edit-inline.orig,
+.td-addr-original-wrap:hover .btn-edit-inline.orig {
 opacity: 1;
 }
-.btn-edit-orig:hover {
-background: var(--accent2);
-color: #fff;
-border-color: var(--accent2);
-}
-.membro-orig-wrap.editing .btn-edit-orig,
-.td-addr-original-wrap.editing .btn-edit-orig {
+.membro-orig-wrap.editing .btn-edit-inline.orig,
+.td-addr-original-wrap.editing .btn-edit-inline.orig {
 display: none;
 }
 .input-original-endereco {
@@ -2545,7 +2517,7 @@ text-decoration: none;
 cursor: pointer;
 border-radius: 5px;
 padding: 1px 5px;
-transition: .15s;
+transition: var(--btn-transition);
 }
 .membro-contato:hover {
 background: rgba(34,197,94,.14);
@@ -2566,7 +2538,7 @@ cursor: pointer;
 display: flex;
 align-items: center;
 justify-content: center;
-transition: .15s;
+transition: var(--btn-transition);
 }
 .btn-ungroup:hover {
 background: #ef4444;
@@ -2675,7 +2647,7 @@ cursor: pointer;
 display: inline-flex;
 align-items: center;
 justify-content: center;
-transition: .15s;
+transition: var(--btn-transition);
 flex-shrink: 0;
 }
 .btn-map:hover {
@@ -2924,41 +2896,52 @@ td.td-coord::before { content: '📍 '; }
   .td-check input, .check-all-mobile input { width: 22px; height: 22px; }
   .check-all-mobile { font-size: 13px; }
 
-  /* Botão do mapa com área de toque mais confortável */
-  .btn-map { width: 40px; height: 40px; font-size: 17px; }
+  /* Botão do mapa: 44px de área de toque (WCAG 2.5.5) */
+  .btn-map { width: 44px; height: 44px; font-size: 17px; }
   td.td-action { top: 8px; right: 8px; }
 
+  /* Botão do menu mobile (hamburguer): 44px de área de toque */
+  #btn-mobile-menu { width: 44px; height: 44px; }
+
   /* Botões "Histórico / Banco / Admin" no header: quadrados e com toque confortável */
-  .btn-hist { min-width: 38px; min-height: 38px; justify-content: center; padding: 8px 10px; }
+  .btn-hist { min-width: 44px; min-height: 44px; justify-content: center; padding: 8px 10px; }
 
   /* Botões da barra de ferramentas: altura mínima confortável para o dedo */
-  .toolbar .btn { min-height: 42px; }
+  .toolbar .btn { min-height: 44px; }
 
-  /* Botões de fechar painéis laterais (histórico, banco, admin, assinatura) */
-  #hist-header .close-btn,
-  #banco-header .close-btn,
-  #admin-header .close-btn,
-  #assinatura-header .close-btn {
-    min-width: 40px; min-height: 40px;
+  /* Botão de fechar (✕ de texto): 44px pra qualquer painel, já cobre
+     histórico/banco/admin/assinatura/scan/extração/anjun de uma vez */
+  .close-btn {
+    min-width: 44px; min-height: 44px;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 22px;
   }
-  #export-modal-header .close-btn { width: 38px; height: 38px; }
+  #export-modal-header .close-btn { width: 44px; height: 44px; }
+
+  /* Botões de fechar mapa / ficha da parada / perfil: mesma área de 44px, ícone (svg) inalterado */
+  #mapa-header .close-btn,
+  #parada-sheet .sheet-close,
+  .profile-modal-close {
+    width: 44px; height: 44px;
+  }
 
   /* Botões de remover (banco/histórico): área de toque maior, visual igual */
   .banco-del, .hist-del {
     top: 2px; right: 2px;
-    width: 34px; height: 34px;
+    width: 44px; height: 44px;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 16px;
     opacity: .7;
   }
 
+  /* Botão de desagrupar endereço: ícone continua pequeno (linha de tabela é densa), só a área de toque cresce */
+  .btn-ungroup { padding: 13px; margin: -13px; }
+
   /* Toggle de mostrar/ocultar senha: área de toque maior sem mudar o visual */
   .toggle-pass { padding: 12px; margin: -12px; }
 
   /* Ações dentro do painel de admin: botões mais altos */
-  .admin-item-actions button { padding: 10px 8px; min-height: 38px; }
+  .admin-item-actions button { padding: 10px 8px; min-height: 44px; }
   .admin-novo-toggle { padding: 10px 2px; }
 
   /* Botão de sair (logout) com mais espaço para o toque */
@@ -3055,7 +3038,7 @@ text-transform: uppercase;
 cursor: pointer;
 background: transparent;
 color: var(--muted);
-transition: .15s;
+transition: var(--btn-transition);
 }
 .login-tab.active {
 background: var(--surface);
@@ -3122,7 +3105,7 @@ color: #1a1205;
 font-size: 13px;
 font-weight: 800;
 cursor: pointer;
-transition: .15s;
+transition: var(--btn-transition);
 margin-top: 6px;
 letter-spacing: .07em;
 text-transform: uppercase;
@@ -3290,7 +3273,7 @@ display: flex; align-items: center;
   color: var(--muted);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: .15s;
+  transition: var(--btn-transition);
 }
 .profile-modal-close:hover { color: var(--text); background: var(--surface2); }
 .profile-modal-close svg { width: 16px; height: 16px; }
@@ -3489,7 +3472,7 @@ display: flex; align-items: center;
   font-weight: 700;
   padding: 10px 14px;
   cursor: pointer;
-  transition: .15s;
+  transition: var(--btn-transition);
   width: 100%;
   text-align: center;
 }
@@ -4365,7 +4348,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 <!-- Modal de Perfil -->
 <div class="profile-modal-overlay" id="profile-modal-overlay" onclick="fecharProfileModal(event)">
-  <div class="profile-modal" role="dialog" aria-modal="true">
+  <div class="profile-modal" id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title-text">
     <div class="profile-modal-topbar">
       <span class="profile-modal-title" id="profile-modal-title-text">Meu Perfil</span>
       <button class="profile-modal-close" onclick="fecharProfileDropdown()" aria-label="Fechar">
@@ -4483,7 +4466,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 <!-- Mapa de fundo com exemplo de rota (4 paradas) + card de upload sobreposto -->
 <div class="map-hero">
-<img class="map-hero-img" alt="Mapa de exemplo de rota" src="https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/path-4+6c63ff-0.85(-49.2648,-16.6799,-49.2500,-16.6900,-49.2400,-16.7050,-49.2300,-16.7200),pin-l-1+2bb583(-49.2648,-16.6799),pin-l-2+6c63ff(-49.2500,-16.6900),pin-l-3+6c63ff(-49.2400,-16.7050),pin-l-4+f5a623(-49.2300,-16.7200)/-49.2474,-16.6950,13,0,0/1000x520@2x?access_token=pk.eyJ1IjoibW9pc2Vzc2VuanVpem8iLCJhIjoiY21xOHRzOXZyMDFidTJyb2x0Zml5a2FxNyJ9.EHf8W94vDiim9_EDVGlP1g">
+<img class="map-hero-img" id="map-hero-img" alt="Mapa de exemplo de rota">
 <div class="map-hero-label">
 <span class="eyebrow">Roteirizador inteligente</span>
 <span class="headline">Manda suas paradas.</span>
@@ -5185,7 +5168,7 @@ membrosHtml = `<div class="membros-list">` + membros.map((m, mi) => `
          ${m.stop ? `<span class="membro-stop">Seq ${escHtml(m.stop)}</span>` : ''}
          <span class="membro-orig-wrap" data-cid="${row._cid}" data-mi="${mi}">
            <span class="membro-orig">${escHtml(m.original)}</span>
-           <button type="button" class="btn-edit-orig" title="Editar este endereço">✎</button>
+           <button type="button" class="btn-edit-inline orig" title="Editar este endereço">✎</button>
          </span>
          ${contatoHtml(m.contato)}
          <button class="btn-ungroup" data-cid="${row._cid}" data-mi="${mi}" title="Tirar este endereço do grupo">✕</button>
@@ -5197,7 +5180,7 @@ const contatoUnico = contatoHtml(membros[0] ? membros[0].contato : row.contato);
 if (completo && completo.toUpperCase() !== endReformado.toUpperCase()) {
 membrosHtml = `<div class="td-addr-original-wrap" data-cid="${row._cid}" data-mi="0">
     <span class="td-addr-original">${escHtml(completo)}</span>
-    <button type="button" class="btn-edit-orig" title="Editar este endereço">✎</button>
+    <button type="button" class="btn-edit-inline orig" title="Editar este endereço">✎</button>
   </div>`;
 }
 if (contatoUnico) {
@@ -5268,7 +5251,7 @@ tr.insertAdjacentHTML('beforeend', `
        <td class="td-addr">
          <div class="td-addr-reformado-wrap" data-cid="${row._cid}">
            <span class="td-addr-reformado">${escHtml(endReformado)}</span>
-           <button type="button" class="btn-edit-nome" title="Editar nome do endereço">✎</button>
+           <button type="button" class="btn-edit-inline nome" title="Editar nome do endereço">✎</button>
          </div>
          ${hereBadgeHtml}${confiancaBadgeHtml}${correlacaoBadgeHtml}${editouAgoraBadgeHtml}${nomeEditadoBadgeHtml}
          ${membrosHtml}
@@ -5298,8 +5281,8 @@ const atual = row.group_label || standardize(row.address) || row.address || '';
 wrap.classList.add('editing');
 wrap.innerHTML = `
     <input type="text" class="input-nome-endereco" value="${escHtml(atual)}">
-    <button type="button" class="btn-nome-ok" title="Salvar">✓</button>
-    <button type="button" class="btn-nome-cancel" title="Cancelar">✕</button>
+    <button type="button" class="row-confirm-btn ok" title="Salvar">✓</button>
+    <button type="button" class="row-confirm-btn cancel" title="Cancelar">✕</button>
   `;
 const input = wrap.querySelector('.input-nome-endereco');
 input.focus();
@@ -5343,8 +5326,8 @@ const atual = row.membros[mi].original || '';
 wrap.classList.add('editing');
 wrap.innerHTML = `
     <input type="text" class="input-original-endereco" value="${escHtml(atual)}">
-    <button type="button" class="btn-nome-ok" title="Salvar">✓</button>
-    <button type="button" class="btn-nome-cancel" title="Cancelar">✕</button>
+    <button type="button" class="row-confirm-btn ok" title="Salvar">✓</button>
+    <button type="button" class="row-confirm-btn cancel" title="Cancelar">✕</button>
   `;
 const input = wrap.querySelector('.input-original-endereco');
 input.focus();
@@ -5379,17 +5362,17 @@ autoSaveDraft();
 // ou do endereço original, e os botões ✓/✕ salvam/cancelam qualquer um
 // dos dois modos (identificados pelo tipo do wrap mais próximo).
 document.getElementById('table-body').addEventListener('click', (e) => {
-const btnEditNome = e.target.closest('.btn-edit-nome');
+const btnEditNome = e.target.closest('.btn-edit-inline.nome');
 if (btnEditNome) {
 entrarEdicaoNomeEndereco(btnEditNome.closest('.td-addr-reformado-wrap'));
 return;
 }
-const btnEditOrig = e.target.closest('.btn-edit-orig');
+const btnEditOrig = e.target.closest('.btn-edit-inline.orig');
 if (btnEditOrig) {
 entrarEdicaoOriginal(btnEditOrig.closest('.membro-orig-wrap') || btnEditOrig.closest('.td-addr-original-wrap'));
 return;
 }
-const btnOk = e.target.closest('.btn-nome-ok');
+const btnOk = e.target.closest('.row-confirm-btn.ok');
 if (btnOk) {
 const wrapNome = btnOk.closest('.td-addr-reformado-wrap');
 if (wrapNome) {
@@ -5404,7 +5387,7 @@ if (input) salvarOriginalEndereco(wrapOrig.dataset.cid, parseInt(wrapOrig.datase
 }
 return;
 }
-const btnCancel = e.target.closest('.btn-nome-cancel');
+const btnCancel = e.target.closest('.row-confirm-btn.cancel');
 if (btnCancel) {
 cancelarEdicaoNomeEndereco();
 return;
@@ -5756,17 +5739,27 @@ const p = coord.split(',');
 return parseFloat(p[1]) || -49.2925;
 })();
 
-const HERE_KEY = 'P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M';
-const html = getMapHtml(HERE_KEY, lat, lng, endReformado, endOriginal, rowIdx);
-
+// window.open PRECISA rodar antes de qualquer await, senão o navegador não
+// reconhece mais isso como resposta direta ao clique e bloqueia o popup.
 const win = window.open('', '_blank', 'width=1280,height=860');
 if (!win) { alert('Permita pop-ups para este site e tente novamente.'); return; }
+
+let cfg;
+try {
+  cfg = await carregarConfigMapas();
+} catch (e) {
+  win.close();
+  alert('Não foi possível carregar as chaves de mapa. Faça login novamente.');
+  return;
+}
+
+const html = getMapHtml(cfg.hereApiKey, cfg.googleMapsKey, cfg.mapboxToken, lat, lng, endReformado, endOriginal, rowIdx);
 win.document.open();
 win.document.write(html);
 win.document.close();
 }
 
-function getMapHtml(hereKey, initLat, initLng, endReformado, endOriginal, rowIdx) {
+function getMapHtml(hereKey, googleKey, mapboxToken, initLat, initLng, endReformado, endOriginal, rowIdx) {
 return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -5780,106 +5773,129 @@ return `<!DOCTYPE html>
 <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css"/>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"><\/script>
 <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
+:root {
+  --bg: #0a0c16;
+  --surface: #12152a;
+  --surface2: #161a33;
+  --border: #262b4a;
+  --accent: #f5a623;
+  --accent2: #6c63ff;
+  --green: #2bb583;
+  --text: #e7e9f5;
+  --muted: #8d93ad;
+  --danger: #e35c84;
+  --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', Consolas, monospace;
+  --radius-xs: 3px;
+  --radius-md: 8px;
+  --btn-transition: background .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s, filter .15s, transform .15s;
+  --shadow-md: 0 8px 24px rgba(0,0,0,.5);
+}
 * { margin:0; padding:0; box-sizing:border-box; }
-body { display:flex; flex-direction:column; height:100vh; background:#0b1120; font-family:Arial,sans-serif; overflow:hidden; }
+body { display:flex; flex-direction:column; height:100vh; background:var(--bg); color:var(--text); font-family:var(--font); overflow:hidden; }
 #top-bar {
  display:flex; flex-direction:column; justify-content:center; gap:3px;
  padding:7px 18px; min-height:50px;
- background:#111827; border-bottom:2px solid #f59e0b;
+ background:var(--surface); border-bottom:2px solid var(--accent);
  box-shadow:0 2px 12px rgba(0,0,0,.5);
 }
 #top-bar .row1 { display:flex; align-items:center; gap:12px; }
 #top-bar .pin { font-size:20px; }
-#top-bar .lbl { color:#f59e0b; font-size:11px; font-weight:bold; letter-spacing:.08em; white-space:nowrap; }
-#top-bar .addr { color:#fff; font-size:14px; font-weight:bold; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
-#top-bar .orig { color:#94a3b8; font-size:12px; padding-left:32px; line-height:1.35; white-space:normal; word-break:break-word; cursor:pointer; }
+#top-bar .lbl { color:var(--accent); font-size:11px; font-weight:700; letter-spacing:.08em; white-space:nowrap; }
+#top-bar .addr { color:var(--text); font-size:14px; font-weight:700; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+#top-bar .orig { color:var(--muted); font-size:12px; padding-left:32px; line-height:1.35; white-space:normal; word-break:break-word; cursor:pointer; }
 #top-bar .addr:active, #top-bar .orig:active { opacity:.6; }
-#top-bar .addr.copiado, #top-bar .orig.copiado { color:#4ade80 !important; }
+#top-bar .addr.copiado, #top-bar .orig.copiado { color:var(--green) !important; }
 #coord-bar {
  display:flex; align-items:center; gap:10px;
  padding:0 18px; height:42px; min-height:42px;
- background:#1e2d3d; border-bottom:1px solid #1e3a5f;
+ background:var(--surface2); border-bottom:1px solid var(--border);
 }
-#coord-display { flex:1; color:#64748b; font-size:13px; font-family:monospace; }
-#coord-display span { color:#60a5fa; font-weight:bold; }
-.btn { padding:7px 18px; border:none; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; transition:.15s; }
-#btn-copy { background:#1e3a5f; color:#60a5fa; }
-#btn-copy:hover { background:#2563eb; color:#fff; }
-#btn-confirm { background:#16a34a; color:#fff; padding:7px 22px; }
-#btn-confirm:hover { background:#15803d; }
-#btn-confirm.flash { background:#86efac; color:#14532d; }
-#google-status { font-size:11px; color:#64748b; font-family:monospace; background:#0b1120; border:1px solid #1e3a5f; border-radius:4px; padding:3px 10px; display:none; }
-#google-status.show { display:block; }
-#google-status span { color:#22c55e; font-weight:bold; }
-#btn-confirm { background:#16a34a; color:#fff; font-size:13px; padding:7px 22px; }
-#btn-confirm:hover { background:#15803d; }
+#coord-display { flex:1; color:var(--muted); font-size:13px; font-family:var(--mono); }
+#coord-display span { color:var(--accent2); font-weight:700; }
+.btn {
+ padding:7px 18px; border:none; border-radius:var(--radius-xs);
+ font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+ cursor:pointer; transition:var(--btn-transition);
+ box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(0,0,0,.4);
+}
+.btn:active { transform: translateY(1px); }
+#btn-copy { background:var(--surface2); color:var(--accent2); border:1px solid var(--border); }
+#btn-copy:hover { background:var(--border); color:var(--text); }
+#btn-confirm { background:var(--green); color:#06120c; font-size:13px; padding:7px 22px; }
+#btn-confirm:hover { filter:brightness(1.12); }
 #btn-confirm.flash { background:#86efac; color:#14532d; }
 #google-status {
- font-size:11px; color:#64748b; font-family:monospace;
- background:#0b1120; border:1px solid #1e3a5f; border-radius:4px;
+ font-size:11px; color:var(--muted); font-family:var(--mono);
+ background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-xs);
  padding:3px 10px; display:none;
 }
 #google-status.show { display:block; }
-#google-status span { color:#22c55e; font-weight:bold; }
+#google-status span { color:var(--green); font-weight:700; }
 #search-bar {
  display:flex; align-items:center; gap:8px;
- padding:8px 18px; background:#1e2d3d;
- border-bottom:1px solid #1e3a5f;
+ padding:8px 18px; background:var(--surface2);
+ border-bottom:1px solid var(--border);
 }
 #search-wrap {
  display:flex; flex:1; align-items:center; gap:6px;
- background:#0b1120; border:1px solid #1e3a5f; border-radius:8px;
+ background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-md);
  padding:0 10px; height:34px; position:relative;
+ transition: border-color .15s;
 }
-#search-wrap:focus-within { border-color:#60a5fa; }
-#search-input { flex:1; background:none; border:none; outline:none; color:#fff; font-size:13px; }
-#search-input::placeholder { color:#475569; }
+#search-wrap:focus-within { border-color:var(--accent2); }
+#search-input { flex:1; background:none; border:none; outline:none; color:var(--text); font-size:13px; font-family:var(--font); }
+#search-input::placeholder { color:var(--muted); }
 #btn-clear-search {
  display:none; align-items:center; justify-content:center;
  width:20px; height:20px; flex-shrink:0; padding:0;
- background:#1e3a5f; border:none; border-radius:50%;
- color:#94a3b8; font-size:12px; line-height:1; cursor:pointer;
+ background:var(--border); border:none; border-radius:50%;
+ color:var(--muted); font-size:12px; line-height:1; cursor:pointer;
+ transition:var(--btn-transition);
 }
 #btn-clear-search.show { display:flex; }
-#btn-clear-search:hover { background:#2c4a6e; color:#fff; }
-#btn-search { background:#2563eb; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:12px; font-weight:bold; cursor:pointer; }
-#btn-search:hover { background:#1d4ed8; }
+#btn-clear-search:hover { background:var(--accent2); color:#fff; }
+#btn-search { background:var(--accent2); color:#fff; border:none; border-radius:var(--radius-xs); padding:6px 14px; font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; transition:var(--btn-transition); }
+#btn-search:hover { filter:brightness(1.15); }
 #suggestions {
- position:absolute; z-index:1000; background:#1e2d3d; border:1px solid #1e3a5f; border-radius:8px;
- max-height:220px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.5);
+ position:absolute; z-index:1000; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-md);
+ max-height:220px; overflow-y:auto; box-shadow:var(--shadow-md);
  display:none; top:100%; left:0; right:0;
 }
-.sugg-item { padding:9px 14px; cursor:pointer; border-bottom:1px solid #1e3a5f; color:#e2e8f0; font-size:12px; }
+.sugg-item { padding:9px 14px; cursor:pointer; border-bottom:1px solid var(--border); color:var(--text); font-size:12px; }
 .sugg-item:last-child { border-bottom:none; }
-.sugg-item:hover { background:#1e3a5f; }
+.sugg-item:hover { background:var(--border); }
 .sugg-title-row { display:flex; align-items:center; gap:6px; }
-.sugg-title { font-weight:bold; }
-.sugg-addr { color:#64748b; font-size:11px; }
-.sugg-src { font-size:9px; font-weight:bold; letter-spacing:.04em; padding:1px 6px; border-radius:4px; text-transform:uppercase; flex-shrink:0; }
-.sugg-src-here   { background:#3b1a00; color:#f59e0b; }
-.sugg-src-mapbox { background:#001615; color:#14b8a6; }
-.sugg-src-google { background:#0a2a12; color:#22c55e; }
+.sugg-title { font-weight:700; }
+.sugg-addr { color:var(--muted); font-size:11px; }
+.sugg-src { font-size:9px; font-weight:700; letter-spacing:.04em; padding:1px 6px; border-radius:4px; text-transform:uppercase; flex-shrink:0; }
+.sugg-src-here   { background:color-mix(in srgb, var(--accent) 18%, var(--bg)); color:var(--accent); }
+.sugg-src-mapbox { background:color-mix(in srgb, var(--accent2) 18%, var(--bg)); color:var(--accent2); }
+.sugg-src-google { background:color-mix(in srgb, var(--green) 18%, var(--bg)); color:var(--green); }
 #map-toggle-bar {
  display:flex; align-items:center; gap:6px;
  padding:0 18px; height:36px; min-height:36px;
- background:#1e2d3d; border-bottom:1px solid #1e3a5f;
+ background:var(--surface2); border-bottom:1px solid var(--border);
 }
-.tgl-lbl { color:#64748b; font-size:11px; font-weight:bold; letter-spacing:.07em; margin-right:4px; }
-.tgl-btn { padding:5px 16px; border:2px solid transparent; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; transition:.15s; background:#0b1120; color:#64748b; }
-.tgl-btn.active-here  { border-color:#f59e0b; color:#f59e0b; background:#1a1200; }
-.tgl-btn.active-google { border-color:#22c55e; color:#22c55e; background:#001a0e; }
-.tgl-btn.active-terceiros { border-color:#14b8a6; color:#14b8a6; background:#001615; }
+.tgl-lbl { color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.07em; margin-right:4px; }
+.tgl-btn { padding:5px 16px; border:2px solid transparent; border-radius:var(--radius-xs); font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; transition:var(--btn-transition); background:var(--bg); color:var(--muted); }
+.tgl-btn.active-here  { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.tgl-btn.active-google { border-color:var(--accent2); color:var(--accent2); background:color-mix(in srgb, var(--accent2) 12%, var(--bg)); }
+.tgl-btn.active-terceiros { border-color:var(--accent2); color:var(--accent2); background:color-mix(in srgb, var(--accent2) 12%, var(--bg)); }
 #maps-container { flex:1; display:flex; min-height:0; }
 #map-here-wrap, #map-google-wrap, #map-terceiros-wrap { flex:1; display:flex; flex-direction:column; min-width:0; }
 #map-terceiros-wrap { position:relative; }
-#map-google-wrap { border-right:2px solid #1e3a5f; }
-.map-label { height:24px; min-height:24px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:bold; letter-spacing:.07em; background:#0b1120; border-bottom:1px solid #111827; }
-#lbl-here { color:#f59e0b; }
-#lbl-google { color:#22c55e; }
+#map-google-wrap { border-right:2px solid var(--border); }
+.map-label { height:24px; min-height:24px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.07em; background:var(--bg); border-bottom:1px solid var(--surface); }
+#lbl-here { color:var(--accent); }
+#lbl-google { color:var(--green); }
 #lbl-terceiros {
  display:none; /* escondido por enquanto — reativar removendo essa linha */
- color:#14b8a6;
+ color:var(--accent2);
 }
 #lote-search-bar {
  display:none; /* escondido por enquanto — reativar removendo essa linha */
@@ -5888,53 +5904,53 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 }
 #lote-search-bar > input, #lote-search-bar > button { pointer-events:auto; }
 #lote-search-input {
- background:#0b1120ee; border:1px solid #14b8a6; border-radius:8px 0 0 8px;
- color:#fff; font-size:13px; padding:0 10px; height:34px; flex:1; outline:none;
+ background:color-mix(in srgb, var(--bg) 93%, transparent); border:1px solid var(--accent2); border-radius:var(--radius-md) 0 0 var(--radius-md);
+ color:var(--text); font-size:13px; padding:0 10px; height:34px; flex:1; outline:none;
  box-shadow:0 4px 14px rgba(0,0,0,.4);
 }
-#lote-search-input::placeholder { color:#64748b; }
+#lote-search-input::placeholder { color:var(--muted); }
 #lote-search-bar { flex-direction:row; }
 #btn-lote-search {
- background:#0f766e; color:#fff; border:none; border-radius:0 8px 8px 0;
- padding:0 14px; height:34px; font-size:12px; font-weight:bold; cursor:pointer;
+ background:var(--accent2); color:#fff; border:none; border-radius:0 var(--radius-md) var(--radius-md) 0;
+ padding:0 14px; height:34px; font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; transition:var(--btn-transition);
 }
-#btn-lote-search:hover { background:#0d9488; }
+#btn-lote-search:hover { filter:brightness(1.15); }
 #btn-lote-salvar-posicao {
  display:none; /* escondido por enquanto — reativar removendo essa linha */
- background:#7c3aed; color:#fff; border:none; border-radius:0 8px 8px 0;
- padding:0 10px; height:34px; font-size:11px; font-weight:bold; cursor:pointer; white-space:nowrap;
+ background:var(--accent2); color:#fff; border:none; border-radius:0 var(--radius-md) var(--radius-md) 0;
+ padding:0 10px; height:34px; font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; cursor:pointer; white-space:nowrap; transition:var(--btn-transition);
 }
-#btn-lote-salvar-posicao:hover { background:#6d28d9; }
-#btn-lote-salvar-posicao:disabled { opacity:.7; cursor:default; }
+#btn-lote-salvar-posicao:hover { filter:brightness(1.15); }
+#btn-lote-salvar-posicao:disabled { opacity:.7; cursor:default; filter:none; }
 #lote-search-resultados {
  position:absolute; top:38px; left:0; right:0; pointer-events:auto;
- background:#0b1120ee; border:1px solid #1e3a5f; border-radius:8px;
- max-height:220px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.5);
+ background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-md);
+ max-height:220px; overflow-y:auto; box-shadow:var(--shadow-md);
  display:none;
 }
 #lote-search-resultados.show { display:block; }
-.lote-result-item { padding:9px 12px; cursor:pointer; border-bottom:1px solid #1e3a5f; color:#e2e8f0; font-size:12px; }
+.lote-result-item { padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--border); color:var(--text); font-size:12px; }
 .lote-result-item:last-child { border-bottom:none; }
-.lote-result-item:hover { background:#1e3a5f; }
-.lote-result-sub { color:#64748b; font-size:11px; }
-.lote-result-item b { color:#5eead4; }
-.lote-result-empty, .lote-result-erro { padding:10px 12px; font-size:12px; color:#64748b; }
-.lote-result-erro { color:#f87171; }
+.lote-result-item:hover { background:var(--border); }
+.lote-result-sub { color:var(--muted); font-size:11px; }
+.lote-result-item b { color:var(--accent2); }
+.lote-result-empty, .lote-result-erro { padding:10px 12px; font-size:12px; color:var(--muted); }
+.lote-result-erro { color:var(--danger); }
 #lote-result-filtro {
  display:block; width:100%; box-sizing:border-box;
- background:#0f172a; border:none; border-bottom:1px solid #1e3a5f;
- color:#5eead4; font-size:12px; padding:8px 12px; outline:none;
+ background:var(--bg); border:none; border-bottom:1px solid var(--border);
+ color:var(--accent2); font-size:12px; padding:8px 12px; outline:none; font-family:var(--font);
 }
-#lote-result-filtro::placeholder { color:#475569; }
+#lote-result-filtro::placeholder { color:var(--muted); }
 #lote-result-lista { max-height:180px; overflow-y:auto; }
 @keyframes loteHighlightPulse {
- 0%   { box-shadow:0 0 0 0 rgba(20,184,166,.5); }
- 100% { box-shadow:0 0 0 14px rgba(20,184,166,0); }
+ 0%   { box-shadow:0 0 0 0 rgba(108,99,255,.5); }
+ 100% { box-shadow:0 0 0 14px rgba(108,99,255,0); }
 }
 .dot { width:7px; height:7px; border-radius:50%; }
-#lbl-here .dot { background:#f59e0b; }
-#lbl-google .dot { background:#22c55e; }
-#lbl-terceiros .dot { background:#14b8a6; }
+#lbl-here .dot { background:var(--accent); }
+#lbl-google .dot { background:var(--green); }
+#lbl-terceiros .dot { background:var(--accent2); }
 #map-here { flex:1; min-height:0; }
 #google-map { flex:1; min-height:0; width:100%; }
 #terceiros-map { flex:1; min-height:0; width:100%; }
@@ -5943,11 +5959,13 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
    mas escondido visualmente — display:none quebra a renderização do HERE JS,
    então usamos position:absolute fora da tela em vez disso. */
 .here-hidden { position:absolute !important; width:1px !important; height:1px !important; overflow:hidden !important; left:-9999px !important; top:-9999px !important; }
-#status-bar { height:26px; min-height:26px; background:#0b1120; display:flex; align-items:center; padding:0 18px; color:#475569; font-size:11px; border-top:1px solid #111827; }
+#status-bar { height:26px; min-height:26px; background:var(--bg); display:flex; align-items:center; padding:0 18px; color:var(--muted); font-size:11px; border-top:1px solid var(--surface); }
 
-/* Popup do Mapbox com info do lote (quadra/lote da prefeitura) */
-.lote-popup { font-family:Arial,sans-serif; font-size:12px; line-height:1.5; color:#1e293b; }
-.lote-popup b { color:#7c3aed; }
+/* Popup do Mapbox com info do lote (quadra/lote da prefeitura) — o balão em
+   si é renderizado pelo Mapbox GL com fundo branco fixo, então o texto usa
+   uma cor escura literal (não os tokens do tema escuro) pra manter contraste. */
+.lote-popup { font-family:var(--font); font-size:12px; line-height:1.5; color:#1e293b; }
+.lote-popup b { color:var(--accent2); }
 
 /* ── Responsivo mobile (mapa popup) ── */
 @media (max-width: 640px) {
@@ -5964,7 +5982,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 
  /* Mapas empilhados (em vez de lado a lado, ilegíveis no celular) */
  #maps-container { flex-direction: column; }
- #map-google-wrap { border-right: none; border-bottom: 2px solid #1e3a5f; }
+ #map-google-wrap { border-right: none; border-bottom: 2px solid var(--border); }
  #map-google-wrap, #map-terceiros-wrap { flex: 1 1 50%; min-height: 0; }
 }
 </style>
@@ -5991,7 +6009,7 @@ body { display:flex; flex-direction:column; height:100vh; background:#0b1120; fo
 
 <div id="search-bar">
  <div id="search-wrap">
-   <span style="color:#60a5fa;font-size:13px" id="search-icon">🔍</span>
+   <span style="color:var(--accent2);font-size:13px" id="search-icon">🔍</span>
    <input id="search-input" type="text" placeholder="Buscar endereço ou lat,lng... (HERE)"/>
    <button id="btn-clear-search" type="button" title="Limpar busca" aria-label="Limpar busca">✕</button>
    <div id="suggestions"></div>
@@ -6130,7 +6148,7 @@ hereMap.addEventListener('tap', e => {
 
 // ── Google Maps iframe ────────────────────────────────────────────────
 // ── Google Maps JavaScript API ───────────────────────────────────────
-const GKEY = 'AIzaSyAaESp78MrYmySlHiupJKjjgCi0-1dfWnE';
+const GKEY = '${googleKey}';
 let googleMap = null;
 let googleMarker = null;
 let googlePlaceInfoWindow = null;   // balão com nome/endereço do local clicado
@@ -6319,7 +6337,7 @@ function updateGoogle(lat, lng) {
 //  MAPA 3 — LOTES (Goiânia / Aparecida de Goiânia / Senador Canedo)
 // ════════════════════════════════════════════════════════════════════════
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoibW9pc2Vzc2VuanVpem8iLCJhIjoiY21xOHRzOXZyMDFidTJyb2x0Zml5a2FxNyJ9.EHf8W94vDiim9_EDVGlP1g';
+const MAPBOX_TOKEN = '${mapboxToken}';
 
 // ════════════════════════════════════════════════════════════════════════
 //  MAPA 4 — LOTES (Aparecida de Goiânia / Senador Canedo) via Mapbox GL JS
@@ -6492,7 +6510,7 @@ function _irParaLote(lat, lon, rotulo) {
  terceirosMap.flyTo({ center: [lon, lat], zoom: 18 });
  if (_loteHighlightMarker) _loteHighlightMarker.remove();
  const el = document.createElement('div');
- el.style.cssText = 'width:22px;height:22px;border-radius:50%;background:rgba(20,184,166,.35);border:3px solid #14b8a6;box-shadow:0 0 0 4px rgba(20,184,166,.2);animation:loteHighlightPulse 1.4s ease-out infinite;';
+ el.style.cssText = 'width:22px;height:22px;border-radius:50%;background:color-mix(in srgb, var(--accent2) 35%, transparent);border:3px solid var(--accent2);box-shadow:0 0 0 4px color-mix(in srgb, var(--accent2) 20%, transparent);animation:loteHighlightPulse 1.4s ease-out infinite;';
  _loteHighlightMarker = new mapboxgl.Marker({ element: el }).setLngLat([lon, lat]).addTo(terceirosMap);
  _fecharResultadosLote();
 }
@@ -6979,6 +6997,22 @@ const SERVER = '';
 let _serverOnline = false;
 let _temAcesso = true;   // assume acesso liberado até o servidor dizer o contrário
 
+// Chaves de HERE/Google/Mapbox vêm sempre do servidor (nunca hardcoded no
+// frontend) — buscadas uma vez e reaproveitadas por qualquer recurso que
+// precise delas (popup de correção, mapa de rotas, geocoding do scan/OCR).
+let _configMapasPromise = null;
+function carregarConfigMapas() {
+  if (_configMapasPromise) return _configMapasPromise;
+  _configMapasPromise = fetch(SERVER + '/api/config', { headers: authHeaders() })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) throw new Error(d.erro || 'Falha ao carregar configuração de mapas.');
+      return d;
+    })
+    .catch(err => { _configMapasPromise = null; throw err; });
+  return _configMapasPromise;
+}
+
 function aplicarVisibilidadeDropZone() {
   // Só decide a UI quando já existe rota carregada nenhuma e o drop-zone está em jogo.
   // mostrarRotaNoApp()/processarComServidor() escondem ambos os blocos quando há tabela.
@@ -7362,15 +7396,14 @@ alert('❌ Erro: ' + err.message);
 }
 }
 // ══════════════════════════════════════════════════════════
-const MAPA_ROTAS_TOKEN = 'pk.eyJ1IjoibW9pc2Vzc2VuanVpem8iLCJhIjoiY21xOHRzOXZyMDFidTJyb2x0Zml5a2FxNyJ9.EHf8W94vDiim9_EDVGlP1g';
 let _mapaRotasInstance = null;
 let _mapaRotasMarkers  = [];
 
-function abrirMapaRotas() {
+async function abrirMapaRotas() {
   if (!_allRows.length) { alert('Nenhum endereço carregado para mostrar no mapa.'); return; }
   document.getElementById('mapa-overlay').classList.add('show');
   if (!_mapaRotasInstance) {
-    initMapaRotas();
+    await initMapaRotas();
   } else {
     renderMapaRotas();
     setTimeout(() => _mapaRotasInstance.resize(), 60);
@@ -7382,8 +7415,16 @@ function fecharMapaRotas() {
   fecharParadaSheet();
 }
 
-function initMapaRotas() {
-  mapboxgl.accessToken = MAPA_ROTAS_TOKEN;
+async function initMapaRotas() {
+  let cfg;
+  try {
+    cfg = await carregarConfigMapas();
+  } catch (e) {
+    document.getElementById('mapa-overlay').classList.remove('show');
+    alert('Não foi possível carregar as chaves de mapa. Faça login novamente.');
+    return;
+  }
+  mapboxgl.accessToken = cfg.mapboxToken;
   _mapaRotasInstance = new mapboxgl.Map({
     container: 'mapa-rotas-map',
     style: 'mapbox://styles/mapbox/dark-v11',
@@ -7608,11 +7649,13 @@ function _abrirOverlayAnimado(overlayId, panelId, animEntrada) {
     panel.style.setProperty('--animate-duration', '.32s');
     panel.classList.add('animate__animated', animEntrada);
   }
+  _a11yAbrirModal(overlayId, panelId);
 }
 
 function _fecharOverlayAnimado(overlayId, panelId, animSaida) {
   const overlay = document.getElementById(overlayId);
   const panel   = panelId ? document.getElementById(panelId) : null;
+  _a11yFecharModal(overlayId, panelId);
   overlay.classList.remove('animate__fadeIn');
   overlay.classList.add('animate__animated', 'animate__fadeOut');
   if (panel) {
@@ -7624,6 +7667,66 @@ function _fecharOverlayAnimado(overlayId, panelId, animSaida) {
     overlay.classList.remove('show', 'animate__animated', 'animate__fadeIn', 'animate__fadeOut');
     if (panel) panel.classList.remove('animate__animated', animSaida);
   }, 230);
+}
+
+// ══════════════════════════════════════════════════════════
+//  ACESSIBILIDADE DE MODAIS — foco, teclado e ARIA compartilhados
+//  por todo overlay/painel lateral (histórico, banco, admin,
+//  assinatura, scan, extração, anjun, exportação, revisão de
+//  exportação, perfil). Corrigido uma vez aqui em vez de em cada
+//  abrir/fechar individual.
+// ══════════════════════════════════════════════════════════
+function _a11yAbrirModal(overlayId, panelId) {
+  const overlay = document.getElementById(overlayId);
+  const panel = document.getElementById(panelId);
+  if (!overlay || !panel) return;
+  overlay._a11yUltimoFoco = document.activeElement;
+  if (!panel.hasAttribute('role')) panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  if (!panel.hasAttribute('aria-labelledby')) {
+    const titulo = panel.querySelector('.title');
+    if (titulo) {
+      if (!titulo.id) titulo.id = panelId + '-title';
+      panel.setAttribute('aria-labelledby', titulo.id);
+    }
+  }
+  if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1');
+  panel.addEventListener('keydown', _a11yModalKeydown);
+  setTimeout(() => panel.focus(), 60);
+}
+
+function _a11yFecharModal(overlayId, panelId) {
+  const overlay = document.getElementById(overlayId);
+  const panel = document.getElementById(panelId);
+  if (panel) panel.removeEventListener('keydown', _a11yModalKeydown);
+  if (overlay && overlay._a11yUltimoFoco && overlay._a11yUltimoFoco.focus) {
+    overlay._a11yUltimoFoco.focus();
+  }
+  if (overlay) overlay._a11yUltimoFoco = null;
+}
+
+function _a11yModalKeydown(e) {
+  const panel = e.currentTarget;
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    const fecharBtn = panel.querySelector('.close-btn, .profile-modal-close');
+    if (fecharBtn) fecharBtn.click();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focaveis = panel.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  if (!focaveis.length) return;
+  const primeiro = focaveis[0];
+  const ultimo = focaveis[focaveis.length - 1];
+  if (e.shiftKey && document.activeElement === primeiro) {
+    e.preventDefault();
+    ultimo.focus();
+  } else if (!e.shiftKey && document.activeElement === ultimo) {
+    e.preventDefault();
+    primeiro.focus();
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -8200,8 +8303,25 @@ function _extrDedupe(entregas) {
 }
 
 // ── OCR (Tesseract.js) ──
+// Carregada sob demanda: só quem realmente usa a extração de prints paga o
+// custo desse script (Tesseract.js é pesado e a maioria das sessões nunca abre esse painel).
+let _tesseractLoadPromise = null;
+function _extrCarregarTesseract() {
+  if (window.Tesseract) return Promise.resolve();
+  if (_tesseractLoadPromise) return _tesseractLoadPromise;
+  _tesseractLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Falha ao carregar Tesseract.js'));
+    document.head.appendChild(s);
+  });
+  return _tesseractLoadPromise;
+}
+
 async function _extrGetWorker() {
   if (_extracaoWorker) return _extracaoWorker;
+  await _extrCarregarTesseract();
   _extracaoWorker = await Tesseract.createWorker('por');
   return _extracaoWorker;
 }
@@ -8895,8 +9015,8 @@ function scanLimparLista() {
 // ── Geocodificação headless (mesma lógica do mapa: HERE → Google → Mapbox) ──
 async function scanGeocodeHereRest(query) {
   try {
-    const HERE_KEY = 'P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M';
-    const r = await fetch('https://geocode.search.hereapi.com/v1/geocode?q=' + encodeURIComponent(query + ', Goiânia, GO, Brasil') + '&apiKey=' + HERE_KEY + '&limit=1&lang=pt-BR');
+    const cfg = await carregarConfigMapas();
+    const r = await fetch('https://geocode.search.hereapi.com/v1/geocode?q=' + encodeURIComponent(query + ', Goiânia, GO, Brasil') + '&apiKey=' + cfg.hereApiKey + '&limit=1&lang=pt-BR');
     const d = await r.json();
     if (d.items?.length) return { lat: d.items[0].position.lat, lng: d.items[0].position.lng, fonte: 'HERE' };
   } catch (e) { /* cai pro próximo da cadeia */ }
@@ -8905,8 +9025,8 @@ async function scanGeocodeHereRest(query) {
 
 async function scanGeocodeGoogleRest(query) {
   try {
-    const GKEY = 'AIzaSyAaESp78MrYmySlHiupJKjjgCi0-1dfWnE';
-    const r = await fetch('https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(query + ', Goiânia, GO, Brasil') + '&key=' + GKEY + '&language=pt-BR&region=br');
+    const cfg = await carregarConfigMapas();
+    const r = await fetch('https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(query + ', Goiânia, GO, Brasil') + '&key=' + cfg.googleMapsKey + '&language=pt-BR&region=br');
     const d = await r.json();
     if (d.status === 'OK' && d.results?.length) {
       const loc = d.results[0].geometry.location;
@@ -8918,9 +9038,10 @@ async function scanGeocodeGoogleRest(query) {
 
 async function scanGeocodeMapboxRest(query) {
   try {
+    const cfg = await carregarConfigMapas();
     const url = 'https://api.mapbox.com/search/geocode/v6/forward'
       + '?q=' + encodeURIComponent(query + ', Goiânia, GO, Brasil')
-      + '&access_token=' + MAPA_ROTAS_TOKEN
+      + '&access_token=' + cfg.mapboxToken
       + '&country=br&language=pt&proximity=-49.2925,-16.7159&limit=1';
     const r = await fetch(url);
     const d = await r.json();
@@ -9101,8 +9222,8 @@ return `
     <div class="export-review-item-edit-wrap">
       <input id="export-review-input-${idx}" value="${escHtml(it.endereco || '')}"
         onkeydown="if(event.key==='Enter'){exportReviewSalvar(${idx});} else if(event.key==='Escape'){exportReviewCancelarEdicao(${idx});}">
-      <button type="button" class="export-review-item-btn ok" onclick="exportReviewSalvar(${idx})" title="Salvar">✓</button>
-      <button type="button" class="export-review-item-btn cancel" onclick="exportReviewCancelarEdicao(${idx})" title="Cancelar">✕</button>
+      <button type="button" class="row-confirm-btn export-review-item-btn ok" onclick="exportReviewSalvar(${idx})" title="Salvar">✓</button>
+      <button type="button" class="row-confirm-btn export-review-item-btn cancel" onclick="exportReviewCancelarEdicao(${idx})" title="Cancelar">✕</button>
     </div>
   </div>`;
 }
@@ -9414,7 +9535,7 @@ function renderListaAdmin(lista, isFiltro) {
     if (!u.is_admin && u.plano_solicitado) {
       const dataSolic = u.plano_solicitado_em ? new Date(u.plano_solicitado_em).toLocaleString('pt-BR') : '';
       planoPendenteHtml = `
-      <div style="margin-top:8px;padding:8px 10px;background:rgba(245,158,11,.08);border:1px solid var(--accent);border-radius:6px;font-size:11px;color:var(--text)">
+      <div style="margin-top:8px;padding:8px 10px;background:color-mix(in srgb, var(--accent) 8%, transparent);border:1px solid var(--accent);border-radius:6px;font-size:11px;color:var(--text)">
         💳 Solicitou <b style="color:var(--accent)">${escHtml(u.plano_solicitado.toUpperCase())}</b>${dataSolic ? ` em ${dataSolic}` : ''}
       </div>
       <div class="admin-item-actions">
@@ -10026,11 +10147,13 @@ function _abrirProfileModal(view) {
   document.getElementById('profile-tel-msg').textContent = '';
   document.getElementById('profile-email-msg').textContent = '';
   carregarPerfilUsuario(); // recarrega dados frescos (conta + personagem) toda vez que abre
+  _a11yAbrirModal('profile-modal-overlay', 'profile-modal');
 }
 function abrirPerfil()      { _abrirProfileModal('conta'); }
 function abrirPersonagem()  { _abrirProfileModal('personagem'); }
 
 function fecharProfileDropdown() {
+  _a11yFecharModal('profile-modal-overlay', 'profile-modal');
   document.getElementById('profile-modal-overlay').classList.remove('open');
   document.getElementById('profile-trigger').setAttribute('aria-expanded', 'false');
 }
@@ -10350,6 +10473,14 @@ carregarPerfilUsuario().then(() => {
   _updateSidebarUser(user, '');
 }).catch(() => _updateSidebarUser(user, ''));
 _updateSidebarUser(user, '');
+// Imagem de exemplo do hero de importação usa o Mapbox Static Images API —
+// o token só chega depois do login, nunca fica hardcoded no HTML.
+carregarConfigMapas().then(cfg => {
+  const heroImg = document.getElementById('map-hero-img');
+  if (heroImg) {
+    heroImg.src = 'https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/path-4+6c63ff-0.85(-49.2648,-16.6799,-49.2500,-16.6900,-49.2400,-16.7050,-49.2300,-16.7200),pin-l-1+2bb583(-49.2648,-16.6799),pin-l-2+6c63ff(-49.2500,-16.6900),pin-l-3+6c63ff(-49.2400,-16.7050),pin-l-4+f5a623(-49.2300,-16.7200)/-49.2474,-16.6950,13,0,0/1000x520@2x?access_token=' + cfg.mapboxToken;
+  }
+}).catch(() => {}); // decorativo — se a config falhar, a imagem só fica sem src
 }
 
 // ── Sair ──────────────────────────────────────────────────────────────

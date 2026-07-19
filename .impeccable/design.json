@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-19T00:00:00Z",
+  "title": "Design System: Rota Manager",
+  "extensions": {
+    "colorMeta": {
+      "warning-amber": { "role": "primary", "displayName": "Warning Amber", "canonical": "oklch(78% 0.16 65)", "tonalRamp": ["oklch(20% 0.03 65)", "oklch(32% 0.06 65)", "oklch(45% 0.1 65)", "oklch(58% 0.13 65)", "oklch(70% 0.15 65)", "oklch(78% 0.16 65)", "oklch(88% 0.1 65)", "oklch(95% 0.04 65)"] },
+      "electric-indigo": { "role": "secondary", "displayName": "Electric Indigo", "canonical": "oklch(58% 0.23 275)", "tonalRamp": ["oklch(18% 0.05 275)", "oklch(28% 0.1 275)", "oklch(38% 0.16 275)", "oklch(48% 0.2 275)", "oklch(58% 0.23 275)", "oklch(70% 0.18 275)", "oklch(82% 0.1 275)", "oklch(93% 0.03 275)"] },
+      "signal-green": { "role": "tertiary", "displayName": "Signal Green", "canonical": "oklch(65% 0.13 165)", "tonalRamp": ["oklch(20% 0.03 165)", "oklch(32% 0.06 165)", "oklch(45% 0.1 165)", "oklch(55% 0.12 165)", "oklch(65% 0.13 165)", "oklch(76% 0.11 165)", "oklch(87% 0.06 165)", "oklch(95% 0.02 165)"] },
+      "void-navy": { "role": "neutral", "displayName": "Void Navy", "canonical": "oklch(12% 0.02 265)" },
+      "panel-navy": { "role": "neutral", "displayName": "Panel Navy", "canonical": "oklch(17% 0.025 265)" },
+      "panel-navy-raised": { "role": "neutral", "displayName": "Panel Navy Raised", "canonical": "oklch(20% 0.03 265)" },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "oklch(28% 0.03 265)" },
+      "paper-text": { "role": "neutral", "displayName": "Paper Text", "canonical": "oklch(93% 0.01 265)" },
+      "muted-slate": { "role": "neutral", "displayName": "Muted Slate", "canonical": "oklch(65% 0.02 265)" },
+      "alert-rose": { "role": "neutral", "displayName": "Alert Rose", "canonical": "oklch(62% 0.15 5)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Oswald)", "purpose": "Ceremonial headings, login logo, pricing numbers, level titles. Always uppercase, always tracked." },
+      "label": { "displayName": "Label (Inter, tracked caps)", "purpose": "The system's default UI voice — field labels, button text, nav labels, stat captions." },
+      "body": { "displayName": "Body (Inter)", "purpose": "General copy, modal text, form values." },
+      "mono": { "displayName": "Mono (JetBrains Mono)", "purpose": "Coordinate readouts and other machine-output data." }
+    },
+    "shadows": [
+      { "name": "ambient-sm", "value": "0 1px 2px rgba(0,0,0,.4)", "purpose": "Sticky header, low-emphasis resting elevation." },
+      { "name": "ambient-md", "value": "0 6px 20px rgba(0,0,0,.45)", "purpose": "Dropdowns, popovers, moderate floating elements." },
+      { "name": "ambient-lg", "value": "0 12px 36px rgba(0,0,0,.55)", "purpose": "Sidebar, drawers, login card, full modals." },
+      { "name": "drawer-sweep", "value": "-4px 0 32px rgba(0,0,0,.5)", "purpose": "Right-side slide-in panels (history, admin, map, subscription)." },
+      { "name": "button-inset", "value": "inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(0,0,0,.4)", "purpose": "Top-edge sheen on raised buttons, communicating pressability." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "180ms cubic-bezier(0.16,1,0.3,1)", "purpose": "Default transition for sidebar collapse, nav state, focus/hover changes." },
+      { "name": "btn-transition", "value": "background .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s, filter .15s, transform .15s", "purpose": "Shared transition property list for every button/icon-control; referenced via var(--btn-transition), never transition: all." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The default call-to-action: amber fill, sharp radius, pressable inset highlight.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Processar Rota</button>",
+      "css": ".ds-btn { padding: 8px 18px; border: none; border-radius: 3px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: background .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s, filter .15s, transform .15s; display: inline-flex; align-items: center; gap: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(0,0,0,.4); } .ds-btn:active { transform: translateY(1px); } .ds-btn-primary { background: #f5a623; color: #000; } .ds-btn-primary:hover { filter: brightness(1.12); } .ds-btn-primary:focus-visible { outline: 2px solid #6c63ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Panel-fill button for secondary actions, same shape and type as primary.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Cancelar</button>",
+      "css": ".ds-btn { padding: 8px 18px; border: none; border-radius: 3px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: background .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s, filter .15s, transform .15s; box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(0,0,0,.4); } .ds-btn:active { transform: translateY(1px); } .ds-btn-secondary { background: #12152a; color: #e7e9f5; border: 1px solid #262b4a; } .ds-btn-secondary:hover { background: #262b4a; } .ds-btn-secondary:focus-visible { outline: 2px solid #6c63ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Login Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Icon-leading text field used on the login/auth card.",
+      "html": "<div class=\"ds-input-wrap\"><span class=\"ds-input-icon\">&#128100;</span><input class=\"ds-input\" placeholder=\"usuario\" /></div>",
+      "css": ".ds-input-wrap { display: flex; align-items: center; background: #161a33; border: 1px solid #262b4a; border-radius: 4px; padding: 0 12px; height: 44px; gap: 8px; transition: border-color .15s; } .ds-input-wrap:focus-within { border-color: #6c63ff; } .ds-input-icon { font-size: 15px; opacity: .6; flex-shrink: 0; } .ds-input { flex: 1; background: none; border: none; outline: none; color: #e7e9f5; font-size: 14px; font-family: Inter, system-ui, sans-serif; } .ds-input::placeholder { color: #8d93ad; }"
+    },
+    {
+      "name": "Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Sidebar navigation row, default and active states.",
+      "html": "<button class=\"ds-nav-item ds-nav-item-active\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12l9-9 9 9M5 10v10h14V10\"/></svg><span>Painel</span></button>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .18s cubic-bezier(0.16,1,0.3,1); border: none; background: none; color: rgba(255,255,255,.65); width: 100%; text-align: left; } .ds-nav-item:hover { background: rgba(255,255,255,.06); color: #fff; } .ds-nav-item-active { background: #4338ca; color: #fff; box-shadow: 0 2px 8px rgba(67,56,202,.4); }"
+    },
+    {
+      "name": "Pricing Card",
+      "kind": "card",
+      "refersTo": "card-plan",
+      "description": "Subscription plan card with the 'popular' emphasis ring variant.",
+      "html": "<div class=\"ds-plan-card ds-plan-card-popular\"><div class=\"ds-plan-badge\">Popular</div><div class=\"ds-plan-name\">Pro</div><div class=\"ds-plan-price\"><b>R$ 49</b>/mes</div><button class=\"ds-btn ds-plan-btn\">Assinar</button></div>",
+      "css": ".ds-plan-card { background: #161a33; border: 1px solid #262b4a; border-radius: 10px; padding: 18px 16px; text-align: center; position: relative; } .ds-plan-card-popular { border-color: #6c63ff; box-shadow: 0 0 0 1px #6c63ff; } .ds-plan-badge { position: absolute; top: -11px; right: 14px; background: #6c63ff; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .03em; border-radius: 999px; padding: 4px 12px; } .ds-plan-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #8d93ad; text-transform: uppercase; } .ds-plan-price { margin: 8px 0 2px; font-size: 15px; color: #e7e9f5; } .ds-plan-price b { font-size: 32px; font-weight: 800; } .ds-plan-btn { width: 100%; margin-top: 10px; border-radius: 8px; background: #6c63ff; color: #fff; }"
+    },
+    {
+      "name": "XP Bar (signature)",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "The gamification panel's core signature element: level badge over a pixel avatar, amber-to-green XP fill, three nested stat boxes.",
+      "html": "<div class=\"ds-gami\"><div class=\"ds-gami-row\"><div class=\"ds-gami-avatar\"><div class=\"ds-gami-level\">4</div></div><div class=\"ds-gami-info\"><div class=\"ds-gami-xp-bg\"><div class=\"ds-gami-xp-fill\" style=\"width:62%\"></div></div><div class=\"ds-gami-xp-label\"><span>620 XP</span><span>1000 XP</span></div></div></div><div class=\"ds-gami-stats\"><div class=\"ds-gami-stat\"><div class=\"ds-gami-num\">128</div><div class=\"ds-gami-label\">Paradas</div></div><div class=\"ds-gami-stat\"><div class=\"ds-gami-num\">342</div><div class=\"ds-gami-label\">Pacotes</div></div><div class=\"ds-gami-stat\"><div class=\"ds-gami-num\">56</div><div class=\"ds-gami-label\">Enderecos</div></div></div></div>",
+      "css": ".ds-gami { padding: 16px 20px; border-bottom: 1px solid #262b4a; } .ds-gami-row { display: flex; gap: 12px; align-items: center; } .ds-gami-avatar { position: relative; width: 56px; height: 56px; flex-shrink: 0; border-radius: 10px; background: #161a33; image-rendering: pixelated; } .ds-gami-level { position: absolute; bottom: -4px; right: -4px; background: #f5a623; color: #06121f; font-weight: 800; font-size: 10px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #12152a; } .ds-gami-info { flex: 1; min-width: 0; } .ds-gami-xp-bg { background: #161a33; border-radius: 6px; height: 7px; overflow: hidden; } .ds-gami-xp-fill { height: 100%; background: linear-gradient(90deg, #f5a623, #7ee787); transition: width .6s ease; } .ds-gami-xp-label { font-size: 10.5px; color: #8d93ad; margin-top: 4px; display: flex; justify-content: space-between; } .ds-gami-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; } .ds-gami-stat { background: #161a33; border-radius: 10px; padding: 8px 6px; text-align: center; } .ds-gami-num { font-size: 15px; font-weight: 800; color: #e7e9f5; } .ds-gami-label { font-size: 9.5px; color: #8d93ad; margin-top: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Field Terminal",
+    "overview": "Rota Manager is built for the cab of a delivery vehicle, not a desk. The system reads as rugged dispatch equipment first: a near-black navy base, hairline dividers, uppercase tracked labels, a repeating diagonal hazard stripe on the login card, and a mono readout for coordinates. It has to survive being glanced at one-handed, in motion, in direct sun. Layered on top of that industrial base is the product's actual differentiator: a pixel-art RPG leveling system (avatar, XP bar, badges, item drops) that turns the unglamorous work of correcting an address into visible, earned progress. The two layers don't compete — the terminal is the chassis, the game is the reward system riding inside it. This system explicitly rejects a childish or cartoonish game skin. The pixel art is deliberate craft, not a cutesy wrapper — it should read as earned insignia, closer to a field ribbon than a mascot. It also rejects generic corporate SaaS chrome; the amber hazard-stripe motif and mono coordinate readouts are the brand's own vocabulary.",
+    "keyCharacteristics": [
+      "Dark navy field-terminal base, light theme available as a secondary mode, same tokens re-mapped",
+      "Amber (warning-tape) as the primary action and achievement color; electric indigo as the cooler secondary/active-state color",
+      "Oswald uppercase-tracked display type for anything ceremonial; Inter for everyday UI; JetBrains Mono for coordinates and data readouts",
+      "Flat tonal surfaces at rest; shadow appears only on modals, drawers, and interactive state changes",
+      "Pixel-art gamification components sit inside otherwise sharp, low-radius industrial chrome",
+      "Every animation respects prefers-reduced-motion; loading indicators slow down rather than disappear",
+      "Every interactive control resolves to a 44x44px touch target on mobile, even when the visual icon stays small"
+    ],
+    "rules": [
+      { "name": "The Hazard Stripe Rule", "body": "Amber is the only color allowed to read as an alert-adjacent industrial signal. If a new decorative motif wants attention-grabbing, it's amber-based or it doesn't ship.", "section": "colors" },
+      { "name": "The One Cool Voice Rule", "body": "Electric indigo is the only cool accent in the system, marking selection/navigation state exclusively.", "section": "colors" },
+      { "name": "The All-Caps Ceremony Rule", "body": "Display and Label type are never sentence case. If a heading needs lowercase for readability, it belongs in Body instead.", "section": "typography" },
+      { "name": "The Press-and-Release Rule", "body": "Buttons carry an inset top highlight plus a drop shadow at rest, and both disappear on active/press. Depth communicates pressable, not important.", "section": "elevation" },
+      { "name": "The Reduced-Motion Floor Rule", "body": "Every keyframe animation and transition goes near-instant under prefers-reduced-motion, except indicators whose job is signaling 'still working' (spinner, indeterminate progress bar), which slow down instead of vanishing.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep amber as the only achievement/attention signal — XP, primary actions, and the login hazard stripe all share one color language.",
+      "Do use the sharp 3px radius for anything interactive and reserve the looser 10-12px radius for passive containers.",
+      "Do default every new surface to flat + tonal layering; add a shadow only when the element temporarily floats.",
+      "Do treat the pixel-art gamification assets as earned insignia — crisp, pixelated, tiered by real accomplishment.",
+      "Do verify contrast for anything read outdoors: this app's baseline assumption is a driver squinting at a phone in sunlight.",
+      "Do scope every transition to the exact properties changing (background, color, border-color, box-shadow, opacity, filter, transform) — never transition: all.",
+      "Do hit a 44x44px touch target on every icon-only control, growing the box or the invisible hit area, never leaving a sub-40px tap target on a control a courier uses mid-route."
+    ],
+    "donts": [
+      "Don't let gamification tip childish or cartoonish — no mascot faces, no bouncy/elastic easing, no candy-bright secondary palette.",
+      "Don't flatten this into a generic corporate SaaS dashboard — no gray-and-blue enterprise chrome, no default Material card grid.",
+      "Don't introduce a second cool accent color alongside Electric Indigo, and don't reuse it for anything other than navigation/selection state.",
+      "Don't add resting-state shadows to cards or panels — depth comes from the two-step navy tonal system, not drop shadows.",
+      "Don't use border-left/border-right colored stripes as a callout pattern — the one stripe motif is the diagonal hazard stripe on the login card specifically."
+    ]
+  }
+}
