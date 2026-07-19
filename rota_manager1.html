@@ -3219,7 +3219,10 @@ display: flex; align-items: center;
   box-shadow: 0 20px 60px rgba(0,0,0,.6);
   width: 100%;
   max-width: 440px;
-  overflow: hidden;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-x: hidden;
+  overflow-y: auto;
   transform: scale(.96) translateY(8px);
   transition: transform .2s;
 }
@@ -3332,7 +3335,7 @@ display: flex; align-items: center;
   border: 1px solid var(--border); display: flex; align-items: center;
   justify-content: center; overflow: hidden; position: relative;
 }
-.gami-icon-slot img { width: 24px; height: 24px; image-rendering: pixelated; }
+.gami-icon-slot img { width: 32px; height: 32px; image-rendering: pixelated; }
 .gami-icon-slot.locked { opacity: .35; filter: grayscale(1); }
 .gami-icon-slot .gami-lock { position: absolute; font-size: 9px; }
 .gami-ranking-list { display: flex; flex-direction: column; gap: 5px; }
@@ -3403,7 +3406,7 @@ display: flex; align-items: center;
 }
 .levelup-sub { font-size: 12.5px; color: var(--muted); max-width: 26ch; line-height: 1.5; }
 .levelup-badges { display: flex; gap: 8px; margin-top: 6px; min-height: 28px; }
-.levelup-badges img { width: 28px; height: 28px; image-rendering: pixelated; }
+.levelup-badges img { width: 32px; height: 32px; image-rendering: pixelated; }
 .levelup-btn {
   margin-top: 14px; background: var(--accent); color: #14170f; border: none;
   font-family: var(--display); font-weight: 600; font-size: 11.5px; letter-spacing: .08em;
@@ -4326,8 +4329,12 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     </button>
   </div>
 </div>
+</header>
 
-<!-- Modal de Perfil -->
+<!-- Modal de Perfil — fora do header de propósito: o header tem
+     backdrop-filter, que cria um containing block pra descendentes com
+     position:fixed, encolhendo o overlay pra altura do header (~56px) em
+     vez da viewport inteira. Precisa ficar fora pra centralizar direito. -->
 <div class="profile-modal-overlay" id="profile-modal-overlay" onclick="fecharProfileModal(event)">
   <div class="profile-modal" id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title-text">
     <div class="profile-modal-topbar">
@@ -4418,7 +4425,6 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
   </div>
 </div>
-</header>
 
 <div id="banner-trial" style="display:none">
   <span id="banner-trial-texto"></span>
