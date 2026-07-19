@@ -815,10 +815,25 @@ def banco_coords_promover_manual(banco: dict, chave: str, endereco_original: str
       primeiro (ou outro) a discordar — fica marcado como "pendente" nesse
       endereço, mas NÃO troca o valor que os outros já estão usando; só
       troca se uma segunda conta confirmar esse mesmo ponto depois.
+
+    Também atualiza banco["stats_usuario"][user_id] = {"confirmadas", "corrigidas"}
+    — só nos dois casos com veredito resolvido ("confirmado" e "promovido"),
+    já que "novo"/"proprio"/"pendente_novo" ainda não foram julgados por
+    ninguém. É a base do stat de precisão que o admin vê no painel (ver
+    admin_listar_usuarios) — não é público pros outros usuários, só o
+    admin, pra não transformar "errar um endereço" em constrangimento
+    público e desincentivar gente de tentar corrigir.
     """
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     globais = banco["global"]
     atual = globais.get(chave)
+    stats = banco.setdefault("stats_usuario", {})
+
+    def _bump(uid: str, campo: str):
+        if not uid:
+            return
+        s = stats.setdefault(uid, {"confirmadas": 0, "corrigidas": 0})
+        s[campo] = s.get(campo, 0) + 1
 
     if atual is None:
         globais[chave] = {
@@ -839,6 +854,7 @@ def banco_coords_promover_manual(banco: dict, chave: str, endereco_original: str
         atual["fonte"] = atual.get("fonte") or "manual"
         if bate and not mesmo_dono:
             atual["confirmacoes"] = atual.get("confirmacoes", 1) + 1
+            _bump(atual.get("usuario"), "confirmadas")  # dono original foi corroborado
         atual.pop("pendente", None)
         return "confirmado" if (bate and not mesmo_dono) else "proprio"
 
@@ -846,6 +862,10 @@ def banco_coords_promover_manual(banco: dict, chave: str, endereco_original: str
     pendente = atual.get("pendente")
     if pendente and pendente.get("usuario") != user_id and \
        _dist_metros(pendente["lat"], pendente["lon"], lat, lon) <= BANCO_COORDS_TOLERANCIA_M:
+        dono_antigo = atual.get("usuario")
+        _bump(dono_antigo, "corrigidas")          # valor antigo foi derrubado por 2 contas
+        _bump(pendente.get("usuario"), "confirmadas")  # quem propôs o valor certo
+        _bump(user_id, "confirmadas")                  # quem confirmou por último, mesma coisa
         globais[chave] = {
             "endereco_original": endereco_original.strip(),
             "lat": round(lat, 6), "lon": round(lon, 6),
@@ -1318,8 +1338,12 @@ def usuario_consumir_credito_avulso_se_necessario(username: str):
 
 def admin_listar_usuarios() -> list:
     users = carregar_usuarios()
+    # Stat de precisão de coordenadas — só o admin vê (ver
+    # banco_coords_promover_manual pra como confirmadas/corrigidas são contadas).
+    stats_coords = banco_coords_carregar().get("stats_usuario", {})
     out = []
     for nome, dados in users.items():
+        s = stats_coords.get(dados.get("id"), {})
         out.append({
             "usuario":             nome,
             "email":               dados.get("email", ""),
@@ -1330,6 +1354,8 @@ def admin_listar_usuarios() -> list:
             "avulsa_creditos":     int(dados.get("avulsa_creditos", 0) or 0),
             "plano_solicitado":    dados.get("plano_solicitado"),
             "plano_solicitado_em": dados.get("plano_solicitado_em"),
+            "coords_confirmadas":  s.get("confirmadas", 0),
+            "coords_corrigidas":   s.get("corrigidas", 0),
         })
     out.sort(key=lambda u: u["usuario"].lower())
     return out

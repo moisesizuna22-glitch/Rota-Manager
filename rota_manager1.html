@@ -1549,6 +1549,8 @@ header .badge b { color: var(--accent2); }
   .admin-acesso-ok       { color: #7bc26a; border: 1px solid #7bc26a; background: rgba(123,194,106,.08); }
   .admin-acesso-expirado { color: var(--accent);  border: 1px solid var(--accent);  background: rgba(199,211,74,.08); }
   .admin-acesso-sem      { color: var(--muted); border: 1px solid var(--border); }
+  .admin-item-precisao { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .admin-precisao-corrigida { color: var(--danger); border: 1px solid var(--danger); background: rgba(201,96,74,.08); }
   .admin-item-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .admin-item-actions button {
     flex: 1; min-width: 90px; font-size: 11px; font-weight: 600; padding: 6px 8px; border-radius: 6px;
@@ -9606,6 +9608,18 @@ function renderListaAdmin(lista, isFiltro) {
       statusHtml += ` <span class="admin-acesso-badge admin-acesso-ok">🎟 ${u.avulsa_creditos} avulsa(s)</span>`;
     }
 
+    // Precisão nas coordenadas que essa pessoa corrigiu manualmente — só
+    // aparece pro admin (ver servidor.py: admin_listar_usuarios /
+    // banco_coords_promover_manual), nunca pros outros usuários.
+    let precisaoHtml = '';
+    if ((u.coords_confirmadas || 0) > 0 || (u.coords_corrigidas || 0) > 0) {
+      precisaoHtml = `
+      <div class="admin-item-precisao" title="Confirmadas: correções dela que outra conta bateu com o mesmo ponto depois. Corrigidas: correções dela que 2 outras contas substituíram por um valor diferente.">
+        <span class="admin-acesso-badge admin-acesso-ok">✅ ${u.coords_confirmadas || 0} confirmada(s)</span>
+        ${(u.coords_corrigidas || 0) > 0 ? `<span class="admin-acesso-badge admin-precisao-corrigida">⚠️ ${u.coords_corrigidas} corrigida(s)</span>` : ''}
+      </div>`;
+    }
+
     let planoPendenteHtml = '';
     if (!u.is_admin && u.plano_solicitado) {
       const dataSolic = u.plano_solicitado_em ? new Date(u.plano_solicitado_em).toLocaleString('pt-BR') : '';
@@ -9640,6 +9654,7 @@ function renderListaAdmin(lista, isFiltro) {
       </div>
 
       <div style="margin-top:6px">${statusHtml}</div>
+      ${precisaoHtml}
       <div class="admin-item-actions">
         <button onclick="iniciarEdicaoContato(${idx})">✏️ Editar contato</button>
         <button onclick="adminResetarSenha('${escHtml(u.usuario)}')">🔑 Resetar senha</button>
