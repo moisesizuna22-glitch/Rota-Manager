@@ -8122,8 +8122,12 @@ function _entregaRenderizar() {
 // ── Sheet de ação ─────────────────────────────────────────────────────
 function _entregaAbrirSheet(row) {
   _entregaSheetCid = row._cid;
-  document.getElementById('entrega-sheet-seq').textContent = row.group_stops || row.stop || '—';
-  document.getElementById('entrega-sheet-endereco').textContent = row.endereco_original || row.address || '';
+  const seqTxt = row.group_stops || row.stop || '';
+  const enderecoTxt = row.endereco_original || row.address || '';
+  document.getElementById('entrega-sheet-seq').textContent = seqTxt || '—';
+  // Sequência + endereço juntos no texto, igual já é feito na planilha
+  // exportada pro Circuit (`${seq} - ${endereco}`) — não só no badge redondo.
+  document.getElementById('entrega-sheet-endereco').textContent = seqTxt ? `${seqTxt} - ${enderecoTxt}` : enderecoTxt;
   document.getElementById('entrega-sheet-coords').textContent = (row.lat && row.lon) ? `${row.lat}, ${row.lon}` : '';
   _entregaAtualizarBotoesSheet();
   document.getElementById('entrega-sheet').classList.add('show');
