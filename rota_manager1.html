@@ -4446,7 +4446,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <div id="entrega-lista-itens"></div>
       </div>
       <div id="entrega-acoes-topo">
-        <button class="btn btn-secondary" onclick="_entregaReotimizar()">🔀 Otimizar rota</button>
+        <button class="btn btn-secondary" id="entrega-btn-reotimizar" onclick="_entregaReotimizar()">🔀 Otimizar rota</button>
       </div>
       <div id="entrega-sheet">
         <div class="handle"></div>
@@ -7974,6 +7974,46 @@ function _entregaDistanciaOrdem(dist, ordem) {
   return total;
 }
 
+// ── Matriz de tempo real de rua via OSRM (servidor público de demo) ────
+// ponytail: servidor público, sem SLA garantido — por isso só é usado até
+// OSRM_MAX_PARADAS (limite prático do /table lá) e com timeout curto;
+// qualquer falha (rate-limit, timeout, fora do ar) cai pro haversine em
+// linha reta, que sempre funciona offline. Pra volume alto/confiabilidade
+// garantida, a alternativa é subir uma instância OSRM própria.
+const OSRM_MAX_PARADAS = 80;
+const OSRM_TIMEOUT_MS = 8000;
+
+async function _entregaMatrizOSRM(pontos) {
+  const n = pontos.length;
+  if (n > OSRM_MAX_PARADAS) return null;
+  const coords = pontos.map(p => `${p.lon},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=duration`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.code !== 'Ok' || !data.durations) return null;
+    const dur = data.durations;
+    // Par sem rota encontrada (ilha, fora da malha viária mapeada, etc.) —
+    // substitui pela distância em linha reta penalizada, só pra não quebrar
+    // as comparações do 2-opt/Or-opt com null.
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (dur[i][j] == null) {
+          dur[i][j] = _entregaHaversineM(pontos[i].lat, pontos[i].lon, pontos[j].lat, pontos[j].lon) * 10;
+        }
+      }
+    }
+    return dur;
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // pontos: [{id, lat, lon}, ...]. Retorna array de ids na ordem otimizada de
 // visita (caminho aberto — rota de entrega, não um circuito fechado).
 //
@@ -7991,15 +8031,21 @@ function _entregaDistanciaOrdem(dist, ordem) {
 // linha reta embaralhada, e no cenário de bairros bem separados a rota
 // visita cada bairro inteiro antes de ir pro próximo (o mínimo teórico de
 // transições caras, não mais que isso).
-function otimizarOrdemEntrega(pontos) {
+async function otimizarOrdemEntrega(pontos) {
   const n = pontos.length;
   if (n <= 2) return pontos.map(p => p.id);
 
-  const dist = Array.from({ length: n }, () => new Array(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const d = _entregaHaversineM(pontos[i].lat, pontos[i].lon, pontos[j].lat, pontos[j].lon);
-      dist[i][j] = d; dist[j][i] = d;
+  // Tenta tempo real de rua (OSRM) primeiro; se falhar por qualquer motivo,
+  // cai pro haversine em linha reta — o algoritmo de 2-opt/Or-opt/multi-start
+  // é o mesmo dos dois jeitos, só muda a matriz de custo usada.
+  let dist = await _entregaMatrizOSRM(pontos);
+  if (!dist) {
+    dist = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const d = _entregaHaversineM(pontos[i].lat, pontos[i].lon, pontos[j].lat, pontos[j].lon);
+        dist[i][j] = d; dist[j][i] = d;
+      }
     }
   }
 
@@ -8083,12 +8129,12 @@ function _entregaSalvarNoStorage() {
   } catch (e) { /* localStorage indisponível (modo privado etc.) — segue sem persistir */ }
 }
 
-function _entregaOtimizar() {
+async function _entregaOtimizar() {
   const pontos = _allRows.filter(_entregaTemCoordenada).map(r => ({ id: r._cid, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
-  _entregaOrdem = otimizarOrdemEntrega(pontos);
+  _entregaOrdem = await otimizarOrdemEntrega(pontos);
 }
 
-function _entregaPrepararDados() {
+async function _entregaPrepararDados() {
   const salvo = _entregaCarregarDoStorage();
   if (salvo) {
     const existentes = new Set(_allRows.map(r => r._cid));
@@ -8101,7 +8147,7 @@ function _entregaPrepararDados() {
     const novas = _allRows.filter(r => _entregaTemCoordenada(r) && !jaTem.has(r._cid)).map(r => r._cid);
     _entregaOrdem = _entregaOrdem.concat(novas);
   } else {
-    _entregaOtimizar();
+    await _entregaOtimizar();
     _entregaStatus = {};
     _entregaSalvoEm = Date.now();
   }
@@ -8109,18 +8155,21 @@ function _entregaPrepararDados() {
   _entregaSalvarNoStorage();
 }
 
-function _entregaReotimizar() {
-  _entregaOtimizar();
+async function _entregaReotimizar() {
+  const btn = document.getElementById('entrega-btn-reotimizar');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Otimizando...'; }
+  await _entregaOtimizar();
   _entregaOrdem.forEach(cid => { if (!_entregaStatus[cid]) _entregaStatus[cid] = 'pendente'; });
   _entregaSalvarNoStorage();
   _entregaRenderizar();
+  if (btn) { btn.disabled = false; btn.textContent = '🔀 Otimizar rota'; }
 }
 
 // ── Abrir/fechar ──────────────────────────────────────────────────────
 async function abrirModoEntrega() {
   if (!_allRows.length) { alert('Nenhum endereço carregado para entregar.'); return; }
-  _entregaPrepararDados();
   document.getElementById('entrega-overlay').classList.add('show');
+  await _entregaPrepararDados();
   if (!_entregaMapInstance) {
     await _entregaInitMap();
   } else {
