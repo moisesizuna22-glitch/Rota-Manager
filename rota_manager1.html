@@ -1567,7 +1567,8 @@ header .badge b { color: var(--accent2); }
     padding-bottom: max(14px, env(safe-area-inset-bottom));
   }
   #entrega-sheet.show { transform: translateY(0); }
-  #entrega-sheet-botoes { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  #entrega-sheet-botoes, #entrega-sheet-botoes-navegar { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  #entrega-sheet-botoes-navegar .btn { width: 100%; justify-content: center; }
   #entrega-sheet-botoes .btn { flex: 1; min-width: 140px; justify-content: center; }
   .btn-entregar { background: #5a9e4f; color: #fff; border-color: #5a9e4f; }
   .btn-entregar:hover { filter: brightness(1.1); }
@@ -4412,6 +4413,9 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           </div>
           <div class="sheet-endereco" id="entrega-sheet-endereco"></div>
           <div class="sheet-coords" id="entrega-sheet-coords"></div>
+          <div id="entrega-sheet-botoes-navegar">
+            <button type="button" class="btn btn-blue" onclick="_entregaNavegar()">🧭 Navegar</button>
+          </div>
           <div id="entrega-sheet-botoes">
             <button type="button" class="btn btn-entregar" onclick="_entregaMarcar('entregue')">✅ Entregar</button>
             <button type="button" class="btn btn-falhou" onclick="_entregaMarcar('falhou')">❌ Não deu certo</button>
@@ -8036,8 +8040,12 @@ async function _entregaInitMap() {
   }
   mapboxgl.accessToken = cfg.mapboxToken;
   _entregaMapInstance = new mapboxgl.Map({
+    // Estilo de ruas claro (nomes de rua, parques, quarteirões) em vez do
+    // dark-v11 usado no resto do app — aqui o mapa é ferramenta de
+    // orientação de verdade (dirigindo), não decoração, então legibilidade
+    // vence consistência visual com o tema.
     container: 'entrega-map',
-    style: 'mapbox://styles/mapbox/dark-v11',
+    style: 'mapbox://styles/mapbox/streets-v12',
     center: [-49.2925, -16.7159],
     zoom: 11,
   });
@@ -8051,7 +8059,7 @@ async function _entregaInitMap() {
       id: 'entrega-linha-layer',
       type: 'line',
       source: 'entrega-linha',
-      paint: { 'line-color': '#c7d34a', 'line-width': 3, 'line-opacity': .75, 'line-dasharray': [1, 1.4] },
+      paint: { 'line-color': '#2f6b62', 'line-width': 4, 'line-opacity': .85, 'line-dasharray': [1, 1.4] },
     });
     _entregaMapInstance.on('click', () => _entregaFecharSheet());
     _entregaRenderizar();
@@ -8127,6 +8135,16 @@ function _entregaAtualizarBotoesSheet() {
   label.textContent = status === 'entregue' ? '✅ Entregue' : status === 'falhou' ? '❌ Não deu certo' : 'Pendente';
   label.className = status;
   document.getElementById('entrega-sheet-desfazer').style.display = status === 'pendente' ? 'none' : '';
+}
+
+// Entrega a navegação de verdade pro Google Maps — grátis, sem token novo,
+// e abre direto no app instalado no celular (ou no navegador, se não tiver).
+function _entregaNavegar() {
+  if (_entregaSheetCid == null) return;
+  const row = _allRows.find(r => r._cid === _entregaSheetCid);
+  if (!row || !row.lat || !row.lon) { alert('Essa parada não tem coordenada pra navegar.'); return; }
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${row.lat},${row.lon}&travelmode=driving`;
+  window.open(url, '_blank');
 }
 
 function _entregaFecharSheet() {
