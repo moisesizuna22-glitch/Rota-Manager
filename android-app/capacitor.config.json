@@ -1,0 +1,9 @@
+{
+  "appId": "com.rotamanager.app",
+  "appName": "Rota Manager",
+  "webDir": "www",
+  "server": {
+    "url": "https://web-production-0f536.up.railway.app",
+    "cleartext": false
+  }
+}

@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# arquivos de dados gerados em tempo de execução
+rota.xlsx
+rota_agrupada.xlsx
+rota_processada_final.xlsx
+
+# App Android (Capacitor) — dependências e build, nunca commitados
+android-app/node_modules/
+android-app/android/.gradle/
+android-app/android/build/
+android-app/android/app/build/
+android-app/android/local.properties
+android-app/android/*.iml
+android-app/android/.idea/
+android-app/android/captures/
+*.apk
+*.aab
