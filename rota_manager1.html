@@ -8014,6 +8014,28 @@ async function _entregaMatrizOSRM(pontos) {
   }
 }
 
+// Geometria real da rota (linha seguindo as ruas, não reta entre pontos) —
+// usa o /route do OSRM na ordem já otimizada, mesmos limite e timeout do
+// /table. Falhando, quem chama cai pra linha reta (coordsRetas original).
+async function _entregaGeometriaOSRM(coordsRetas) {
+  if (coordsRetas.length < 2 || coordsRetas.length > OSRM_MAX_PARADAS) return null;
+  const coordsStr = coordsRetas.map(c => `${c[0]},${c[1]}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return null;
+    return data.routes[0].geometry.coordinates;
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // pontos: [{id, lat, lon}, ...]. Retorna array de ids na ordem otimizada de
 // visita (caminho aberto — rota de entrega, não um circuito fechado).
 //
@@ -8089,6 +8111,8 @@ let _entregaOrdem = [];    // array de _cid na ordem otimizada de visita
 let _entregaStatus = {};   // { [_cid]: 'pendente' | 'entregue' | 'falhou' }
 let _entregaSalvoEm = null;
 let _entregaSheetCid = null;
+let _entregaLinhaAssinatura = null; // assinatura da _entregaOrdem usada na última busca de geometria OSRM
+let _entregaLinhaCoords = null;     // geometria real (seguindo rua) em cache pra essa assinatura
 
 function _entregaTemCoordenada(row) {
   const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
@@ -8259,8 +8283,11 @@ function _entregaRenderizar() {
     _entregaMarkers.push(marker);
   });
 
-  const source = _entregaMapInstance.getSource('entrega-linha');
-  if (source) source.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coordsLinha } });
+  // Desenha a linha reta na hora (feedback imediato) — se o pedido de
+  // geometria real de rua abaixo chegar, ela substitui pela versão que
+  // segue as ruas de verdade.
+  _entregaAplicarLinha(coordsLinha);
+  _entregaAtualizarLinhaRota(coordsLinha);
 
   document.getElementById('entrega-progresso-txt').textContent = `${entregues + falhas}/${total}`;
   const pct = total ? Math.round((entregues + falhas) / total * 100) : 0;
@@ -8273,6 +8300,30 @@ function _entregaRenderizar() {
   }
 
   _entregaRenderizarLista();
+}
+
+function _entregaAplicarLinha(coords) {
+  const source = _entregaMapInstance.getSource('entrega-linha');
+  if (source) source.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } });
+}
+
+// Busca a geometria real (seguindo rua) só quando a ordem muda — marcar
+// entregue/falhou chama _entregaRenderizar() de novo, mas a ordem das
+// paradas continua a mesma, então reaproveita o cache em vez de bater na
+// rede toda hora.
+async function _entregaAtualizarLinhaRota(coordsRetas) {
+  const assinatura = _entregaOrdem.join(',');
+  if (_entregaLinhaAssinatura === assinatura && _entregaLinhaCoords) {
+    _entregaAplicarLinha(_entregaLinhaCoords);
+    return;
+  }
+  const coordsRota = await _entregaGeometriaOSRM(coordsRetas);
+  // A ordem pode ter mudado de novo enquanto a requisição estava em voo
+  // (reotimizou de novo rápido) — só aplica se ainda for a mais atual.
+  if (_entregaOrdem.join(',') !== assinatura) return;
+  _entregaLinhaAssinatura = assinatura;
+  _entregaLinhaCoords = coordsRota || coordsRetas;
+  _entregaAplicarLinha(_entregaLinhaCoords);
 }
 
 // ── Vista em lista (equivalente à lista de paradas do Circuit) ────────
