@@ -5820,13 +5820,13 @@ try {
   return;
 }
 
-const html = getMapHtml(cfg.hereApiKey, cfg.googleMapsKey, cfg.mapboxToken, lat, lng, endReformado, endOriginal, rowIdx);
+const html = getMapHtml(cfg.hereApiKey, cfg.googleMapsKey, cfg.mapboxToken, lat, lng, endReformado, endOriginal, rowIdx, getToken());
 win.document.open();
 win.document.write(html);
 win.document.close();
 }
 
-function getMapHtml(hereKey, googleKey, mapboxToken, initLat, initLng, endReformado, endOriginal, rowIdx) {
+function getMapHtml(hereKey, googleKey, mapboxToken, initLat, initLng, endReformado, endOriginal, rowIdx, sessionToken) {
 return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -6405,6 +6405,11 @@ function updateGoogle(lat, lng) {
 // ════════════════════════════════════════════════════════════════════════
 
 const MAPBOX_TOKEN = '${mapboxToken}';
+// Token de sessão do usuário, pra autenticar os tiles de /api/lotes-terceiros/
+// — essa janela é um documento separado (aberta via window.open), então não
+// tem acesso a authHeaders()/getToken() da janela principal; precisa vir
+// embutido aqui como parâmetro mesmo, igual ao MAPBOX_TOKEN acima.
+const _AUTH_TOKEN = '${sessionToken || ""}';
 
 // ════════════════════════════════════════════════════════════════════════
 //  MAPA 4 — LOTES (Aparecida de Goiânia / Senador Canedo) via Mapbox GL JS
@@ -6429,10 +6434,12 @@ function initTerceirosMap() {
    center: [currentLng, currentLat],
    zoom: 17,
    // Os tiles de /api/lotes-terceiros/... agora exigem sessão — o Mapbox GL
-   // não anexa nosso header de auth sozinho, então injeta aqui.
+   // não anexa nosso header de auth sozinho, então injeta aqui. (Essa janela
+   // não tem authHeaders() da janela principal — usa _AUTH_TOKEN, embutido
+   // no HTML como parâmetro; ver getMapHtml().)
    transformRequest: (url, resourceType) => {
      if (url.includes('/api/lotes-terceiros/')) {
-       return { url, headers: authHeaders() };
+       return { url, headers: _AUTH_TOKEN ? { 'Authorization': 'Bearer ' + _AUTH_TOKEN } : {} };
      }
      return { url };
    },
@@ -6446,7 +6453,7 @@ function initTerceirosMap() {
 
  terceirosMarker.on('dragend', () => {
    const pos = terceirosMarker.getLngLat();
-   moveMap(pos.lat, pos.lng, pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));
+   sincronizarDeTerceiros(pos.lat, pos.lng);
  });
 
  terceirosMap.on('load', () => {
@@ -6557,9 +6564,26 @@ function initTerceirosMap() {
      if (e.defaultPrevented) return;
      const feats = terceirosMap.queryRenderedFeatures(e.point, { layers: ['aparecida-fill', 'goiania-fill'] });
      if (feats.length) return;
-     moveMap(e.lngLat.lat, e.lngLat.lng, e.lngLat.lat.toFixed(6) + ', ' + e.lngLat.lng.toFixed(6));
+     sincronizarDeTerceiros(e.lngLat.lat, e.lngLat.lng);
    });
  });
+}
+
+// Espelha sincronizarParaHere, mas pra quando a interação começa no PRÓPRIO
+// mapa QD/LT (clique ou arrastar o pin nele) — atualiza HERE/Google
+// normalmente (invisíveis nesse momento, então recentralizar eles não
+// incomoda), mas NÃO recentraliza o terceirosMap nele mesmo: o usuário já
+// está olhando pro ponto certo, então o flyTo por cima da própria visão
+// fazia o pino parecer "ir e voltar" enquanto a câmera reanimava.
+function sincronizarDeTerceiros(lat, lng) {
+ marker.setGeometry({ lat, lng });
+ hereMap.setCenter({ lat, lng });
+ hereMap.setZoom(19);
+ updateDisplay(lat, lng);
+ updateGoogle(lat, lng);
+ if (terceirosMarker) terceirosMarker.setLngLat([lng, lat]);
+ document.getElementById('status-bar').textContent =
+   '🏘️ ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
 }
 
 // Move o Mapbox (Aparecida/Canedo) para lat/lng (chamado quando HERE/Google mudam)
