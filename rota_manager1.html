@@ -85,8 +85,22 @@ body {
   width: 100%;
   overflow-x: hidden;
   display: flex;
+  /* Desliga seleção de texto e o menu de copiar/pesquisar do Android/iOS
+     que aparece ao segurar (long-press) em qualquer lugar do app — num
+     app de celular, de uma mão só, em movimento, um toque um pouco mais
+     longo enquanto rola a lista dispara esse menu sem querer o tempo
+     todo. Campos de input/textarea (onde selecionar texto faz sentido)
+     ficam de fora dessa regra logo abaixo. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 body.has-bottom-nav { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+input, textarea, [contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
 button { cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
@@ -5863,7 +5877,8 @@ return `<!DOCTYPE html>
   --shadow-md: 0 8px 24px rgba(0,0,0,.5);
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { display:flex; flex-direction:column; height:100vh; background:var(--bg); color:var(--text); font-family:var(--font); overflow:hidden; }
+body { display:flex; flex-direction:column; height:100vh; background:var(--bg); color:var(--text); font-family:var(--font); overflow:hidden; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+input, textarea { user-select:text; -webkit-user-select:text; -webkit-touch-callout:default; }
 #top-bar {
  display:flex; flex-direction:column; justify-content:center; gap:3px;
  padding:7px 18px; min-height:50px;
