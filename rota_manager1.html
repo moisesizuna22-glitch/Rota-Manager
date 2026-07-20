@@ -1450,34 +1450,34 @@ header .badge b { color: var(--accent2); }
     padding-bottom: max(14px, env(safe-area-inset-bottom));
   }
   #parada-sheet.show { transform: translateY(0); }
-  #parada-sheet .handle {
+  #parada-sheet .handle, #entrega-sheet .handle {
     width: 36px; height: 4px; border-radius: 4px;
     background: var(--border, #ddd);
     margin: 10px auto 6px;
     flex-shrink: 0;
   }
-  #parada-sheet .sheet-scroll { overflow-y: auto; padding: 4px 18px 4px; }
-  #parada-sheet .sheet-top {
+  #parada-sheet .sheet-scroll, #entrega-sheet .sheet-scroll { overflow-y: auto; padding: 4px 18px 4px; }
+  #parada-sheet .sheet-top, #entrega-sheet .sheet-top {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   }
-  #parada-sheet .sheet-seq {
+  #parada-sheet .sheet-seq, #entrega-sheet .sheet-seq {
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; border-radius: 50%;
     background: var(--accent, #f59e0b); color: #1a1205;
     font-weight: 800; font-size: 13px; flex-shrink: 0;
   }
-  #parada-sheet .sheet-close {
+  #parada-sheet .sheet-close, #entrega-sheet .sheet-close {
     width: 30px; height: 30px; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center;
     background: none; border: none; color: var(--muted); cursor: pointer; border-radius: 50%;
   }
-  #parada-sheet .sheet-close:hover { background: var(--surface2); color: var(--text); }
-  #parada-sheet .sheet-close svg { width: 18px; height: 18px; }
-  #parada-sheet .sheet-endereco {
+  #parada-sheet .sheet-close:hover, #entrega-sheet .sheet-close:hover { background: var(--surface2); color: var(--text); }
+  #parada-sheet .sheet-close svg, #entrega-sheet .sheet-close svg { width: 18px; height: 18px; }
+  #parada-sheet .sheet-endereco, #entrega-sheet .sheet-endereco {
     font-size: 15px; font-weight: 700; color: var(--text);
     margin: 10px 0 2px; line-height: 1.35;
   }
-  #parada-sheet .sheet-coords {
+  #parada-sheet .sheet-coords, #entrega-sheet .sheet-coords {
     font-size: 12px; color: var(--muted); font-family: monospace;
     margin-bottom: 12px;
   }
@@ -1497,6 +1497,88 @@ header .badge b { color: var(--accent2); }
   }
   #parada-sheet .sheet-select input { width: 18px; height: 18px; accent-color: var(--accent2, #4f9a90); cursor: pointer; }
 
+  /* ── Modo de Entrega — clone simplificado do fluxo de execução do
+     Circuit: mapa com ordem otimizada + marcar cada parada como
+     entregue/não entregue. Reaproveita a estrutura do #mapa-overlay e do
+     #parada-sheet (mesmos seletores .sheet-* extendidos abaixo). ── */
+  #entrega-overlay {
+    display: none; position: fixed; inset: 0; background: var(--bg);
+    z-index: 550; align-items: stretch; justify-content: stretch;
+  }
+  #entrega-overlay.show { display: flex; }
+  #entrega-panel { background: var(--bg); width: 100vw; height: 100%; display: flex; flex-direction: column; }
+  #entrega-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 12px max(20px, env(safe-area-inset-left));
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  #entrega-header .title { font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--display); letter-spacing: .03em; }
+  #entrega-header .subtitle { flex: 1; font-size: 13px; color: var(--accent); font-family: var(--pixel); text-align: right; }
+  #entrega-header .close-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 6px; flex-shrink: 0;
+    border: 1px solid transparent; color: var(--muted); transition: var(--btn-transition);
+  }
+  #entrega-header .close-btn svg { width: 18px; height: 18px; }
+  #entrega-header .close-btn:hover { border-color: var(--border); background: var(--surface2); color: var(--text); }
+  #entrega-progresso-bar { height: 6px; background: var(--surface2); flex-shrink: 0; }
+  #entrega-progresso-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #e6ef9c); transition: width .4s ease; }
+  #entrega-body { flex: 1; position: relative; }
+  #entrega-map { position: absolute; inset: 0; }
+  #entrega-acoes-topo { position: absolute; top: 12px; left: 12px; z-index: 5; display: flex; gap: 8px; }
+
+  .entrega-marker {
+    width: 30px; height: 30px; font-weight: 800; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--border); border-radius: 0;
+    clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+    box-shadow: 0 2px 6px rgba(0,0,0,.45);
+    cursor: pointer;
+  }
+  .entrega-marker.pendente { border-color: var(--border); color: var(--text); background: var(--surface2); }
+  .entrega-marker.proxima {
+    border-color: var(--accent); background: var(--accent); color: #14170f;
+    transform: scale(1.25);
+    box-shadow: 0 0 0 4px rgba(199,211,74,.35), 0 2px 10px rgba(0,0,0,.5);
+    z-index: 10;
+    animation: entrega-pulso 1.6s ease-in-out infinite;
+  }
+  .entrega-marker.entregue { border-color: #5a9e4f; background: #5a9e4f; color: #fff; }
+  .entrega-marker.falhou { border-color: var(--danger); background: var(--danger); color: #fff; }
+  @keyframes entrega-pulso {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(199,211,74,.35), 0 2px 10px rgba(0,0,0,.5); }
+    50%      { box-shadow: 0 0 0 9px rgba(199,211,74,.12), 0 2px 10px rgba(0,0,0,.5); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entrega-marker.proxima { animation: none; }
+  }
+
+  #entrega-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--surface);
+    border-radius: 0;
+    border-top: 3px solid var(--accent);
+    clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%, 0 14px);
+    box-shadow: 0 -6px 24px rgba(0,0,0,.35), 0 0 0 3px #0d0f08;
+    transform: translateY(105%);
+    transition: transform .28s cubic-bezier(.32,.72,0,1);
+    z-index: 20; max-height: 66%;
+    display: flex; flex-direction: column;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  #entrega-sheet.show { transform: translateY(0); }
+  #entrega-sheet-botoes { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  #entrega-sheet-botoes .btn { flex: 1; min-width: 140px; justify-content: center; }
+  .btn-entregar { background: #5a9e4f; color: #fff; border-color: #5a9e4f; }
+  .btn-entregar:hover { filter: brightness(1.1); }
+  .btn-falhou { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .btn-falhou:hover { filter: brightness(1.1); }
+  #entrega-sheet-status-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; background: var(--surface2); color: var(--muted);
+  }
+  #entrega-sheet-status-label.entregue { background: rgba(90,158,79,.14); color: #5a9e4f; }
+  #entrega-sheet-status-label.falhou { background: rgba(201,96,74,.14); color: var(--danger); }
 
   #admin-body {
     flex: 1;
@@ -2960,6 +3042,8 @@ td.td-coord::before { content: '📍 '; }
   /* Botões de fechar mapa / ficha da parada / perfil: mesma área de 44px, ícone (svg) inalterado */
   #mapa-header .close-btn,
   #parada-sheet .sheet-close,
+  #entrega-header .close-btn,
+  #entrega-sheet .sheet-close,
   .profile-modal-close {
     width: 44px; height: 44px;
   }
@@ -4297,6 +4381,47 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   </div>
 </div>
 
+<!-- ══ MODO DE ENTREGA — clone simplificado do fluxo de execução do Circuit ══ -->
+<div id="entrega-overlay">
+  <div id="entrega-panel">
+    <div id="entrega-header">
+      <span>🚚</span>
+      <span class="title">Modo de Entrega</span>
+      <span class="subtitle" id="entrega-progresso-txt">0/0</span>
+      <button class="close-btn" onclick="fecharModoEntrega()" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="entrega-progresso-bar"><div id="entrega-progresso-fill"></div></div>
+    <div id="entrega-body">
+      <div id="entrega-map"></div>
+      <div id="entrega-acoes-topo">
+        <button class="btn btn-secondary" onclick="_entregaReotimizar()">🔀 Otimizar rota</button>
+      </div>
+      <div id="entrega-sheet">
+        <div class="handle"></div>
+        <div class="sheet-scroll">
+          <div class="sheet-top">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="sheet-seq" id="entrega-sheet-seq">1</span>
+              <span id="entrega-sheet-status-label">Pendente</span>
+            </div>
+            <button class="sheet-close" onclick="_entregaFecharSheet()" aria-label="Fechar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="sheet-endereco" id="entrega-sheet-endereco"></div>
+          <div class="sheet-coords" id="entrega-sheet-coords"></div>
+          <div id="entrega-sheet-botoes">
+            <button type="button" class="btn btn-entregar" onclick="_entregaMarcar('entregue')">✅ Entregar</button>
+            <button type="button" class="btn btn-falhou" onclick="_entregaMarcar('falhou')">❌ Não deu certo</button>
+            <button type="button" class="btn btn-secondary" id="entrega-sheet-desfazer" onclick="_entregaMarcar('pendente')" style="display:none">↩️ Voltar pra pendente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ══ MODAL OPÇÕES DE EXPORTAÇÃO ══ -->
 <div id="export-overlay" onclick="fecharExportModal(event)">
@@ -4685,6 +4810,12 @@ Selecionar todos
       <svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
     </span>
     <span id="bn-exportar-label">Exportar</span>
+  </button>
+  <button class="bn-item" id="bn-entregar" onclick="abrirModoEntrega()" title="Iniciar modo de entrega">
+    <span class="bn-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><rect x="1" y="7" width="13" height="10" rx="1"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg>
+    </span>
+    <span>Entregar</span>
   </button>
 </div>
 
@@ -7688,6 +7819,340 @@ function fecharParadaSheet() {
   _paradaAtivaCid = null;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+//  MODO DE ENTREGA — clone simplificado do fluxo de execução do Circuit:
+//  mapa com a ordem de visita otimizada + marcar cada parada como
+//  entregue/não entregue. Progresso fica só no navegador (localStorage),
+//  expira em 12h, e é substituído inteiro quando uma rota diferente é
+//  carregada — de propósito, sem sincronizar com o servidor (mais simples,
+//  sem precisar de endpoint novo).
+// ══════════════════════════════════════════════════════════════════════
+
+function _entregaHaversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+  const dphi = (lat2 - lat1) * Math.PI / 180;
+  const dlmb = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dphi / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dlmb / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function _entregaConstruirNN(n, dist, inicio) {
+  const visitado = new Array(n).fill(false);
+  const ordem = [inicio];
+  visitado[inicio] = true;
+  for (let k = 1; k < n; k++) {
+    const atual = ordem[ordem.length - 1];
+    let melhor = -1, melhorD = Infinity;
+    for (let j = 0; j < n; j++) {
+      if (!visitado[j] && dist[atual][j] < melhorD) { melhorD = dist[atual][j]; melhor = j; }
+    }
+    ordem.push(melhor);
+    visitado[melhor] = true;
+  }
+  return ordem;
+}
+
+// ponytail: 2-opt é O(n²) por volta, capado em N<=300 e 40 voltas — se
+// rotas passarem disso rotineiramente, trocar por uma heurística mais
+// esperta (ex: or-opt, ou limitar por tempo de relógio em vez de voltas).
+function _entregaMelhorar2opt(n, dist, ordem) {
+  const LIMITE_2OPT = 300;
+  if (n > LIMITE_2OPT) return ordem;
+  let melhorou = true, voltas = 0;
+  const MAX_VOLTAS = 40;
+  while (melhorou && voltas < MAX_VOLTAS) {
+    melhorou = false;
+    voltas++;
+    for (let i = 0; i < n - 2; i++) {
+      for (let j = i + 2; j < n - 1; j++) {
+        const a = ordem[i], b = ordem[i + 1], c = ordem[j], d = ordem[j + 1];
+        const antes = dist[a][b] + dist[c][d];
+        const depois = dist[a][c] + dist[b][d];
+        if (depois < antes - 1e-9) {
+          let lo = i + 1, hi = j;
+          while (lo < hi) { const t = ordem[lo]; ordem[lo] = ordem[hi]; ordem[hi] = t; lo++; hi--; }
+          melhorou = true;
+        }
+      }
+    }
+  }
+  return ordem;
+}
+
+function _entregaDistanciaOrdem(dist, ordem) {
+  let total = 0;
+  for (let i = 0; i < ordem.length - 1; i++) total += dist[ordem[i]][ordem[i + 1]];
+  return total;
+}
+
+// pontos: [{id, lat, lon}, ...]. Retorna array de ids na ordem otimizada de
+// visita (caminho aberto — rota de entrega, não um circuito fechado).
+// Nearest-neighbor é sensível ao ponto de partida, então tenta a partir de
+// dois pontos (o primeiro da lista e o mais distante do centroide, um bom
+// proxy pra "ponta" de uma distribuição alongada) e fica com o resultado
+// melhor depois do 2-opt em cada um — testado isoladamente antes de entrar
+// aqui (reduz ~80% da distância numa rota espalhada, e acerta o ótimo numa
+// rota em linha reta embaralhada).
+function otimizarOrdemEntrega(pontos) {
+  const n = pontos.length;
+  if (n <= 2) return pontos.map(p => p.id);
+
+  const dist = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = _entregaHaversineM(pontos[i].lat, pontos[i].lon, pontos[j].lat, pontos[j].lon);
+      dist[i][j] = d; dist[j][i] = d;
+    }
+  }
+
+  const centroide = pontos.reduce((acc, p) => ({ lat: acc.lat + p.lat / n, lon: acc.lon + p.lon / n }), { lat: 0, lon: 0 });
+  let maisLongeIdx = 0, maisLongeD = -1;
+  pontos.forEach((p, i) => {
+    const d = _entregaHaversineM(p.lat, p.lon, centroide.lat, centroide.lon);
+    if (d > maisLongeD) { maisLongeD = d; maisLongeIdx = i; }
+  });
+
+  const inicios = maisLongeIdx === 0 ? [0] : [0, maisLongeIdx];
+  let melhorOrdem = null, melhorDist = Infinity;
+  for (const inicio of inicios) {
+    const ordem = _entregaMelhorar2opt(n, dist, _entregaConstruirNN(n, dist, inicio));
+    const d = _entregaDistanciaOrdem(dist, ordem);
+    if (d < melhorDist) { melhorDist = d; melhorOrdem = ordem; }
+  }
+
+  return melhorOrdem.map(idx => pontos[idx].id);
+}
+
+// ── Estado + persistência (localStorage, 12h, por assinatura de rota) ──
+const ENTREGA_TTL_MS = 12 * 60 * 60 * 1000;
+const ENTREGA_STORAGE_KEY = '_rm_entrega_progresso';
+
+let _entregaMapInstance = null;
+let _entregaMarkers = [];
+let _entregaOrdem = [];    // array de _cid na ordem otimizada de visita
+let _entregaStatus = {};   // { [_cid]: 'pendente' | 'entregue' | 'falhou' }
+let _entregaSalvoEm = null;
+let _entregaSheetCid = null;
+
+function _entregaTemCoordenada(row) {
+  const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
+  return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
+}
+
+// Assinatura simples da rota atual (endereço + coordenada de cada parada,
+// sem depender da ordem) — só pra saber se o progresso salvo no
+// localStorage ainda é dessa mesma rota ou de uma anterior.
+function _entregaAssinaturaRota() {
+  const chaves = _allRows.map(r => (r.address || '') + '|' + (r.lat || '') + ',' + (r.lon || '')).sort();
+  const str = chaves.length + '::' + chaves.join('::');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  return String(hash);
+}
+
+function _entregaCarregarDoStorage() {
+  try {
+    const raw = localStorage.getItem(ENTREGA_STORAGE_KEY);
+    if (!raw) return null;
+    const dados = JSON.parse(raw);
+    if (!dados || !dados.assinatura || !dados.salvoEm) return null;
+    if (Date.now() - dados.salvoEm > ENTREGA_TTL_MS) return null;
+    if (dados.assinatura !== _entregaAssinaturaRota()) return null;
+    return dados;
+  } catch (e) { return null; }
+}
+
+function _entregaSalvarNoStorage() {
+  try {
+    localStorage.setItem(ENTREGA_STORAGE_KEY, JSON.stringify({
+      assinatura: _entregaAssinaturaRota(),
+      salvoEm: _entregaSalvoEm,
+      ordem: _entregaOrdem,
+      status: _entregaStatus,
+    }));
+  } catch (e) { /* localStorage indisponível (modo privado etc.) — segue sem persistir */ }
+}
+
+function _entregaOtimizar() {
+  const pontos = _allRows.filter(_entregaTemCoordenada).map(r => ({ id: r._cid, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
+  _entregaOrdem = otimizarOrdemEntrega(pontos);
+}
+
+function _entregaPrepararDados() {
+  const salvo = _entregaCarregarDoStorage();
+  if (salvo) {
+    const existentes = new Set(_allRows.map(r => r._cid));
+    _entregaOrdem = salvo.ordem.filter(cid => existentes.has(cid));
+    _entregaStatus = salvo.status || {};
+    _entregaSalvoEm = salvo.salvoEm;
+    // Paradas novas desde o último salvamento (ex: reimportou com endereços
+    // a mais) entram no fim, sem perder o progresso já feito.
+    const jaTem = new Set(_entregaOrdem);
+    const novas = _allRows.filter(r => _entregaTemCoordenada(r) && !jaTem.has(r._cid)).map(r => r._cid);
+    _entregaOrdem = _entregaOrdem.concat(novas);
+  } else {
+    _entregaOtimizar();
+    _entregaStatus = {};
+    _entregaSalvoEm = Date.now();
+  }
+  _entregaOrdem.forEach(cid => { if (!_entregaStatus[cid]) _entregaStatus[cid] = 'pendente'; });
+  _entregaSalvarNoStorage();
+}
+
+function _entregaReotimizar() {
+  _entregaOtimizar();
+  _entregaOrdem.forEach(cid => { if (!_entregaStatus[cid]) _entregaStatus[cid] = 'pendente'; });
+  _entregaSalvarNoStorage();
+  _entregaRenderizar();
+}
+
+// ── Abrir/fechar ──────────────────────────────────────────────────────
+async function abrirModoEntrega() {
+  if (!_allRows.length) { alert('Nenhum endereço carregado para entregar.'); return; }
+  _entregaPrepararDados();
+  document.getElementById('entrega-overlay').classList.add('show');
+  if (!_entregaMapInstance) {
+    await _entregaInitMap();
+  } else {
+    _entregaRenderizar();
+    setTimeout(() => _entregaMapInstance.resize(), 60);
+  }
+}
+
+function fecharModoEntrega() {
+  document.getElementById('entrega-overlay').classList.remove('show');
+  _entregaFecharSheet();
+}
+
+async function _entregaInitMap() {
+  let cfg;
+  try {
+    cfg = await carregarConfigMapas();
+  } catch (e) {
+    document.getElementById('entrega-overlay').classList.remove('show');
+    alert('Não foi possível carregar as chaves de mapa. Faça login novamente.');
+    return;
+  }
+  mapboxgl.accessToken = cfg.mapboxToken;
+  _entregaMapInstance = new mapboxgl.Map({
+    container: 'entrega-map',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [-49.2925, -16.7159],
+    zoom: 11,
+  });
+  _entregaMapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  _entregaMapInstance.on('load', () => {
+    _entregaMapInstance.addSource('entrega-linha', {
+      type: 'geojson',
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } },
+    });
+    _entregaMapInstance.addLayer({
+      id: 'entrega-linha-layer',
+      type: 'line',
+      source: 'entrega-linha',
+      paint: { 'line-color': '#c7d34a', 'line-width': 3, 'line-opacity': .75, 'line-dasharray': [1, 1.4] },
+    });
+    _entregaMapInstance.on('click', () => _entregaFecharSheet());
+    _entregaRenderizar();
+    setTimeout(() => _entregaMapInstance.resize(), 60);
+  });
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function _entregaProximaPendenteCid() {
+  for (const cid of _entregaOrdem) if (_entregaStatus[cid] === 'pendente') return cid;
+  return null;
+}
+
+function _entregaRenderizar() {
+  if (!_entregaMapInstance) return;
+
+  _entregaMarkers.forEach(m => m.remove());
+  _entregaMarkers = [];
+
+  const porCid = new Map(_allRows.map(r => [r._cid, r]));
+  const proximaCid = _entregaProximaPendenteCid();
+  const coordsLinha = [];
+  let entregues = 0, falhas = 0, total = 0;
+
+  _entregaOrdem.forEach((cid, idx) => {
+    const row = porCid.get(cid);
+    if (!row) return;
+    const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    total++;
+    const status = _entregaStatus[cid] || 'pendente';
+    if (status === 'entregue') entregues++;
+    if (status === 'falhou') falhas++;
+    coordsLinha.push([lon, lat]);
+
+    const el = document.createElement('div');
+    const ehProxima = cid === proximaCid;
+    el.className = 'entrega-marker ' + (ehProxima ? 'proxima' : status);
+    el.textContent = status === 'entregue' ? '✓' : status === 'falhou' ? '✕' : (row.group_stops || row.stop || (idx + 1));
+    el.addEventListener('click', (ev) => { ev.stopPropagation(); _entregaAbrirSheet(row); });
+
+    const marker = new mapboxgl.Marker({ element: el }).setLngLat([lon, lat]).addTo(_entregaMapInstance);
+    _entregaMarkers.push(marker);
+  });
+
+  const source = _entregaMapInstance.getSource('entrega-linha');
+  if (source) source.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coordsLinha } });
+
+  document.getElementById('entrega-progresso-txt').textContent = `${entregues + falhas}/${total}`;
+  const pct = total ? Math.round((entregues + falhas) / total * 100) : 0;
+  document.getElementById('entrega-progresso-fill').style.width = pct + '%';
+
+  if (coordsLinha.length > 0) {
+    const bounds = new mapboxgl.LngLatBounds();
+    coordsLinha.forEach(c => bounds.extend(c));
+    _entregaMapInstance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 400 });
+  }
+}
+
+// ── Sheet de ação ─────────────────────────────────────────────────────
+function _entregaAbrirSheet(row) {
+  _entregaSheetCid = row._cid;
+  document.getElementById('entrega-sheet-seq').textContent = row.group_stops || row.stop || '—';
+  document.getElementById('entrega-sheet-endereco').textContent = row.endereco_original || row.address || '';
+  document.getElementById('entrega-sheet-coords').textContent = (row.lat && row.lon) ? `${row.lat}, ${row.lon}` : '';
+  _entregaAtualizarBotoesSheet();
+  document.getElementById('entrega-sheet').classList.add('show');
+}
+
+function _entregaAtualizarBotoesSheet() {
+  const status = _entregaStatus[_entregaSheetCid] || 'pendente';
+  const label = document.getElementById('entrega-sheet-status-label');
+  label.textContent = status === 'entregue' ? '✅ Entregue' : status === 'falhou' ? '❌ Não deu certo' : 'Pendente';
+  label.className = status;
+  document.getElementById('entrega-sheet-desfazer').style.display = status === 'pendente' ? 'none' : '';
+}
+
+function _entregaFecharSheet() {
+  const sheet = document.getElementById('entrega-sheet');
+  if (sheet) sheet.classList.remove('show');
+  _entregaSheetCid = null;
+}
+
+function _entregaMarcar(novoStatus) {
+  if (_entregaSheetCid == null) return;
+  _entregaStatus[_entregaSheetCid] = novoStatus;
+  _entregaSalvarNoStorage();
+  _entregaAtualizarBotoesSheet();
+  _entregaRenderizar();
+  // Ao marcar entregue/falhou, avança sozinho pra próxima parada pendente
+  // (o "modo dinâmico" pedido) — desfazer (voltar pra pendente) não avança.
+  if (novoStatus !== 'pendente') {
+    setTimeout(() => {
+      const proximaCid = _entregaProximaPendenteCid();
+      if (proximaCid == null) { _entregaFecharSheet(); return; }
+      const row = _allRows.find(r => r._cid === proximaCid);
+      if (row) _entregaAbrirSheet(row);
+    }, 350);
+  }
+}
+
 // Mantém função vazia para não quebrar referências antigas
 async function rodarPipeline() {}
 
@@ -9460,6 +9925,10 @@ label.textContent = "Exportar";
 btn.classList.remove('bn-sucesso');
 btn.disabled = false;
 }, 2500);
+// Planilha exportada — deixa o Modo de Entrega pronto pra assumir a partir
+// daqui, igual pedido: a otimização de rota e as ações de entregar/não deu
+// certo substituem o precisar abrir isso no Circuit depois.
+setTimeout(() => { abrirModoEntrega(); }, 900);
 } catch(err) {
 alert("Erro ao exportar: " + err.message);
 label.textContent = "Exportar";
