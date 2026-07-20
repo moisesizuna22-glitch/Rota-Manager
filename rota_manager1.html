@@ -1523,8 +1523,49 @@ header .badge b { color: var(--accent2); }
   #entrega-header .close-btn:hover { border-color: var(--border); background: var(--surface2); color: var(--text); }
   #entrega-progresso-bar { height: 6px; background: var(--surface2); flex-shrink: 0; }
   #entrega-progresso-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #e6ef9c); transition: width .4s ease; }
+  #entrega-toggle-view {
+    display: flex; gap: 0; flex-shrink: 0; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .entrega-toggle-btn {
+    flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 700;
+    color: var(--muted); border-bottom: 2px solid transparent; background: transparent;
+  }
+  .entrega-toggle-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
   #entrega-body { flex: 1; position: relative; }
   #entrega-map { position: absolute; inset: 0; }
+  #entrega-lista { display: none; position: absolute; inset: 0; overflow-y: auto; padding: 14px max(14px, env(safe-area-inset-right)) 14px max(14px, env(safe-area-inset-left)); }
+  #entrega-lista.show { display: block; }
+  #entrega-lista-resumo {
+    font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px;
+    font-family: var(--mono, monospace);
+  }
+  .entrega-lista-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    cursor: pointer;
+  }
+  .entrega-lista-item.proxima { border-left-color: var(--accent); background: rgba(199,211,74,.08); }
+  .entrega-lista-item.entregue { border-left-color: #5a9e4f; }
+  .entrega-lista-item.falhou { border-left-color: var(--danger); }
+  .entrega-lista-pos {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; background: var(--surface2); color: var(--text);
+    clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+  }
+  .entrega-lista-item.entregue .entrega-lista-pos { background: #5a9e4f; color: #fff; }
+  .entrega-lista-item.falhou .entrega-lista-pos { background: var(--danger); color: #fff; }
+  .entrega-lista-corpo { flex: 1; min-width: 0; }
+  .entrega-lista-endereco { font-size: 13.5px; color: var(--text); line-height: 1.35; }
+  .entrega-lista-status {
+    display: inline-block; margin-top: 4px; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+    background: var(--surface2); color: var(--muted);
+  }
+  .entrega-lista-item.entregue .entrega-lista-status { background: rgba(90,158,79,.14); color: #5a9e4f; }
+  .entrega-lista-item.falhou .entrega-lista-status { background: rgba(201,96,74,.14); color: var(--danger); }
   #entrega-acoes-topo { position: absolute; top: 12px; left: 12px; z-index: 5; display: flex; gap: 8px; }
 
   .entrega-marker {
@@ -4394,8 +4435,16 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       </button>
     </div>
     <div id="entrega-progresso-bar"><div id="entrega-progresso-fill"></div></div>
+    <div id="entrega-toggle-view">
+      <button type="button" class="entrega-toggle-btn active" id="entrega-toggle-mapa" onclick="_entregaMostrarMapa()">🗺️ Mapa</button>
+      <button type="button" class="entrega-toggle-btn" id="entrega-toggle-lista" onclick="_entregaMostrarLista()">📋 Lista</button>
+    </div>
     <div id="entrega-body">
       <div id="entrega-map"></div>
+      <div id="entrega-lista">
+        <div id="entrega-lista-resumo"></div>
+        <div id="entrega-lista-itens"></div>
+      </div>
       <div id="entrega-acoes-topo">
         <button class="btn btn-secondary" onclick="_entregaReotimizar()">🔀 Otimizar rota</button>
       </div>
@@ -8173,6 +8222,76 @@ function _entregaRenderizar() {
     coordsLinha.forEach(c => bounds.extend(c));
     _entregaMapInstance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 400 });
   }
+
+  _entregaRenderizarLista();
+}
+
+// ── Vista em lista (equivalente à lista de paradas do Circuit) ────────
+function _entregaMostrarMapa() {
+  document.getElementById('entrega-map').style.display = '';
+  document.getElementById('entrega-acoes-topo').style.display = '';
+  document.getElementById('entrega-lista').classList.remove('show');
+  document.getElementById('entrega-toggle-mapa').classList.add('active');
+  document.getElementById('entrega-toggle-lista').classList.remove('active');
+  setTimeout(() => _entregaMapInstance && _entregaMapInstance.resize(), 60);
+}
+
+function _entregaMostrarLista() {
+  document.getElementById('entrega-map').style.display = 'none';
+  document.getElementById('entrega-acoes-topo').style.display = 'none';
+  document.getElementById('entrega-lista').classList.add('show');
+  document.getElementById('entrega-toggle-lista').classList.add('active');
+  document.getElementById('entrega-toggle-mapa').classList.remove('active');
+}
+
+function _entregaRenderizarLista() {
+  const cont = document.getElementById('entrega-lista-itens');
+  if (!cont) return;
+  const porCid = new Map(_allRows.map(r => [r._cid, r]));
+  const proximaCid = _entregaProximaPendenteCid();
+
+  let distanciaTotalM = 0;
+  let anterior = null;
+  let totalParadas = 0;
+  const linhas = [];
+
+  _entregaOrdem.forEach((cid, idx) => {
+    const row = porCid.get(cid);
+    if (!row) return;
+    const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    totalParadas++;
+    if (anterior) distanciaTotalM += _entregaHaversineM(anterior.lat, anterior.lon, lat, lon);
+    anterior = { lat, lon };
+
+    const status = _entregaStatus[cid] || 'pendente';
+    const ehProxima = cid === proximaCid;
+    const seqTxt = row.group_stops || row.stop || String(idx + 1);
+    const enderecoTxt = row.endereco_original || row.address || '';
+    const statusLabel = status === 'entregue' ? '✅ Entregue' : status === 'falhou' ? '❌ Não deu certo' : (ehProxima ? '➤ Próxima' : 'Pendente');
+    const classeStatus = ehProxima && status === 'pendente' ? 'proxima' : status;
+
+    linhas.push(`
+      <div class="entrega-lista-item ${classeStatus}" onclick="_entregaAbrirSheetPorCid(${cid})">
+        <div class="entrega-lista-pos">${idx + 1}</div>
+        <div class="entrega-lista-corpo">
+          <div class="entrega-lista-endereco">${escHtml(seqTxt)} - ${escHtml(enderecoTxt)}</div>
+          <span class="entrega-lista-status">${statusLabel}</span>
+        </div>
+      </div>
+    `);
+  });
+
+  const km = (distanciaTotalM / 1000).toFixed(1);
+  document.getElementById('entrega-lista-resumo').textContent = `${totalParadas} parada(s) · ${km} km (rota otimizada)`;
+  cont.innerHTML = linhas.join('');
+}
+
+function _entregaAbrirSheetPorCid(cid) {
+  const row = _allRows.find(r => r._cid === cid);
+  if (!row) return;
+  _entregaMostrarMapa();
+  _entregaAbrirSheet(row);
 }
 
 // ── Sheet de ação ─────────────────────────────────────────────────────
