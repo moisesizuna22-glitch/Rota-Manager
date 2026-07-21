@@ -1481,6 +1481,10 @@ header .badge b { color: var(--accent2); }
     font-size: 12px; color: var(--muted); font-family: monospace;
     margin-bottom: 12px;
   }
+  #entrega-sheet .sheet-eta {
+    font-size: 12.5px; font-weight: 700; color: var(--accent2, #4f9a90);
+    font-family: var(--mono, monospace); margin: -6px 0 12px;
+  }
   #parada-sheet .sheet-contato {
     font-size: 13px; font-weight: 700; color: #5a9e4f; font-family: monospace;
     margin: -6px 0 12px;
@@ -1532,15 +1536,39 @@ header .badge b { color: var(--accent2); }
   }
   .entrega-toggle-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
   #entrega-banner {
-    display: none; align-items: center; justify-content: space-between; gap: 10px;
+    display: none; align-items: center; gap: 12px;
     padding: 10px 14px; background: var(--accent2, #4f9a90); color: #fff;
     font-weight: 700; font-size: 14px; flex-shrink: 0;
   }
   #entrega-banner.show { display: flex; }
-  #entrega-banner-texto { flex: 1; min-width: 0; }
-  #entrega-banner-distancia { font-family: var(--mono, monospace); font-weight: 800; flex-shrink: 0; }
+  #entrega-banner-seta {
+    flex-shrink: 0; width: 34px; height: 34px; font-size: 22px; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .3s ease;
+  }
+  .entrega-banner-corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  #entrega-banner-texto { font-weight: 700; font-size: 14px; }
+  #entrega-banner-distancia { font-family: var(--mono, monospace); font-weight: 800; font-size: 13px; opacity: .9; }
+  #entrega-banner-depois {
+    flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding-left: 10px; border-left: 1px solid rgba(255,255,255,.35);
+  }
+  .entrega-banner-depois-label { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; opacity: .85; }
+  #entrega-banner-depois-seta { font-size: 16px; font-weight: 900; transition: transform .3s ease; }
+  @media (prefers-reduced-motion: reduce) {
+    #entrega-banner-seta, #entrega-banner-depois-seta { transition: none; }
+  }
   #entrega-body { flex: 1; position: relative; }
   #entrega-map { position: absolute; inset: 0; }
+  #entrega-velocimetro {
+    position: absolute; bottom: 14px; left: 14px; z-index: 5;
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--surface); border: 3px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,.35);
+  }
+  #entrega-velocimetro-valor { font-size: 20px; font-weight: 800; color: var(--text); line-height: 1; font-family: var(--mono, monospace); }
+  .entrega-velocimetro-unidade { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
   #entrega-lista { display: none; position: absolute; inset: 0; overflow-y: auto; padding: 14px max(14px, env(safe-area-inset-right)) 14px max(14px, env(safe-area-inset-left)); }
   #entrega-lista.show { display: block; }
   #entrega-lista-resumo {
@@ -4475,11 +4503,22 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <button type="button" class="entrega-toggle-btn" id="entrega-toggle-lista" onclick="_entregaMostrarLista()">📋 Lista</button>
     </div>
     <div id="entrega-banner">
-      <span id="entrega-banner-texto"></span>
-      <span id="entrega-banner-distancia"></span>
+      <div id="entrega-banner-seta">➜</div>
+      <div class="entrega-banner-corpo">
+        <span id="entrega-banner-texto"></span>
+        <span id="entrega-banner-distancia"></span>
+      </div>
+      <div id="entrega-banner-depois">
+        <span class="entrega-banner-depois-label">DEPOIS</span>
+        <div id="entrega-banner-depois-seta">➜</div>
+      </div>
     </div>
     <div id="entrega-body">
       <div id="entrega-map"></div>
+      <div id="entrega-velocimetro" style="display:none">
+        <span id="entrega-velocimetro-valor">--</span>
+        <span class="entrega-velocimetro-unidade">km/h</span>
+      </div>
       <div id="entrega-lista">
         <div id="entrega-lista-resumo"></div>
         <div id="entrega-lista-itens"></div>
@@ -4487,6 +4526,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <div id="entrega-acoes-topo">
         <button class="btn btn-secondary" id="entrega-btn-reotimizar" onclick="_entregaReotimizar()">🔀 Otimizar rota</button>
         <button class="btn btn-secondary" id="entrega-btn-seguir" onclick="_entregaAlternarSeguir()">🎯 Seguir</button>
+        <button class="btn btn-secondary" id="entrega-btn-centralizar" onclick="_entregaCentralizar()">📍 Centralizar</button>
       </div>
       <div id="entrega-sheet">
         <div class="handle"></div>
@@ -4502,6 +4542,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
           </div>
           <div class="sheet-endereco" id="entrega-sheet-endereco"></div>
           <div class="sheet-coords" id="entrega-sheet-coords"></div>
+          <div class="sheet-eta" id="entrega-sheet-eta" style="display:none"></div>
           <div id="entrega-sheet-botoes-navegar">
             <button type="button" class="btn btn-blue" onclick="_entregaNavegar()">🧭 Navegar</button>
           </div>
@@ -8092,11 +8133,35 @@ async function _entregaRotaComPassos(coordsRetas) {
     if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return null;
     const rota = data.routes[0];
     const steps = (rota.legs || []).flatMap(l => l.steps || []);
-    return { coords: rota.geometry.coordinates, steps };
+    return { coords: rota.geometry.coordinates, steps, distanciaM: rota.distance, duracaoS: rota.duration };
   } catch (e) {
     return null;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// Ângulo (graus) pra girar a seta do banner conforme o tipo/modificador da
+// manobra do OSRM — 0° é "seguir em frente", positivo é sentido horário.
+const ENTREGA_MANOBRA_ANGULO = {
+  'uturn': 180, 'sharp right': 120, 'right': 90, 'slight right': 30,
+  'straight': 0, 'slight left': -30, 'left': -90, 'sharp left': -120,
+};
+function _entregaAnguloManobra(passo) {
+  return ENTREGA_MANOBRA_ANGULO[passo.maneuver.modifier] ?? 0;
+}
+
+// Aplica o ícone certo (seta girada, ou bandeira no destino final) num
+// elemento do banner — reaproveitado tanto pra manobra atual quanto pro
+// preview "Depois".
+function _entregaAplicarIconeManobra(el, passo) {
+  if (!el) return;
+  if (passo.maneuver.type === 'arrive') {
+    el.textContent = '🏁';
+    el.style.transform = 'none';
+  } else {
+    el.textContent = '➜';
+    el.style.transform = `rotate(${_entregaAnguloManobra(passo)}deg)`;
   }
 }
 
@@ -8239,6 +8304,12 @@ let _entregaSeguirProximaCid = null;         // cid da parada-alvo do traçado e
 let _entregaSeguirUltimoRecalc = 0;          // timestamp do último recálculo (debounce)
 let _entregaSeguirRecalculando = false;      // evita chamadas concorrentes ao OSRM
 let _entregaSeguirChegadaSinalizadaCid = null; // evita reabrir o sheet a cada leitura de GPS parado dentro do raio
+// ponytail: distância/duração só atualizam quando a rota é recalculada (troca
+// de alvo ou desvio), não em tempo real segundo a segundo — pra esse trecho
+// curto (até a próxima parada) é uma estimativa boa o bastante; um relógio
+// decrescendo de verdade exigiria estimar velocidade/progresso continuamente.
+let _entregaSeguirDistanciaM = null;   // distância restante até a próxima parada (última rota calculada)
+let _entregaSeguirDuracaoS = null;     // duração estimada (segundos) da última rota calculada
 
 function _entregaTemCoordenada(row) {
   const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
@@ -8343,7 +8414,7 @@ function fecharModoEntrega() {
 function _entregaIniciarGPS() {
   if (_entregaGeoWatchId != null || !navigator.geolocation) return;
   _entregaGeoWatchId = navigator.geolocation.watchPosition(
-    (pos) => _entregaAtualizarPosicao(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    (pos) => _entregaAtualizarPosicao(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.speed),
     (err) => _entregaSinalizarErroGPS(),
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
   );
@@ -8360,13 +8431,18 @@ function _entregaPararGPS() {
   _entregaSeguirSteps = null;
   _entregaSeguirProximaCid = null;
   _entregaSeguirChegadaSinalizadaCid = null;
+  _entregaSeguirDistanciaM = null;
+  _entregaSeguirDuracaoS = null;
   const btn = document.getElementById('entrega-btn-seguir');
   if (btn) btn.classList.remove('active');
   const banner = document.getElementById('entrega-banner');
   if (banner) banner.classList.remove('show');
+  const velocimetro = document.getElementById('entrega-velocimetro');
+  if (velocimetro) velocimetro.style.display = 'none';
+  _entregaAtualizarEtaSheet();
 }
 
-function _entregaAtualizarPosicao(lat, lon, accuracy) {
+function _entregaAtualizarPosicao(lat, lon, accuracy, speedMs) {
   if (!_entregaMapInstance) return;
   _entregaUltimaLat = lat; _entregaUltimaLon = lon; _entregaUltimaAccuracy = accuracy;
   if (!_entregaGeoMarker) {
@@ -8380,6 +8456,7 @@ function _entregaAtualizarPosicao(lat, lon, accuracy) {
     _entregaMapInstance.easeTo({ center: [lon, lat], zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
     _entregaProcessarSeguirRota(lat, lon, accuracy);
   }
+  _entregaAtualizarVelocimetro(speedMs);
 }
 
 function _entregaSinalizarErroGPS() {
@@ -8388,7 +8465,26 @@ function _entregaSinalizarErroGPS() {
   if (!banner) return;
   document.getElementById('entrega-banner-texto').textContent = '⚠️ Sem sinal de GPS';
   document.getElementById('entrega-banner-distancia').textContent = '';
+  document.getElementById('entrega-banner-depois').style.display = 'none';
   banner.classList.add('show');
+}
+
+// Velocímetro simples (km/h) a partir do GPS — nem todo aparelho/navegador
+// reporta velocidade de forma confiável, por isso o "--" quando vem null.
+function _entregaAtualizarVelocimetro(speedMs) {
+  const el = document.getElementById('entrega-velocimetro');
+  if (!el) return;
+  if (!_entregaSeguindo) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  document.getElementById('entrega-velocimetro-valor').textContent =
+    (speedMs == null || isNaN(speedMs)) ? '--' : Math.max(0, Math.round(speedMs * 3.6));
+}
+
+// Botão 📍: recentraliza a câmera na posição atual sem mexer no modo Seguir.
+function _entregaCentralizar() {
+  if (!_entregaGeoMarker || !_entregaMapInstance) return;
+  const pos = _entregaGeoMarker.getLngLat();
+  _entregaMapInstance.easeTo({ center: pos, zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
 }
 
 // Botão 🎯: liga/desliga o modo seguir (recentraliza no celular a cada
@@ -8402,15 +8498,23 @@ function _entregaAlternarSeguir() {
       const pos = _entregaGeoMarker.getLngLat();
       _entregaMapInstance.easeTo({ center: pos, zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
     }
+    // Mostra o cartão da parada-alvo assim que liga, mesmo antes de andar.
+    const proximaCid = _entregaProximaPendenteCid();
+    const row = proximaCid != null ? _allRows.find(r => r._cid === proximaCid) : null;
+    if (row && _entregaSheetCid !== row._cid) _entregaAbrirSheet(row);
     if (_entregaUltimaLat != null) {
       _entregaSeguirUltimoRecalc = 0; // força recálculo imediato ao ligar
       _entregaProcessarSeguirRota(_entregaUltimaLat, _entregaUltimaLon, _entregaUltimaAccuracy);
     }
   } else {
     document.getElementById('entrega-banner').classList.remove('show');
+    document.getElementById('entrega-velocimetro').style.display = 'none';
     _entregaSeguirRotaCoords = null;
     _entregaSeguirSteps = null;
     _entregaSeguirProximaCid = null;
+    _entregaSeguirDistanciaM = null;
+    _entregaSeguirDuracaoS = null;
+    _entregaAtualizarEtaSheet();
     _entregaRenderizar(); // volta a mostrar a linha inteira da rota e reencaixa o mapa
   }
 }
@@ -8425,6 +8529,11 @@ async function _entregaProcessarSeguirRota(lat, lon, accuracy) {
   const destLat = parseFloat(row.lat), destLon = parseFloat(row.lon);
   if (isNaN(destLat) || isNaN(destLon)) return;
 
+  // Troca de alvo (marcou a parada anterior) — mostra o cartão da nova
+  // parada-alvo, igual acontece ao ligar o modo Seguir.
+  const mudouAlvo = _entregaSeguirProximaCid !== proximaCid;
+  if (mudouAlvo && _entregaSheetCid !== row._cid) _entregaAbrirSheet(row);
+
   // Geofence de chegada — ignora leitura de GPS ruim demais pra não dar
   // falso positivo (accuracy vem em metros; null quando o navegador não
   // reporta, aí não tem como filtrar e segue mesmo assim).
@@ -8436,11 +8545,10 @@ async function _entregaProcessarSeguirRota(lat, lon, accuracy) {
     }
   }
 
-  // Recalcula o traçado se a parada-alvo mudou (marcou a anterior) ou se
-  // desviou da geometria em cache — com debounce pra não martelar o OSRM
-  // a cada atualização de GPS (a troca de alvo ignora o debounce, porque
-  // é uma mudança de estado real, não ruído de GPS).
-  const mudouAlvo = _entregaSeguirProximaCid !== proximaCid;
+  // Recalcula o traçado se a parada-alvo mudou ou se desviou da geometria
+  // em cache — com debounce pra não martelar o OSRM a cada atualização de
+  // GPS (a troca de alvo ignora o debounce, porque é mudança de estado
+  // real, não ruído de GPS).
   const desviou = !mudouAlvo && _entregaSeguirRotaCoords &&
     _entregaDistanciaAteRota(lat, lon, _entregaSeguirRotaCoords) > ENTREGA_DESVIO_RECALC_M;
   const agora = Date.now();
@@ -8456,7 +8564,10 @@ async function _entregaProcessarSeguirRota(lat, lon, accuracy) {
       _entregaSeguirSteps = resultado.steps;
       _entregaSeguirStepIdx = 0;
       _entregaSeguirProximaCid = proximaCid;
+      _entregaSeguirDistanciaM = resultado.distanciaM;
+      _entregaSeguirDuracaoS = resultado.duracaoS;
       _entregaAplicarLinha(resultado.coords);
+      _entregaAtualizarEtaSheet();
     }
   }
 
@@ -8478,7 +8589,33 @@ function _entregaAtualizarBannerManobra(lat, lon) {
   document.getElementById('entrega-banner-texto').textContent = _entregaTextoManobra(passo);
   document.getElementById('entrega-banner-distancia').textContent =
     distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
+  _entregaAplicarIconeManobra(document.getElementById('entrega-banner-seta'), passo);
+
+  const proximoPasso = steps[_entregaSeguirStepIdx + 1];
+  const depoisEl = document.getElementById('entrega-banner-depois');
+  if (proximoPasso) {
+    depoisEl.style.display = '';
+    _entregaAplicarIconeManobra(document.getElementById('entrega-banner-depois-seta'), proximoPasso);
+  } else {
+    depoisEl.style.display = 'none';
+  }
+
   banner.classList.add('show');
+}
+
+// Linha de ETA dentro do cartão da parada (min restantes · km · horário de
+// chegada estimado) — só aparece no modo Seguir e depois do primeiro cálculo.
+function _entregaAtualizarEtaSheet() {
+  const el = document.getElementById('entrega-sheet-eta');
+  if (!el) return;
+  if (!_entregaSeguindo || _entregaSeguirDuracaoS == null) { el.style.display = 'none'; return; }
+  const minutos = Math.round(_entregaSeguirDuracaoS / 60);
+  const km = (_entregaSeguirDistanciaM / 1000).toFixed(1);
+  const chegada = new Date(Date.now() + _entregaSeguirDuracaoS * 1000);
+  const hh = String(chegada.getHours()).padStart(2, '0');
+  const mm = String(chegada.getMinutes()).padStart(2, '0');
+  el.textContent = `⏱ ${minutos} min · ${km} km · chegada ${hh}:${mm}`;
+  el.style.display = '';
 }
 
 function _entregaFinalizarSeguir() {
@@ -8486,10 +8623,14 @@ function _entregaFinalizarSeguir() {
   if (!banner) return;
   document.getElementById('entrega-banner-texto').textContent = '✅ Rota concluída';
   document.getElementById('entrega-banner-distancia').textContent = '';
+  document.getElementById('entrega-banner-depois').style.display = 'none';
   banner.classList.add('show');
   _entregaSeguirRotaCoords = null;
   _entregaSeguirSteps = null;
   _entregaSeguirProximaCid = null;
+  _entregaSeguirDistanciaM = null;
+  _entregaSeguirDuracaoS = null;
+  _entregaAtualizarEtaSheet();
 }
 
 async function _entregaInitMap() {
@@ -8719,6 +8860,7 @@ function _entregaAbrirSheet(row) {
   document.getElementById('entrega-sheet-endereco').textContent = seqTxt ? `${seqTxt} - ${enderecoTxt}` : enderecoTxt;
   document.getElementById('entrega-sheet-coords').textContent = (row.lat && row.lon) ? `${row.lat}, ${row.lon}` : '';
   _entregaAtualizarBotoesSheet();
+  _entregaAtualizarEtaSheet();
   document.getElementById('entrega-sheet').classList.add('show');
 }
 
