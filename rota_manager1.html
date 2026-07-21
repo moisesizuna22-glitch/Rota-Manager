@@ -8192,51 +8192,63 @@ function _entregaTextoManobra(passo) {
   return 'Siga em frente' + rua;
 }
 
-// pontos: [{id, lat, lon}, ...]. Retorna array de ids na ordem otimizada de
-// visita (caminho aberto — rota de entrega, não um circuito fechado).
+// pontos: [{id, lat, lon}, ...]. origem (opcional): {lat, lon} da localização
+// atual do celular — quando informada, vira o ponto de partida FIXO da rota
+// (a rota passa a começar de onde o entregador está de verdade, em vez de
+// simplesmente começar pela parada que dá a menor distância total). Retorna
+// array de ids na ordem otimizada de visita (caminho aberto — rota de
+// entrega, não um circuito fechado).
 //
 // Nearest-neighbor é sensível ao ponto de partida — se o ponto sorteado
 // pra começar for uma parada "solta" longe do resto do próprio bairro, o
 // algoritmo greedy fica preso visitando ela isolada antes de pular pro
 // grosso da rota (era exatamente o bug relatado: 1 parada isolada, depois
 // salto pra outro lado da cidade, sem terminar de visitar a vizinhança
-// atual). A correção é tentar vários pontos de partida diferentes e ficar
-// com o de menor distância total — quanto mais tentativas, menor a chance
-// de começar num ponto ruim. O número de tentativas cai conforme a rota
-// cresce, pra manter o cálculo rápido mesmo em rotas grandes (testado:
-// <35ms até 300 paradas). Validado isoladamente antes de entrar aqui:
-// ~80% menos distância numa rota espalhada, ótimo exato numa rota em
-// linha reta embaralhada, e no cenário de bairros bem separados a rota
-// visita cada bairro inteiro antes de ir pro próximo (o mínimo teórico de
-// transições caras, não mais que isso).
-async function otimizarOrdemEntrega(pontos) {
-  const n = pontos.length;
-  if (n <= 2) return pontos.map(p => p.id);
+// atual). Sem uma origem real (GPS indisponível), a correção é tentar
+// vários pontos de partida diferentes e ficar com o de menor distância
+// total — quanto mais tentativas, menor a chance de começar num ponto
+// ruim. O número de tentativas cai conforme a rota cresce, pra manter o
+// cálculo rápido mesmo em rotas grandes (testado: <35ms até 300 paradas).
+// Validado isoladamente antes de entrar aqui: ~80% menos distância numa
+// rota espalhada, ótimo exato numa rota em linha reta embaralhada, e no
+// cenário de bairros bem separados a rota visita cada bairro inteiro
+// antes de ir pro próximo (o mínimo teórico de transições caras, não
+// mais que isso).
+async function otimizarOrdemEntrega(pontos, origem) {
+  // A origem entra como um ponto virtual na posição 0 — o 2-opt/Or-opt
+  // nunca move o conteúdo da posição 0 (só reorganiza o que vem depois),
+  // então isso já garante a rota inteira começando ali sem precisar de
+  // lógica extra de "ponto fixo" dentro do otimizador.
+  const pontosFonte = origem ? [{ id: '__origem__', lat: origem.lat, lon: origem.lon }, ...pontos] : pontos;
+  const n = pontosFonte.length;
+  if (n <= 2) return pontosFonte.filter(p => p.id !== '__origem__').map(p => p.id);
 
   // Tenta tempo real de rua (OSRM) primeiro; se falhar por qualquer motivo,
   // cai pro haversine em linha reta — o algoritmo de 2-opt/Or-opt/multi-start
   // é o mesmo dos dois jeitos, só muda a matriz de custo usada.
-  let dist = await _entregaMatrizOSRM(pontos);
+  let dist = await _entregaMatrizOSRM(pontosFonte);
   if (!dist) {
     dist = Array.from({ length: n }, () => new Array(n).fill(0));
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        const d = _entregaHaversineM(pontos[i].lat, pontos[i].lon, pontos[j].lat, pontos[j].lon);
+        const d = _entregaHaversineM(pontosFonte[i].lat, pontosFonte[i].lon, pontosFonte[j].lat, pontosFonte[j].lon);
         dist[i][j] = d; dist[j][i] = d;
       }
     }
   }
 
   let indicesInicio;
-  if (n <= 60) {
+  if (origem) {
+    indicesInicio = [0]; // partida fixa na localização atual — sem multi-start
+  } else if (n <= 60) {
     indicesInicio = Array.from({ length: n }, (_, i) => i); // tenta todos
   } else {
     // Amostra espalhada pelo array (não só os primeiros) — sempre inclui o
     // primeiro ponto e o mais distante do centroide, completando o resto
     // com passos regulares pra cobrir pontos de partes diferentes da rota.
-    const centroide = pontos.reduce((acc, p) => ({ lat: acc.lat + p.lat / n, lon: acc.lon + p.lon / n }), { lat: 0, lon: 0 });
+    const centroide = pontosFonte.reduce((acc, p) => ({ lat: acc.lat + p.lat / n, lon: acc.lon + p.lon / n }), { lat: 0, lon: 0 });
     let maisLongeIdx = 0, maisLongeD = -1;
-    pontos.forEach((p, i) => {
+    pontosFonte.forEach((p, i) => {
       const d = _entregaHaversineM(p.lat, p.lon, centroide.lat, centroide.lon);
       if (d > maisLongeD) { maisLongeD = d; maisLongeIdx = i; }
     });
@@ -8254,7 +8266,7 @@ async function otimizarOrdemEntrega(pontos) {
     if (d < melhorDist) { melhorDist = d; melhorOrdem = ordem; }
   }
 
-  return melhorOrdem.map(idx => pontos[idx].id);
+  return melhorOrdem.map(idx => pontosFonte[idx].id).filter(id => id !== '__origem__');
 }
 
 // ── Estado + persistência (localStorage, 12h, por assinatura de rota) ──
@@ -8350,9 +8362,25 @@ function _entregaSalvarNoStorage() {
   } catch (e) { /* localStorage indisponível (modo privado etc.) — segue sem persistir */ }
 }
 
+// Pega a localização atual uma única vez (não é o watchPosition contínuo do
+// modo Seguir) — usa cache de até 30s pra não esperar um GPS frio à toa se
+// já tiver uma leitura recente. Resolve null se não tiver permissão/suporte,
+// e quem chama cai pro comportamento antigo (multi-start sem ponto fixo).
+function _entregaObterLocalizacaoAtual() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  });
+}
+
 async function _entregaOtimizar() {
   const pontos = _allRows.filter(_entregaTemCoordenada).map(r => ({ id: r._cid, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
-  _entregaOrdem = await otimizarOrdemEntrega(pontos);
+  const origem = await _entregaObterLocalizacaoAtual();
+  _entregaOrdem = await otimizarOrdemEntrega(pontos, origem);
 }
 
 async function _entregaPrepararDados() {
