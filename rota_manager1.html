@@ -1577,7 +1577,7 @@ header .badge b { color: var(--accent2); }
   }
   .entrega-lista-item.entregue .entrega-lista-status { background: rgba(90,158,79,.14); color: #5a9e4f; }
   .entrega-lista-item.falhou .entrega-lista-status { background: rgba(201,96,74,.14); color: var(--danger); }
-  #entrega-acoes-topo { position: absolute; top: 12px; left: 12px; z-index: 5; display: flex; gap: 8px; }
+  #entrega-acoes-topo { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 5; display: flex; gap: 8px; flex-wrap: wrap; }
 
   .entrega-marker {
     width: 30px; height: 30px; font-weight: 800; font-size: 12px;
@@ -1597,6 +1597,22 @@ header .badge b { color: var(--accent2); }
   }
   .entrega-marker.entregue { border-color: #5a9e4f; background: #5a9e4f; color: #fff; }
   .entrega-marker.falhou { border-color: var(--danger); background: var(--danger); color: #fff; }
+
+  #entrega-btn-seguir.active { background: var(--accent2, #4f9a90); color: #fff; border-color: var(--accent2, #4f9a90); }
+
+  .entrega-gps-dot {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #2b7de9; border: 3px solid #fff;
+    box-shadow: 0 0 0 4px rgba(43,125,233,.35), 0 2px 6px rgba(0,0,0,.4);
+    animation: entrega-gps-pulso 2s ease-in-out infinite;
+  }
+  @keyframes entrega-gps-pulso {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(43,125,233,.35), 0 2px 6px rgba(0,0,0,.4); }
+    50%      { box-shadow: 0 0 0 9px rgba(43,125,233,.12), 0 2px 6px rgba(0,0,0,.4); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entrega-gps-dot { animation: none; }
+  }
   @keyframes entrega-pulso {
     0%, 100% { box-shadow: 0 0 0 4px rgba(199,211,74,.35), 0 2px 10px rgba(0,0,0,.5); }
     50%      { box-shadow: 0 0 0 9px rgba(199,211,74,.12), 0 2px 10px rgba(0,0,0,.5); }
@@ -4458,6 +4474,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       </div>
       <div id="entrega-acoes-topo">
         <button class="btn btn-secondary" id="entrega-btn-reotimizar" onclick="_entregaReotimizar()">🔀 Otimizar rota</button>
+        <button class="btn btn-secondary" id="entrega-btn-seguir" onclick="_entregaAlternarSeguir()">🎯 Seguir</button>
       </div>
       <div id="entrega-sheet">
         <div class="handle"></div>
@@ -8128,6 +8145,9 @@ let _entregaSalvoEm = null;
 let _entregaSheetCid = null;
 let _entregaLinhaAssinatura = null; // assinatura da _entregaOrdem usada na última busca de geometria OSRM
 let _entregaLinhaCoords = null;     // geometria real (seguindo rua) em cache pra essa assinatura
+let _entregaGeoWatchId = null;      // id do navigator.geolocation.watchPosition em andamento
+let _entregaGeoMarker = null;       // marcador da posição atual do celular no mapa
+let _entregaSeguindo = false;       // "modo seguir": recentraliza o mapa a cada atualização de posição
 
 function _entregaTemCoordenada(row) {
   const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
@@ -8215,11 +8235,63 @@ async function abrirModoEntrega() {
     _entregaRenderizar();
     setTimeout(() => _entregaMapInstance.resize(), 60);
   }
+  _entregaIniciarGPS();
 }
 
 function fecharModoEntrega() {
   document.getElementById('entrega-overlay').classList.remove('show');
   _entregaFecharSheet();
+  _entregaPararGPS();
+}
+
+// ── Localização ao vivo (bolinha própria dentro do site) ───────────────
+// Não é navegação de verdade (sem voz, sem recálculo automático) — pra
+// isso o botão "Navegar"/"Navegar grupo" continua abrindo o Google Maps.
+// Isso aqui é só acompanhar a posição do celular sem sair do site.
+function _entregaIniciarGPS() {
+  if (_entregaGeoWatchId != null || !navigator.geolocation) return;
+  _entregaGeoWatchId = navigator.geolocation.watchPosition(
+    (pos) => _entregaAtualizarPosicao(pos.coords.latitude, pos.coords.longitude),
+    (err) => { /* usuário negou ou GPS indisponível — segue só com o mapa/marcadores normais */ },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+  );
+}
+
+function _entregaPararGPS() {
+  if (_entregaGeoWatchId != null) {
+    navigator.geolocation.clearWatch(_entregaGeoWatchId);
+    _entregaGeoWatchId = null;
+  }
+  if (_entregaGeoMarker) { _entregaGeoMarker.remove(); _entregaGeoMarker = null; }
+  _entregaSeguindo = false;
+  const btn = document.getElementById('entrega-btn-seguir');
+  if (btn) btn.classList.remove('active');
+}
+
+function _entregaAtualizarPosicao(lat, lon) {
+  if (!_entregaMapInstance) return;
+  if (!_entregaGeoMarker) {
+    const el = document.createElement('div');
+    el.className = 'entrega-gps-dot';
+    _entregaGeoMarker = new mapboxgl.Marker({ element: el }).setLngLat([lon, lat]).addTo(_entregaMapInstance);
+  } else {
+    _entregaGeoMarker.setLngLat([lon, lat]);
+  }
+  if (_entregaSeguindo) {
+    _entregaMapInstance.easeTo({ center: [lon, lat], zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
+  }
+}
+
+// Botão 🎯: liga/desliga o modo seguir (recentraliza no celular a cada
+// atualização de GPS). Se ainda não tem posição nenhuma, só ativa a busca.
+function _entregaAlternarSeguir() {
+  _entregaSeguindo = !_entregaSeguindo;
+  const btn = document.getElementById('entrega-btn-seguir');
+  if (btn) btn.classList.toggle('active', _entregaSeguindo);
+  if (_entregaSeguindo && _entregaGeoMarker) {
+    const pos = _entregaGeoMarker.getLngLat();
+    _entregaMapInstance.easeTo({ center: pos, zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
+  }
 }
 
 async function _entregaInitMap() {
@@ -8313,7 +8385,9 @@ function _entregaRenderizar() {
   const pct = total ? Math.round((entregues + falhas) / total * 100) : 0;
   document.getElementById('entrega-progresso-fill').style.width = pct + '%';
 
-  if (coordsLinha.length > 0) {
+  // No modo seguir a câmera já está presa na posição do celular — não some
+  // com o zoom aplicado só porque uma entrega foi marcada nesse meio tempo.
+  if (coordsLinha.length > 0 && !_entregaSeguindo) {
     const bounds = new mapboxgl.LngLatBounds();
     coordsLinha.forEach(c => bounds.extend(c));
     _entregaMapInstance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 400 });
