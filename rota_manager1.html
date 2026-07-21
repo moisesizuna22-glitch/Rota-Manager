@@ -1531,6 +1531,14 @@ header .badge b { color: var(--accent2); }
     color: var(--muted); border-bottom: 2px solid transparent; background: transparent;
   }
   .entrega-toggle-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  #entrega-banner {
+    display: none; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; background: var(--accent2, #4f9a90); color: #fff;
+    font-weight: 700; font-size: 14px; flex-shrink: 0;
+  }
+  #entrega-banner.show { display: flex; }
+  #entrega-banner-texto { flex: 1; min-width: 0; }
+  #entrega-banner-distancia { font-family: var(--mono, monospace); font-weight: 800; flex-shrink: 0; }
   #entrega-body { flex: 1; position: relative; }
   #entrega-map { position: absolute; inset: 0; }
   #entrega-lista { display: none; position: absolute; inset: 0; overflow-y: auto; padding: 14px max(14px, env(safe-area-inset-right)) 14px max(14px, env(safe-area-inset-left)); }
@@ -4465,6 +4473,10 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     <div id="entrega-toggle-view">
       <button type="button" class="entrega-toggle-btn active" id="entrega-toggle-mapa" onclick="_entregaMostrarMapa()">🗺️ Mapa</button>
       <button type="button" class="entrega-toggle-btn" id="entrega-toggle-lista" onclick="_entregaMostrarLista()">📋 Lista</button>
+    </div>
+    <div id="entrega-banner">
+      <span id="entrega-banner-texto"></span>
+      <span id="entrega-banner-distancia"></span>
     </div>
     <div id="entrega-body">
       <div id="entrega-map"></div>
@@ -8064,6 +8076,57 @@ async function _entregaGeometriaOSRM(coordsRetas) {
   }
 }
 
+// Rota com instruções passo a passo (pro banner de manobra do modo Seguir) —
+// mesmo /route do OSRM, mas com steps=true. Usado só pro trecho posição
+// atual -> próxima parada (2 pontos), não pra rota inteira.
+async function _entregaRotaComPassos(coordsRetas) {
+  if (coordsRetas.length < 2) return null;
+  const coordsStr = coordsRetas.map(c => `${c[0]},${c[1]}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson&steps=true`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return null;
+    const rota = data.routes[0];
+    const steps = (rota.legs || []).flatMap(l => l.steps || []);
+    return { coords: rota.geometry.coordinates, steps };
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Distância aproximada de um ponto até uma geometria de rota — usa o vértice
+// mais próximo em vez de projeção em segmento (a geometria do OSRM já vem
+// com pontos densos o bastante pra detectar desvio real de rota; upgrade
+// pra projeção em segmento se precisar de mais precisão).
+function _entregaDistanciaAteRota(lat, lon, coords) {
+  let menor = Infinity;
+  for (const [clon, clat] of coords) {
+    const d = _entregaHaversineM(lat, lon, clat, clon);
+    if (d < menor) menor = d;
+  }
+  return menor;
+}
+
+function _entregaTextoManobra(passo) {
+  const tipo = passo.maneuver.type;
+  const mod = passo.maneuver.modifier;
+  const rua = passo.name ? ` em ${passo.name}` : '';
+  if (tipo === 'arrive') return 'Você está chegando ao destino';
+  if (tipo === 'depart') return 'Siga em frente' + rua;
+  if (tipo === 'roundabout' || tipo === 'rotary') return 'Entre na rotatória' + rua;
+  if (mod && ENTREGA_MANOBRA_MODIFICADOR_PT[mod]) {
+    const texto = ENTREGA_MANOBRA_MODIFICADOR_PT[mod];
+    return texto.charAt(0).toUpperCase() + texto.slice(1) + rua;
+  }
+  return 'Siga em frente' + rua;
+}
+
 // pontos: [{id, lat, lon}, ...]. Retorna array de ids na ordem otimizada de
 // visita (caminho aberto — rota de entrega, não um circuito fechado).
 //
@@ -8148,6 +8211,34 @@ let _entregaLinhaCoords = null;     // geometria real (seguindo rua) em cache pr
 let _entregaGeoWatchId = null;      // id do navigator.geolocation.watchPosition em andamento
 let _entregaGeoMarker = null;       // marcador da posição atual do celular no mapa
 let _entregaSeguindo = false;       // "modo seguir": recentraliza o mapa a cada atualização de posição
+
+// ── Navegação turn-by-turn simplificada dentro do modo Seguir ──────────
+// ponytail: raio/tolerâncias em constante, fácil de recalibrar depois de
+// testar em campo — GPS real tem erro variável dependendo do celular/área.
+const ENTREGA_GEOFENCE_M = 25;             // raio de chegada na parada
+const ENTREGA_GPS_ACCURACY_MAX_M = 50;     // ignora leitura de GPS pior que isso (evita falso positivo de chegada)
+const ENTREGA_DESVIO_RECALC_M = 50;        // distância da geometria em cache que dispara recálculo de traçado
+const ENTREGA_RECALC_DEBOUNCE_MS = 8000;   // não recalcula com mais frequência que isso (exceto ao trocar de parada-alvo)
+
+const ENTREGA_MANOBRA_MODIFICADOR_PT = {
+  'uturn': 'faça o retorno',
+  'sharp right': 'vire com força à direita',
+  'right': 'vire à direita',
+  'slight right': 'mantenha-se levemente à direita',
+  'straight': 'siga em frente',
+  'slight left': 'mantenha-se levemente à esquerda',
+  'left': 'vire à esquerda',
+  'sharp left': 'vire com força à esquerda',
+};
+
+let _entregaUltimaLat = null, _entregaUltimaLon = null, _entregaUltimaAccuracy = null;
+let _entregaSeguirRotaCoords = null;         // geometria do trecho atual até a próxima parada (modo Seguir)
+let _entregaSeguirSteps = null;              // steps do OSRM (banner de manobra) pro trecho atual
+let _entregaSeguirStepIdx = 0;               // qual step o usuário já passou
+let _entregaSeguirProximaCid = null;         // cid da parada-alvo do traçado em cache
+let _entregaSeguirUltimoRecalc = 0;          // timestamp do último recálculo (debounce)
+let _entregaSeguirRecalculando = false;      // evita chamadas concorrentes ao OSRM
+let _entregaSeguirChegadaSinalizadaCid = null; // evita reabrir o sheet a cada leitura de GPS parado dentro do raio
 
 function _entregaTemCoordenada(row) {
   const lat = parseFloat(row.lat), lon = parseFloat(row.lon);
@@ -8245,14 +8336,15 @@ function fecharModoEntrega() {
 }
 
 // ── Localização ao vivo (bolinha própria dentro do site) ───────────────
-// Não é navegação de verdade (sem voz, sem recálculo automático) — pra
+// Não tem voz nem recálculo com dados de trânsito tipo Google/Waze — pra
 // isso o botão "Navegar"/"Navegar grupo" continua abrindo o Google Maps.
-// Isso aqui é só acompanhar a posição do celular sem sair do site.
+// Isso aqui é banner de manobra + geofence de chegada em cima do OSRM,
+// sem sair do site.
 function _entregaIniciarGPS() {
   if (_entregaGeoWatchId != null || !navigator.geolocation) return;
   _entregaGeoWatchId = navigator.geolocation.watchPosition(
-    (pos) => _entregaAtualizarPosicao(pos.coords.latitude, pos.coords.longitude),
-    (err) => { /* usuário negou ou GPS indisponível — segue só com o mapa/marcadores normais */ },
+    (pos) => _entregaAtualizarPosicao(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    (err) => _entregaSinalizarErroGPS(),
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
   );
 }
@@ -8264,12 +8356,19 @@ function _entregaPararGPS() {
   }
   if (_entregaGeoMarker) { _entregaGeoMarker.remove(); _entregaGeoMarker = null; }
   _entregaSeguindo = false;
+  _entregaSeguirRotaCoords = null;
+  _entregaSeguirSteps = null;
+  _entregaSeguirProximaCid = null;
+  _entregaSeguirChegadaSinalizadaCid = null;
   const btn = document.getElementById('entrega-btn-seguir');
   if (btn) btn.classList.remove('active');
+  const banner = document.getElementById('entrega-banner');
+  if (banner) banner.classList.remove('show');
 }
 
-function _entregaAtualizarPosicao(lat, lon) {
+function _entregaAtualizarPosicao(lat, lon, accuracy) {
   if (!_entregaMapInstance) return;
+  _entregaUltimaLat = lat; _entregaUltimaLon = lon; _entregaUltimaAccuracy = accuracy;
   if (!_entregaGeoMarker) {
     const el = document.createElement('div');
     el.className = 'entrega-gps-dot';
@@ -8279,19 +8378,118 @@ function _entregaAtualizarPosicao(lat, lon) {
   }
   if (_entregaSeguindo) {
     _entregaMapInstance.easeTo({ center: [lon, lat], zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
+    _entregaProcessarSeguirRota(lat, lon, accuracy);
   }
 }
 
+function _entregaSinalizarErroGPS() {
+  if (!_entregaSeguindo) return;
+  const banner = document.getElementById('entrega-banner');
+  if (!banner) return;
+  document.getElementById('entrega-banner-texto').textContent = '⚠️ Sem sinal de GPS';
+  document.getElementById('entrega-banner-distancia').textContent = '';
+  banner.classList.add('show');
+}
+
 // Botão 🎯: liga/desliga o modo seguir (recentraliza no celular a cada
-// atualização de GPS). Se ainda não tem posição nenhuma, só ativa a busca.
+// atualização de GPS, mostra banner de manobra e geofence de chegada).
 function _entregaAlternarSeguir() {
   _entregaSeguindo = !_entregaSeguindo;
   const btn = document.getElementById('entrega-btn-seguir');
   if (btn) btn.classList.toggle('active', _entregaSeguindo);
-  if (_entregaSeguindo && _entregaGeoMarker) {
-    const pos = _entregaGeoMarker.getLngLat();
-    _entregaMapInstance.easeTo({ center: pos, zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
+  if (_entregaSeguindo) {
+    if (_entregaGeoMarker) {
+      const pos = _entregaGeoMarker.getLngLat();
+      _entregaMapInstance.easeTo({ center: pos, zoom: Math.max(_entregaMapInstance.getZoom(), 16), duration: 500 });
+    }
+    if (_entregaUltimaLat != null) {
+      _entregaSeguirUltimoRecalc = 0; // força recálculo imediato ao ligar
+      _entregaProcessarSeguirRota(_entregaUltimaLat, _entregaUltimaLon, _entregaUltimaAccuracy);
+    }
+  } else {
+    document.getElementById('entrega-banner').classList.remove('show');
+    _entregaSeguirRotaCoords = null;
+    _entregaSeguirSteps = null;
+    _entregaSeguirProximaCid = null;
+    _entregaRenderizar(); // volta a mostrar a linha inteira da rota e reencaixa o mapa
   }
+}
+
+// Núcleo do modo Seguir: geofence de chegada + recálculo de traçado +
+// banner de manobra, tudo a partir da posição de GPS mais recente.
+async function _entregaProcessarSeguirRota(lat, lon, accuracy) {
+  const proximaCid = _entregaProximaPendenteCid();
+  if (proximaCid == null) { _entregaFinalizarSeguir(); return; }
+  const row = _allRows.find(r => r._cid === proximaCid);
+  if (!row) return;
+  const destLat = parseFloat(row.lat), destLon = parseFloat(row.lon);
+  if (isNaN(destLat) || isNaN(destLon)) return;
+
+  // Geofence de chegada — ignora leitura de GPS ruim demais pra não dar
+  // falso positivo (accuracy vem em metros; null quando o navegador não
+  // reporta, aí não tem como filtrar e segue mesmo assim).
+  if (accuracy == null || accuracy <= ENTREGA_GPS_ACCURACY_MAX_M) {
+    const distParada = _entregaHaversineM(lat, lon, destLat, destLon);
+    if (distParada <= ENTREGA_GEOFENCE_M && _entregaSeguirChegadaSinalizadaCid !== proximaCid) {
+      _entregaSeguirChegadaSinalizadaCid = proximaCid;
+      if (_entregaSheetCid !== row._cid) _entregaAbrirSheet(row);
+    }
+  }
+
+  // Recalcula o traçado se a parada-alvo mudou (marcou a anterior) ou se
+  // desviou da geometria em cache — com debounce pra não martelar o OSRM
+  // a cada atualização de GPS (a troca de alvo ignora o debounce, porque
+  // é uma mudança de estado real, não ruído de GPS).
+  const mudouAlvo = _entregaSeguirProximaCid !== proximaCid;
+  const desviou = !mudouAlvo && _entregaSeguirRotaCoords &&
+    _entregaDistanciaAteRota(lat, lon, _entregaSeguirRotaCoords) > ENTREGA_DESVIO_RECALC_M;
+  const agora = Date.now();
+  const podeRecalcular = agora - _entregaSeguirUltimoRecalc > ENTREGA_RECALC_DEBOUNCE_MS;
+
+  if ((mudouAlvo || desviou) && !_entregaSeguirRecalculando && (mudouAlvo || podeRecalcular)) {
+    _entregaSeguirRecalculando = true;
+    _entregaSeguirUltimoRecalc = agora;
+    const resultado = await _entregaRotaComPassos([[lon, lat], [destLon, destLat]]);
+    _entregaSeguirRecalculando = false;
+    if (resultado) {
+      _entregaSeguirRotaCoords = resultado.coords;
+      _entregaSeguirSteps = resultado.steps;
+      _entregaSeguirStepIdx = 0;
+      _entregaSeguirProximaCid = proximaCid;
+      _entregaAplicarLinha(resultado.coords);
+    }
+  }
+
+  if (_entregaSeguirSteps) _entregaAtualizarBannerManobra(lat, lon);
+}
+
+function _entregaAtualizarBannerManobra(lat, lon) {
+  const steps = _entregaSeguirSteps;
+  const banner = document.getElementById('entrega-banner');
+  if (!steps || !steps.length || !banner) return;
+  // Avança o passo conforme o usuário se aproxima da manobra atual.
+  while (_entregaSeguirStepIdx < steps.length - 1) {
+    const loc = steps[_entregaSeguirStepIdx].maneuver.location; // [lon, lat]
+    if (_entregaHaversineM(lat, lon, loc[1], loc[0]) < 20) { _entregaSeguirStepIdx++; } else break;
+  }
+  const passo = steps[_entregaSeguirStepIdx];
+  const loc = passo.maneuver.location;
+  const distM = _entregaHaversineM(lat, lon, loc[1], loc[0]);
+  document.getElementById('entrega-banner-texto').textContent = _entregaTextoManobra(passo);
+  document.getElementById('entrega-banner-distancia').textContent =
+    distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
+  banner.classList.add('show');
+}
+
+function _entregaFinalizarSeguir() {
+  const banner = document.getElementById('entrega-banner');
+  if (!banner) return;
+  document.getElementById('entrega-banner-texto').textContent = '✅ Rota concluída';
+  document.getElementById('entrega-banner-distancia').textContent = '';
+  banner.classList.add('show');
+  _entregaSeguirRotaCoords = null;
+  _entregaSeguirSteps = null;
+  _entregaSeguirProximaCid = null;
 }
 
 async function _entregaInitMap() {
@@ -8375,11 +8573,15 @@ function _entregaRenderizar() {
     _entregaMarkers.push(marker);
   });
 
-  // Desenha a linha reta na hora (feedback imediato) — se o pedido de
-  // geometria real de rua abaixo chegar, ela substitui pela versão que
-  // segue as ruas de verdade.
-  _entregaAplicarLinha(coordsLinha);
-  _entregaAtualizarLinhaRota(coordsLinha);
+  // No modo Seguir a linha mostrada é só o trecho até a próxima parada
+  // (ver _entregaProcessarSeguirRota) — não sobrescreve com a rota inteira.
+  if (!_entregaSeguindo) {
+    // Desenha a linha reta na hora (feedback imediato) — se o pedido de
+    // geometria real de rua abaixo chegar, ela substitui pela versão que
+    // segue as ruas de verdade.
+    _entregaAplicarLinha(coordsLinha);
+    _entregaAtualizarLinhaRota(coordsLinha);
+  }
 
   document.getElementById('entrega-progresso-txt').textContent = `${entregues + falhas}/${total}`;
   const pct = total ? Math.round((entregues + falhas) / total * 100) : 0;
