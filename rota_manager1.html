@@ -8276,7 +8276,12 @@ function _entregaRenderizar() {
     const el = document.createElement('div');
     const ehProxima = cid === proximaCid;
     el.className = 'entrega-marker ' + (ehProxima ? 'proxima' : status);
-    el.textContent = status === 'entregue' ? '✓' : status === 'falhou' ? '✕' : (row.group_stops || row.stop || (idx + 1));
+    // O número do marcador é a posição na rota otimizada (1, 2, 3...), não
+    // o SEQ original da planilha/pacote — senão o pin "próximo" pode
+    // mostrar um número bem alto (ex: 86) mesmo sendo o primeiro a visitar,
+    // confundindo a ordem real de entrega. O SEQ original continua visível
+    // no texto do endereço (sheet e lista).
+    el.textContent = status === 'entregue' ? '✓' : status === 'falhou' ? '✕' : (idx + 1);
     el.addEventListener('click', (ev) => { ev.stopPropagation(); _entregaAbrirSheet(row); });
 
     const marker = new mapboxgl.Marker({ element: el }).setLngLat([lon, lat]).addTo(_entregaMapInstance);
@@ -8397,11 +8402,16 @@ function _entregaAbrirSheetPorCid(cid) {
 // ── Sheet de ação ─────────────────────────────────────────────────────
 function _entregaAbrirSheet(row) {
   _entregaSheetCid = row._cid;
+  // Badge redondo mostra a POSIÇÃO na rota otimizada (igual ao pin no mapa
+  // e à lista) — o SEQ original do pacote/planilha continua no texto do
+  // endereço, mas não é mais o número "de cima", pra não confundir com a
+  // ordem real de visita (ex: pacote 86 sendo o 1º a entregar).
+  const posicao = _entregaOrdem.indexOf(row._cid) + 1;
   const seqTxt = row.group_stops || row.stop || '';
   const enderecoTxt = row.endereco_original || row.address || '';
-  document.getElementById('entrega-sheet-seq').textContent = seqTxt || '—';
-  // Sequência + endereço juntos no texto, igual já é feito na planilha
-  // exportada pro Circuit (`${seq} - ${endereco}`) — não só no badge redondo.
+  document.getElementById('entrega-sheet-seq').textContent = posicao || '—';
+  // Sequência original + endereço juntos no texto, igual já é feito na
+  // planilha exportada pro Circuit (`${seq} - ${endereco}`).
   document.getElementById('entrega-sheet-endereco').textContent = seqTxt ? `${seqTxt} - ${enderecoTxt}` : enderecoTxt;
   document.getElementById('entrega-sheet-coords').textContent = (row.lat && row.lon) ? `${row.lat}, ${row.lon}` : '';
   _entregaAtualizarBotoesSheet();
