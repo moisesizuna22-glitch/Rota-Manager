@@ -4945,12 +4945,24 @@ Selecionar todos
     </span>
     <span id="bn-exportar-label">Exportar</span>
   </button>
-  <button class="bn-item" id="bn-entregar" onclick="abrirModoEntrega()" title="Iniciar modo de entrega">
-    <span class="bn-icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><rect x="1" y="7" width="13" height="10" rx="1"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg>
-    </span>
-    <span>Entregar</span>
-  </button>
+  <script>
+    // Ponto de entrada do Modo de Entrega na barra inferior — oculto
+    // temporariamente enquanto a flag estiver false. Não usa display:none:
+    // o botão simplesmente não é criado no DOM (o resto do Modo de Entrega
+    // — telas, handlers, endpoints — continua intacto e acessível por
+    // outros caminhos, ex.: o auto-abrir depois de exportar a planilha).
+    const MOSTRAR_BOTAO_ENTREGAR = false;
+    if (MOSTRAR_BOTAO_ENTREGAR) {
+      document.currentScript.insertAdjacentHTML('beforebegin', `
+        <button class="bn-item" id="bn-entregar" onclick="abrirModoEntrega()" title="Iniciar modo de entrega">
+          <span class="bn-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="1" y="7" width="13" height="10" rx="1"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg>
+          </span>
+          <span>Entregar</span>
+        </button>
+      `);
+    }
+  </script>
 </div>
 
 <script>
