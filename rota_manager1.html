@@ -4792,6 +4792,9 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <button class="btn" onclick="document.getElementById('file-input-anjun-rota').click()">
 🧾 Importar Rota Anjun
 </button>
+<button class="btn btn-secondary" id="btn-limpar-lista" onclick="limparListaCarregada()" title="Limpar a rota carregada">
+🗑️ Limpar lista
+</button>
 <div class="filter-wrap">
 <span style="color:var(--muted);font-size:13px">🔍</span>
 <input class="filter-input" id="filter-input" placeholder="Filtrar endereços..." oninput="filtrarTabela()">
@@ -5901,6 +5904,33 @@ bnAgrupar.title = n < 2
 ? 'Marque ao menos 2 endereços para agrupar'
 : `Agrupar os ${n} endereços selecionados`;
 atualizarBotaoAgruparMapa();
+}
+
+// Limpa a rota carregada (lista/tabela) e volta pra tela de importação —
+// não mexe na planilha original, só no que já foi processado na sessão.
+function limparListaCarregada() {
+if (!_allRows.length) return;
+if (!confirm('Limpar a rota carregada? Isso remove todos os endereços da lista atual (a planilha original não é afetada).')) return;
+
+_allRows = [];
+_selecionados.clear();
+_headers = []; _colLat = null; _colLon = null; _colCoor = null;
+_fileName = '';
+
+document.getElementById('table-body').innerHTML = '';
+document.getElementById('file-badge').classList.remove('show');
+document.getElementById('filter-input').value = '';
+document.getElementById('file-input').value = '';
+document.getElementById('file-input-anjun-rota').value = '';
+atualizarFab();
+
+document.getElementById('table-section').classList.remove('show');
+document.getElementById('stats-bar').classList.remove('show');
+document.getElementById('toolbar').style.display = 'none';
+document.getElementById('bottom-nav').classList.remove('show');
+document.body.classList.remove('has-bottom-nav');
+
+aplicarVisibilidadeDropZone();
 }
 
 // Mesma seleção (_selecionados) da tabela, refletida no botão do mapa
