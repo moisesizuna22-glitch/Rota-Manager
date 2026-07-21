@@ -1539,6 +1539,17 @@ header .badge b { color: var(--accent2); }
     font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px;
     font-family: var(--mono, monospace);
   }
+  .entrega-lista-grupo {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 18px 0 8px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .entrega-lista-grupo:first-child { margin-top: 0; }
+  .entrega-lista-grupo span {
+    font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .entrega-lista-grupo .btn { padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
   .entrega-lista-item {
     display: flex; align-items: flex-start; gap: 10px;
     padding: 10px 12px; margin-bottom: 8px;
@@ -8103,6 +8114,10 @@ async function otimizarOrdemEntrega(pontos) {
 
 // ── Estado + persistência (localStorage, 12h, por assinatura de rota) ──
 const ENTREGA_TTL_MS = 12 * 60 * 60 * 1000;
+// ponytail: 10 é o teto prático do link grátis do Google Maps (destino +
+// waypoints, sem chave de API) — se o Google cortar antes disso na prática,
+// baixar esse número em vez de reimplementar a navegação por conta própria.
+const ENTREGA_TAMANHO_GRUPO = 10;
 const ENTREGA_STORAGE_KEY = '_rm_entrega_progresso';
 
 let _entregaMapInstance = null;
@@ -8369,6 +8384,19 @@ function _entregaRenderizarLista() {
     if (anterior) distanciaTotalM += _entregaHaversineM(anterior.lat, anterior.lon, lat, lon);
     anterior = { lat, lon };
 
+    // Cabeçalho de grupo a cada ENTREGA_TAMANHO_GRUPO paradas, com botão pra
+    // abrir esse pedaço da rota no Google Maps, na mesma sequência otimizada.
+    if (idx % ENTREGA_TAMANHO_GRUPO === 0) {
+      const grupoIdx = idx / ENTREGA_TAMANHO_GRUPO;
+      const fim = Math.min(idx + ENTREGA_TAMANHO_GRUPO, _entregaOrdem.length);
+      linhas.push(`
+        <div class="entrega-lista-grupo">
+          <span>Grupo ${grupoIdx + 1} · paradas ${idx + 1}–${fim}</span>
+          <button type="button" class="btn btn-secondary" onclick="event.stopPropagation(); _entregaNavegarGrupo(${grupoIdx})">🧭 Navegar grupo</button>
+        </div>
+      `);
+    }
+
     const status = _entregaStatus[cid] || 'pendente';
     const ehProxima = cid === proximaCid;
     const seqTxt = row.group_stops || row.stop || String(idx + 1);
@@ -8433,6 +8461,27 @@ function _entregaNavegar() {
   const row = _allRows.find(r => r._cid === _entregaSheetCid);
   if (!row || !row.lat || !row.lon) { alert('Essa parada não tem coordenada pra navegar.'); return; }
   const url = `https://www.google.com/maps/dir/?api=1&destination=${row.lat},${row.lon}&travelmode=driving`;
+  window.open(url, '_blank');
+}
+
+// Abre um grupo inteiro (até ENTREGA_TAMANHO_GRUPO paradas) de uma vez no
+// Google Maps, na mesma ordem da rota otimizada — origem fica implícita
+// (localização atual do celular), e cada parada do grupo vira um waypoint,
+// menos a última que é o destino final do trecho.
+function _entregaNavegarGrupo(grupoIdx) {
+  const inicio = grupoIdx * ENTREGA_TAMANHO_GRUPO;
+  const cidsGrupo = _entregaOrdem.slice(inicio, inicio + ENTREGA_TAMANHO_GRUPO);
+  const porCid = new Map(_allRows.map(r => [r._cid, r]));
+  const pontos = cidsGrupo.map(cid => porCid.get(cid)).filter(r => r && r.lat && r.lon);
+  if (pontos.length === 0) { alert('Esse grupo não tem paradas com coordenada.'); return; }
+  if (pontos.length === 1) {
+    const p = pontos[0];
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`, '_blank');
+    return;
+  }
+  const destino = pontos[pontos.length - 1];
+  const waypoints = pontos.slice(0, -1).map(p => `${p.lat},${p.lon}`).join('|');
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${destino.lat},${destino.lon}&waypoints=${encodeURIComponent(waypoints)}&travelmode=driving`;
   window.open(url, '_blank');
 }
 
