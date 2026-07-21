@@ -1359,6 +1359,37 @@ header .badge b { color: var(--accent2); }
   }
   #admin-header .title { flex: 1; font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--display); letter-spacing: .03em; }
 
+  /* ── Diálogo customizado (substitui alert()/confirm() nativos) ──
+     Propositalmente neutro/sem chamfer de pixel-art: aparece em qualquer
+     tela do app, inclusive no admin, que não leva estilo de gamificação. */
+  #dialogo-overlay {
+    display: none; position: fixed; inset: 0; z-index: 900;
+    background: rgba(0,0,0,.55);
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #dialogo-overlay.show { display: flex; }
+  #dialogo-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    max-width: 380px; width: 100%;
+    padding: 22px 20px 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+  }
+  #dialogo-mensagem {
+    font-size: 14.5px; color: var(--text); line-height: 1.5; white-space: pre-line;
+    margin-bottom: 14px;
+  }
+  #dialogo-input {
+    display: block; width: 100%; box-sizing: border-box;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 14px; padding: 9px 12px; margin-bottom: 16px;
+  }
+  #dialogo-input:focus { outline: none; border-color: var(--accent2, #4f9a90); }
+  #dialogo-botoes { display: flex; justify-content: flex-end; gap: 10px; }
+  #dialogo-botoes .btn { min-width: 76px; justify-content: center; }
+  #dialogo-btn-ok.perigoso { background: var(--danger); color: #fff; border-color: var(--danger); }
+  #dialogo-btn-ok.perigoso:hover { filter: brightness(1.1); }
+
   /* ── Mapa com todas as paradas (tela cheia) ── */
   #mapa-overlay {
     display: none;
@@ -5301,13 +5332,13 @@ let _colCoor = null;
 const dropZone = document.getElementById('drop-zone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
+dropZone.addEventListener('drop', async e => {
 e.preventDefault();
 dropZone.classList.remove('drag-over');
 const file = e.dataTransfer.files[0];
 if (file) {
 if (!_serverOnline) {
-alert('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
+await mostrarAlerta('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
 return;
 }
 _fileName = file.name;
@@ -5386,7 +5417,7 @@ showLoading(`Lendo ${file.name}...`, 0);
 
 const reader = new FileReader();
 reader.onload = e => {
-setTimeout(() => {
+setTimeout(async () => {
 try {
 setLoadingStage(1, 'Validando endereços...');
 const buffer = new Uint8Array(e.target.result);
@@ -5414,7 +5445,7 @@ document.body.classList.add('has-bottom-nav');
 } catch(err) {
 hideLoading();
 aplicarVisibilidadeDropZone();
-alert('Erro ao processar arquivo: ' + err.message);
+await mostrarAlerta('Erro ao processar arquivo: ' + err.message);
 }
 }, 80);
 };
@@ -5756,12 +5787,12 @@ return;
 });
 
 // Delegação de evento: botão "✕" tira um endereço específico do grupo
-document.getElementById('table-body').addEventListener('click', (e) => {
+document.getElementById('table-body').addEventListener('click', async (e) => {
 const btn = e.target.closest('.btn-ungroup');
 if (!btn) return;
 const cid = parseInt(btn.dataset.cid);
 const mi  = parseInt(btn.dataset.mi);
-if (confirm('Tirar este endereço do grupo? Ele passará a ser uma rota separada.')) {
+if (await mostrarConfirm('Tirar este endereço do grupo? Ele passará a ser uma rota separada.')) {
 desagruparMembro(cid, mi);
 }
 });
@@ -5908,9 +5939,9 @@ atualizarBotaoAgruparMapa();
 
 // Limpa a rota carregada (lista/tabela) e volta pra tela de importação —
 // não mexe na planilha original, só no que já foi processado na sessão.
-function limparListaCarregada() {
+async function limparListaCarregada() {
 if (!_allRows.length) return;
-if (!confirm('Limpar a rota carregada? Isso remove todos os endereços da lista atual (a planilha original não é afetada).')) return;
+if (!(await mostrarConfirm('Limpar a rota carregada? Isso remove todos os endereços da lista atual (a planilha original não é afetada).', true))) return;
 
 _allRows = [];
 _selecionados.clear();
@@ -5951,16 +5982,16 @@ btn.title = n < 2
 // independente de scroll.
 
 // Junta manualmente os endereços marcados em um único grupo
-function agruparSelecionados() {
+async function agruparSelecionados() {
 if (_selecionados.size < 2) {
-alert('Selecione pelo menos 2 endereços (marque as caixinhas) para agrupar.');
+await mostrarAlerta('Selecione pelo menos 2 endereços (marque as caixinhas) para agrupar.');
 return;
 }
 
 const escolhidos = _allRows.filter(r => _selecionados.has(r._cid));
 if (escolhidos.length < 2) return;
 
-if (!confirm(`Agrupar estes ${escolhidos.length} endereços em um único grupo?`)) return;
+if (!(await mostrarConfirm(`Agrupar estes ${escolhidos.length} endereços em um único grupo?`))) return;
 
 // Junta os membros de todos os endereços escolhidos (cada um pode já ser um grupo)
 const membrosCombinados = [];
@@ -6130,14 +6161,14 @@ return parseFloat(p[1]) || -49.2925;
 // window.open PRECISA rodar antes de qualquer await, senão o navegador não
 // reconhece mais isso como resposta direta ao clique e bloqueia o popup.
 const win = window.open('', '_blank', 'width=1280,height=860');
-if (!win) { alert('Permita pop-ups para este site e tente novamente.'); return; }
+if (!win) { await mostrarAlerta('Permita pop-ups para este site e tente novamente.'); return; }
 
 let cfg;
 try {
   cfg = await carregarConfigMapas();
 } catch (e) {
   win.close();
-  alert('Não foi possível carregar as chaves de mapa. Faça login novamente.');
+  await mostrarAlerta('Não foi possível carregar as chaves de mapa. Faça login novamente.');
   return;
 }
 
@@ -7564,13 +7595,13 @@ checarServidorInit();
 setInterval(checarServidor, 5000);
 
 // Ao escolher arquivo: envia pro servidor e roda pipeline automaticamente
-function handleFile(event) {
+async function handleFile(event) {
 const file = event.target.files[0];
 if (!file) return;
 event.target.value = '';
 
 if (!_serverOnline) {
-alert('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
+await mostrarAlerta('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
 return;
 }
 
@@ -7727,7 +7758,7 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 hideLoading();
 aplicarVisibilidadeDropZone();
 if (err && err.name === 'AbortError') return; // cancelado pelo usuário, sem alerta
-alert('❌ Erro: ' + err.message);
+await mostrarAlerta('❌ Erro: ' + err.message);
 }
 }
 
@@ -7735,13 +7766,13 @@ alert('❌ Erro: ' + err.message);
 // processarComServidor acima. Recebe o CSV/xlsx bruto do Anjun, o servidor
 // faz o tratamento Anjun (limpeza/deduplicação do endereço) + a mesma
 // lógica de agrupamento de sempre, e devolve já pronto pra lista.
-function handleFileAnjunRota(event) {
+async function handleFileAnjunRota(event) {
 const file = event.target.files[0];
 if (!file) return;
 event.target.value = '';
 
 if (!_serverOnline) {
-alert('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
+await mostrarAlerta('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
 return;
 }
 
@@ -7813,7 +7844,7 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 hideLoading();
 aplicarVisibilidadeDropZone();
 if (err && err.name === 'AbortError') return;
-alert('❌ Erro: ' + err.message);
+await mostrarAlerta('❌ Erro: ' + err.message);
 }
 }
 // ══════════════════════════════════════════════════════════
@@ -7821,7 +7852,7 @@ let _mapaRotasInstance = null;
 let _mapaRotasMarkers  = [];
 
 async function abrirMapaRotas() {
-  if (!_allRows.length) { alert('Nenhum endereço carregado para mostrar no mapa.'); return; }
+  if (!_allRows.length) { await mostrarAlerta('Nenhum endereço carregado para mostrar no mapa.'); return; }
   document.getElementById('mapa-overlay').classList.add('show');
   if (!_mapaRotasInstance) {
     await initMapaRotas();
@@ -7842,7 +7873,7 @@ async function initMapaRotas() {
     cfg = await carregarConfigMapas();
   } catch (e) {
     document.getElementById('mapa-overlay').classList.remove('show');
-    alert('Não foi possível carregar as chaves de mapa. Faça login novamente.');
+    await mostrarAlerta('Não foi possível carregar as chaves de mapa. Faça login novamente.');
     return;
   }
   mapboxgl.accessToken = cfg.mapboxToken;
@@ -8458,7 +8489,7 @@ async function _entregaReotimizar() {
 
 // ── Abrir/fechar ──────────────────────────────────────────────────────
 async function abrirModoEntrega() {
-  if (!_allRows.length) { alert('Nenhum endereço carregado para entregar.'); return; }
+  if (!_allRows.length) { await mostrarAlerta('Nenhum endereço carregado para entregar.'); return; }
   document.getElementById('entrega-overlay').classList.add('show');
   await _entregaPrepararDados();
   if (!_entregaMapInstance) {
@@ -8709,7 +8740,7 @@ async function _entregaInitMap() {
     cfg = await carregarConfigMapas();
   } catch (e) {
     document.getElementById('entrega-overlay').classList.remove('show');
-    alert('Não foi possível carregar as chaves de mapa. Faça login novamente.');
+    await mostrarAlerta('Não foi possível carregar as chaves de mapa. Faça login novamente.');
     return;
   }
   mapboxgl.accessToken = cfg.mapboxToken;
@@ -8944,10 +8975,10 @@ function _entregaAtualizarBotoesSheet() {
 
 // Entrega a navegação de verdade pro Google Maps — grátis, sem token novo,
 // e abre direto no app instalado no celular (ou no navegador, se não tiver).
-function _entregaNavegar() {
+async function _entregaNavegar() {
   if (_entregaSheetCid == null) return;
   const row = _allRows.find(r => r._cid === _entregaSheetCid);
-  if (!row || !row.lat || !row.lon) { alert('Essa parada não tem coordenada pra navegar.'); return; }
+  if (!row || !row.lat || !row.lon) { await mostrarAlerta('Essa parada não tem coordenada pra navegar.'); return; }
   const url = `https://www.google.com/maps/dir/?api=1&destination=${row.lat},${row.lon}&travelmode=driving`;
   window.open(url, '_blank');
 }
@@ -8956,12 +8987,12 @@ function _entregaNavegar() {
 // Google Maps, na mesma ordem da rota otimizada — origem fica implícita
 // (localização atual do celular), e cada parada do grupo vira um waypoint,
 // menos a última que é o destino final do trecho.
-function _entregaNavegarGrupo(grupoIdx) {
+async function _entregaNavegarGrupo(grupoIdx) {
   const inicio = grupoIdx * ENTREGA_TAMANHO_GRUPO;
   const cidsGrupo = _entregaOrdem.slice(inicio, inicio + ENTREGA_TAMANHO_GRUPO);
   const porCid = new Map(_allRows.map(r => [r._cid, r]));
   const pontos = cidsGrupo.map(cid => porCid.get(cid)).filter(r => r && r.lat && r.lon);
-  if (pontos.length === 0) { alert('Esse grupo não tem paradas com coordenada.'); return; }
+  if (pontos.length === 0) { await mostrarAlerta('Esse grupo não tem paradas com coordenada.'); return; }
   if (pontos.length === 1) {
     const p = pontos[0];
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`, '_blank');
@@ -9208,17 +9239,17 @@ async function carregarDoHistorico(nome) {
   } catch(err) {
     hideLoading();
     aplicarVisibilidadeDropZone();
-    alert('❌ Erro ao carregar do histórico: ' + err.message);
+    await mostrarAlerta('❌ Erro ao carregar do histórico: ' + err.message);
   }
 }
 
 async function apagarDoHistorico(nome) {
-  if (!confirm(`Remover "${nome}" do histórico?`)) return;
+  if (!(await mostrarConfirm(`Remover "${nome}" do histórico?`, true))) return;
   try {
     await fetch(SERVER + '/historico/apagar?nome=' + encodeURIComponent(nome), { method: 'DELETE', headers: authHeaders() });
     carregarListaHistorico();
     if (_nomeAtual === nome) _nomeAtual = '';
-  } catch(e) { alert('Erro ao remover.'); }
+  } catch(e) { await mostrarAlerta('Erro ao remover.'); }
 }
 
 function renderHistoricoPanel() { /* chamado ao carregar rota — já atualiza badge ativo */ }
@@ -9286,7 +9317,7 @@ function renderBancoList() {
 }
 
 async function limparBancoRecentes() {
-  if (!confirm('Zerar do banco todas as coordenadas confirmadas nas últimas 24h? Elas vão ser re-geocodificadas (HERE/Google) na próxima vez que aparecerem numa rota.')) return;
+  if (!(await mostrarConfirm('Zerar do banco todas as coordenadas confirmadas nas últimas 24h? Elas vão ser re-geocodificadas (HERE/Google) na próxima vez que aparecerem numa rota.', true))) return;
   const btn = document.getElementById('banco-limpar-recentes');
   btn.disabled = true;
   try {
@@ -9297,13 +9328,13 @@ async function limparBancoRecentes() {
     });
     const d = await r.json();
     if (d.ok) {
-      alert(d.removidas + ' entrada(s) removida(s) do banco.');
+      await mostrarAlerta(d.removidas + ' entrada(s) removida(s) do banco.');
       await carregarBanco();
     } else {
-      alert('Erro: ' + (d.erro || d.msg));
+      await mostrarAlerta('Erro: ' + (d.erro || d.msg));
     }
   } catch (e) {
-    alert('Erro ao comunicar com o servidor.');
+    await mostrarAlerta('Erro ao comunicar com o servidor.');
   } finally {
     btn.disabled = false;
   }
@@ -9312,11 +9343,11 @@ async function limparBancoRecentes() {
 async function limparBancoIntervalo() {
   const inicio = document.getElementById('banco-intervalo-inicio').value;
   const fim = document.getElementById('banco-intervalo-fim').value;
-  if (!inicio || !fim) { alert('Escolha a data de início e a data de fim.'); return; }
-  if (fim < inicio) { alert('A data final não pode ser antes da data inicial.'); return; }
+  if (!inicio || !fim) { await mostrarAlerta('Escolha a data de início e a data de fim.'); return; }
+  if (fim < inicio) { await mostrarAlerta('A data final não pode ser antes da data inicial.'); return; }
   const [yi, mi, di] = inicio.split('-');
   const [yf, mf, df] = fim.split('-');
-  if (!confirm(`Zerar do banco todas as coordenadas confirmadas de ${di}/${mi}/${yi} até ${df}/${mf}/${yf}? Elas vão ser re-geocodificadas na próxima vez que aparecerem numa rota.`)) return;
+  if (!(await mostrarConfirm(`Zerar do banco todas as coordenadas confirmadas de ${di}/${mi}/${yi} até ${df}/${mf}/${yf}? Elas vão ser re-geocodificadas na próxima vez que aparecerem numa rota.`, true))) return;
   const btn = document.getElementById('banco-limpar-intervalo');
   btn.disabled = true;
   try {
@@ -9327,20 +9358,20 @@ async function limparBancoIntervalo() {
     });
     const d = await r.json();
     if (d.ok) {
-      alert(d.removidas + ' entrada(s) removida(s) do banco.');
+      await mostrarAlerta(d.removidas + ' entrada(s) removida(s) do banco.');
       await carregarBanco();
     } else {
-      alert('Erro: ' + (d.erro || d.msg));
+      await mostrarAlerta('Erro: ' + (d.erro || d.msg));
     }
   } catch (e) {
-    alert('Erro ao comunicar com o servidor.');
+    await mostrarAlerta('Erro ao comunicar com o servidor.');
   } finally {
     btn.disabled = false;
   }
 }
 
 async function apagarDoBanco(chave, btn) {
-  if (!confirm('Remover "' + chave + '" do banco de coordenadas?')) return;
+  if (!(await mostrarConfirm('Remover "' + chave + '" do banco de coordenadas?', true))) return;
   btn.disabled = true;
   try {
     const r = await fetch(SERVER + '/coords/apagar', {
@@ -9353,11 +9384,11 @@ async function apagarDoBanco(chave, btn) {
       _bancoCache = _bancoCache.filter(e => e.chave !== chave);
       renderBancoList();
     } else {
-      alert('Erro: ' + (d.erro || d.msg));
+      await mostrarAlerta('Erro: ' + (d.erro || d.msg));
       btn.disabled = false;
     }
   } catch(e) {
-    alert('Erro ao comunicar com o servidor.');
+    await mostrarAlerta('Erro ao comunicar com o servidor.');
     btn.disabled = false;
   }
 }
@@ -9935,7 +9966,7 @@ async function anjunArquivoSelecionado(event) {
   if (!file) return;
 
   if (!_serverOnline) {
-    alert('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
+    await mostrarAlerta('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
     return;
   }
 
@@ -10075,7 +10106,7 @@ async function scanIniciarStream() {
     const video = document.getElementById('scan-cam-video');
     video.srcObject = _scanCamStream;
   } catch (e) {
-    alert('Não foi possível acessar a câmera: ' + e.message);
+    await mostrarAlerta('Não foi possível acessar a câmera: ' + e.message);
     scanFecharCameraViva();
   }
 }
@@ -10437,8 +10468,8 @@ function scanRemoverItemLista(id) {
   scanRenderLista();
 }
 
-function scanLimparLista() {
-  if (_scanListaItens.length && !confirm('Apagar todos os itens da lista?')) return;
+async function scanLimparLista() {
+  if (_scanListaItens.length && !(await mostrarConfirm('Apagar todos os itens da lista?', true))) return;
   _scanListaItens = [];
   scanAtualizarBadgeCam();
   scanRenderLista();
@@ -10496,7 +10527,7 @@ async function scanGeocodeChain(query) {
 
 async function scanGerarListaXlsx() {
   if (!_scanListaItens.length) {
-    alert('A lista está vazia. Escaneie pelo menos um item antes de gerar.');
+    await mostrarAlerta('A lista está vazia. Escaneie pelo menos um item antes de gerar.');
     return;
   }
   const status = document.getElementById('scan-lista-status');
@@ -10567,8 +10598,8 @@ function scanIrParaLinha(cid) {
 
 
 
-function abrirExportModal() {
-if (!_allRows.length) { alert("Nenhum dado para exportar."); return; }
+async function abrirExportModal() {
+if (!_allRows.length) { await mostrarAlerta("Nenhum dado para exportar."); return; }
 _abrirOverlayAnimado('export-overlay', 'export-modal', 'animate__zoomIn');
 }
 
@@ -10583,9 +10614,9 @@ let _exportPreviewData = [];
 // Passo 1: monta a prévia (sequência + endereço calculado) e abre o modal
 // de revisão, onde o usuário pode renomear qualquer endereço antes de gerar
 // o arquivo de fato. Nada é exportado aqui ainda.
-function exportarXlsx(modo) {
+async function exportarXlsx(modo) {
 modo = modo === 'detailed' ? 'detailed' : 'clean';
-if (!_allRows.length) { alert("Nenhum dado para exportar."); return; }
+if (!_allRows.length) { await mostrarAlerta("Nenhum dado para exportar."); return; }
 
 _exportModoAtual = modo;
 
@@ -10727,8 +10758,8 @@ _fecharOverlayAnimado('export-review-overlay', 'export-review-modal', 'animate__
 
 // Passo 2: gera o arquivo de verdade, usando os endereços (possivelmente
 // renomeados pelo usuário) da prévia.
-function confirmarExportacaoFinal() {
-if (!_exportPreviewData.length) { alert("Nenhum dado para exportar."); return; }
+async function confirmarExportacaoFinal() {
+if (!_exportPreviewData.length) { await mostrarAlerta("Nenhum dado para exportar."); return; }
 
 fecharExportReview();
 
@@ -10774,7 +10805,7 @@ btn.disabled = false;
 // certo substituem o precisar abrir isso no Circuit depois.
 setTimeout(() => { abrirModoEntrega(); }, 900);
 } catch(err) {
-alert("Erro ao exportar: " + err.message);
+await mostrarAlerta("Erro ao exportar: " + err.message);
 label.textContent = "Exportar";
 btn.disabled = false;
 }
@@ -11106,7 +11137,7 @@ async function adminCriarUsuario() {
 }
 
 async function adminResetarSenha(usuario) {
-  const nova = prompt(`Nova senha para "${usuario}" (mínimo 4 caracteres):`);
+  const nova = await mostrarPrompt(`Nova senha para "${usuario}" (mínimo 4 caracteres):`);
   if (nova === null) return;
   if (!nova || nova.length < 4) { adminMsg('Senha deve ter pelo menos 4 caracteres.', 'erro'); return; }
   try {
@@ -11123,7 +11154,7 @@ async function adminResetarSenha(usuario) {
 }
 
 async function adminApagarUsuario(usuario) {
-  if (!confirm(`Apagar o usuário "${usuario}"? Essa ação não pode ser desfeita.`)) return;
+  if (!(await mostrarConfirm(`Apagar o usuário "${usuario}"? Essa ação não pode ser desfeita.`, true))) return;
   try {
     const r = await fetch(SERVER + '/admin/usuarios?usuario=' + encodeURIComponent(usuario), {
       method: 'DELETE',
@@ -11138,7 +11169,7 @@ async function adminApagarUsuario(usuario) {
 }
 
 async function adminLiberarAcesso(usuario) {
-  const dias = prompt(`Liberar acesso à importação de rotas para "${usuario}" por quantos dias?`, '30');
+  const dias = await mostrarPrompt(`Liberar acesso à importação de rotas para "${usuario}" por quantos dias?`, '30');
   if (dias === null) return;
   const n = parseInt(dias, 10);
   if (!n || n < 1) { adminMsg('Informe um número de dias válido (mínimo 1).', 'erro'); return; }
@@ -11157,7 +11188,7 @@ async function adminLiberarAcesso(usuario) {
 }
 
 async function adminRevogarAcesso(usuario) {
-  if (!confirm(`Revogar o acesso de "${usuario}" à importação de rotas?`)) return;
+  if (!(await mostrarConfirm(`Revogar o acesso de "${usuario}" à importação de rotas?`, true))) return;
   try {
     const r = await fetch(SERVER + '/admin/usuarios/revogar-acesso', {
       method: 'POST',
@@ -11173,7 +11204,7 @@ async function adminRevogarAcesso(usuario) {
 }
 
 async function adminConfirmarPlano(usuario) {
-  if (!confirm(`Confirmar e liberar o plano solicitado por "${usuario}"?`)) return;
+  if (!(await mostrarConfirm(`Confirmar e liberar o plano solicitado por "${usuario}"?`))) return;
   try {
     const r = await fetch(SERVER + '/admin/usuarios/confirmar-plano', {
       method: 'POST',
@@ -11189,7 +11220,7 @@ async function adminConfirmarPlano(usuario) {
 }
 
 async function adminRejeitarPlano(usuario) {
-  if (!confirm(`Descartar a solicitação de plano de "${usuario}"?`)) return;
+  if (!(await mostrarConfirm(`Descartar a solicitação de plano de "${usuario}"?`, true))) return;
   try {
     const r = await fetch(SERVER + '/admin/usuarios/rejeitar-plano', {
       method: 'POST',
@@ -11348,15 +11379,15 @@ async function solicitarPlano(planoId, btn) {
     });
     const d = await r.json();
     if (d.ok) {
-      alert(d.msg);
+      await mostrarAlerta(d.msg);
       carregarAssinatura();
     } else {
-      alert(d.msg || d.erro || 'Não foi possível registrar a solicitação.');
+      await mostrarAlerta(d.msg || d.erro || 'Não foi possível registrar a solicitação.');
       if (btn) { btn.disabled = false; }
       carregarAssinatura();
     }
   } catch (e) {
-    alert('Não foi possível conectar ao servidor.');
+    await mostrarAlerta('Não foi possível conectar ao servidor.');
     if (btn) { btn.disabled = false; }
   }
 }
@@ -11377,12 +11408,12 @@ async function pagarPlano(planoId, btn) {
     if (d.ok && d.url) {
       window.location.href = d.url;
     } else {
-      alert(d.erro || 'Não foi possível gerar o link de pagamento.');
+      await mostrarAlerta(d.erro || 'Não foi possível gerar o link de pagamento.');
       if (btn) { btn.disabled = false; }
       carregarAssinatura();
     }
   } catch (e) {
-    alert('Não foi possível conectar ao servidor.');
+    await mostrarAlerta('Não foi possível conectar ao servidor.');
     if (btn) { btn.disabled = false; }
   }
 }
@@ -11411,14 +11442,14 @@ async function confirmarPagamentoSeRetornouDoCheckout() {
     const d = await r.json();
     abrirAssinatura();
     if (d.ok && d.pago) {
-      alert('✓ Pagamento confirmado! ' + (d.msg || ''));
+      await mostrarAlerta('✓ Pagamento confirmado! ' + (d.msg || ''));
     } else if (d.ok) {
-      alert('Recebemos seu retorno do pagamento, mas ele ainda não foi confirmado. Se você já pagou, aguarde alguns instantes e abra a aba Assinatura de novo.');
+      await mostrarAlerta('Recebemos seu retorno do pagamento, mas ele ainda não foi confirmado. Se você já pagou, aguarde alguns instantes e abra a aba Assinatura de novo.');
     } else {
-      alert(d.erro || 'Não foi possível confirmar o pagamento.');
+      await mostrarAlerta(d.erro || 'Não foi possível confirmar o pagamento.');
     }
   } catch (e) {
-    alert('Não foi possível confirmar o pagamento com o servidor.');
+    await mostrarAlerta('Não foi possível confirmar o pagamento com o servidor.');
   }
 }
 </script>
@@ -12356,7 +12387,69 @@ carregarPerfilUsuario = function () {
   gamiCarregarPerfil();
   return _gamiCarregarOriginal();
 };
+// ── Diálogo customizado (substitui alert()/confirm() nativos, que exibem
+// o domínio Railway cru: "web-production-....up.railway.app diz"). Como
+// não existe forma 100% síncrona de bloquear a UI com HTML/CSS próprio
+// (só window.alert/confirm nativos fazem isso), a versão customizada é
+// baseada em Promise — por isso toda função que chama mostrarAlerta/
+// mostrarConfirm precisa ser async e usar await.
+let _dialogoResolver = null;
+let _dialogoEhPrompt = false;
+
+function _dialogoAbrir(mensagem, mostrarCancelar, mostrarInput, valorPadrao) {
+  return new Promise((resolve) => {
+    _dialogoResolver = resolve;
+    _dialogoEhPrompt = !!mostrarInput;
+    document.getElementById('dialogo-mensagem').textContent = mensagem;
+    document.getElementById('dialogo-btn-cancelar').style.display = mostrarCancelar ? '' : 'none';
+    const input = document.getElementById('dialogo-input');
+    input.style.display = mostrarInput ? '' : 'none';
+    input.value = valorPadrao || '';
+    document.getElementById('dialogo-overlay').classList.add('show');
+    if (mostrarInput) setTimeout(() => input.focus(), 50);
+  });
+}
+
+function _dialogoResponder(valor) {
+  document.getElementById('dialogo-overlay').classList.remove('show');
+  const resolver = _dialogoResolver;
+  const ehPrompt = _dialogoEhPrompt;
+  _dialogoResolver = null;
+  if (!resolver) return;
+  if (ehPrompt) resolver(valor ? document.getElementById('dialogo-input').value : null);
+  else resolver(valor);
+}
+
+function mostrarAlerta(mensagem) {
+  document.getElementById('dialogo-btn-ok').classList.remove('perigoso');
+  return _dialogoAbrir(mensagem, false, false).then(() => undefined);
+}
+
+// perigoso=true deixa o botão OK vermelho — pra ações irreversíveis
+// (apagar, remover, zerar).
+function mostrarConfirm(mensagem, perigoso) {
+  document.getElementById('dialogo-btn-ok').classList.toggle('perigoso', !!perigoso);
+  return _dialogoAbrir(mensagem, true, false);
+}
+
+// Substitui window.prompt() — resolve com o texto digitado, ou null se
+// cancelado (mesmo contrato do prompt() nativo).
+function mostrarPrompt(mensagem, valorPadrao) {
+  document.getElementById('dialogo-btn-ok').classList.remove('perigoso');
+  return _dialogoAbrir(mensagem, true, true, valorPadrao);
+}
 </script>
+
+<div id="dialogo-overlay">
+  <div id="dialogo-panel">
+    <div id="dialogo-mensagem"></div>
+    <input type="text" id="dialogo-input" style="display:none" onkeydown="if(event.key==='Enter'){_dialogoResponder(true);}">
+    <div id="dialogo-botoes">
+      <button type="button" class="btn btn-secondary" id="dialogo-btn-cancelar" onclick="_dialogoResponder(false)">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="dialogo-btn-ok" onclick="_dialogoResponder(true)">OK</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
