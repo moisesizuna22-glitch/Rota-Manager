@@ -1416,7 +1416,7 @@ header .badge b { color: var(--accent2); }
   .origem-import-icone {
     width: 36px; height: 36px; flex-shrink: 0; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 19px; background: var(--surface2);
+    font-size: 19px; background: #fff; border: 1px solid var(--border);
     overflow: hidden;
   }
   .origem-import-icone img { width: 100%; height: 100%; object-fit: contain; }
@@ -4917,11 +4917,11 @@ Limpar
 <div id="origem-import-panel">
 <div class="import-card-title" style="margin-bottom:16px"><span class="bar"></span>De onde vem essa planilha?</div>
 <button class="origem-import-opcao" onclick="_origemImportacaoEscolher('shopee')">
-<span class="origem-import-icone">🛍️</span>
+<span class="origem-import-icone"><img src="/static/icons/shopee.png" alt="" aria-hidden="true"></span>
 <span>Shopee</span>
 </button>
 <button class="origem-import-opcao" onclick="_origemImportacaoEscolher('anjun')">
-<span class="origem-import-icone">🧾</span>
+<span class="origem-import-icone"><img src="/static/icons/anjun.jpg" alt="" aria-hidden="true"></span>
 <span>Anjun</span>
 </button>
 </div>
