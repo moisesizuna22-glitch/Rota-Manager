@@ -1390,6 +1390,37 @@ header .badge b { color: var(--accent2); }
   #dialogo-btn-ok.perigoso { background: var(--danger); color: #fff; border-color: var(--danger); }
   #dialogo-btn-ok.perigoso:hover { filter: brightness(1.1); }
 
+  /* ── Escolha da origem da planilha (Shopee / Anjun) ── */
+  #origem-import-overlay {
+    display: none; position: fixed; inset: 0; z-index: 900;
+    background: rgba(0,0,0,.55);
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #origem-import-overlay.show { display: flex; }
+  #origem-import-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    max-width: 380px; width: 100%;
+    padding: 22px 20px 20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+  }
+  .origem-import-opcao {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 14px 16px; margin-bottom: 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: var(--btn-transition);
+  }
+  .origem-import-opcao:last-of-type { margin-bottom: 0; }
+  .origem-import-opcao:hover { background: var(--surface2); border-color: var(--accent2, #4f9a90); }
+  .origem-import-icone {
+    width: 36px; height: 36px; flex-shrink: 0; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; background: var(--surface2);
+    overflow: hidden;
+  }
+  .origem-import-icone img { width: 100%; height: 100%; object-fit: contain; }
+
   /* ── Mapa com todas as paradas (tela cheia) ── */
   #mapa-overlay {
     display: none;
@@ -4847,7 +4878,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 </div>
 
 <!-- Drop zone inicial (começa oculta — JS decide qual exibir após checar acesso, evitando flash) -->
-<div id="drop-zone" onclick="document.getElementById('file-input').click()" style="display:none">
+<div id="drop-zone" onclick="abrirEscolhaOrigemImportacao()" style="display:none">
 <div class="drop-icon">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-5 5M12 4l5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
 </div>
@@ -4873,18 +4904,26 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 </div>
 
 <div class="import-actions">
-<button class="drop-btn" onclick="document.getElementById('file-input').click()">
-<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-Buscar &amp; Processar
-</button>
-<button class="drop-btn" onclick="document.getElementById('file-input-anjun-rota').click()">
-🧾 Importar Rota Anjun
-</button>
 <button class="btn-clear-import" onclick="limparImportacao()">
 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
 Limpar
 </button>
 </div>
+</div>
+</div>
+
+<!-- Escolha de origem da planilha ao clicar em "Selecionar Planilha" -->
+<div id="origem-import-overlay" onclick="fecharEscolhaOrigemImportacao(event)">
+<div id="origem-import-panel">
+<div class="import-card-title" style="margin-bottom:16px"><span class="bar"></span>De onde vem essa planilha?</div>
+<button class="origem-import-opcao" onclick="_origemImportacaoEscolher('shopee')">
+<span class="origem-import-icone">🛍️</span>
+<span>Shopee</span>
+</button>
+<button class="origem-import-opcao" onclick="_origemImportacaoEscolher('anjun')">
+<span class="origem-import-icone">🧾</span>
+<span>Anjun</span>
+</button>
 </div>
 </div>
 
@@ -7611,6 +7650,24 @@ processarComServidor(file);
 // Botão "Limpar" do card de importação: só reseta a seleção de arquivo atual
 function limparImportacao() {
 document.getElementById('file-input').value = '';
+}
+
+// Ao clicar em "Selecionar Planilha", pergunta a origem (Shopee/Anjun) antes
+// de abrir o seletor de arquivo certo — substitui os dois botões separados
+// que existiam antes (Buscar & Processar / Importar Rota Anjun).
+function abrirEscolhaOrigemImportacao() {
+document.getElementById('origem-import-overlay').classList.add('show');
+}
+
+function fecharEscolhaOrigemImportacao(e) {
+if (e && e.target !== document.getElementById('origem-import-overlay')) return;
+document.getElementById('origem-import-overlay').classList.remove('show');
+}
+
+function _origemImportacaoEscolher(tipo) {
+fecharEscolhaOrigemImportacao();
+if (tipo === 'anjun') document.getElementById('file-input-anjun-rota').click();
+else document.getElementById('file-input').click();
 }
 
 // Confirmação de geolocalização: manda pro servidor só os endereços sem
