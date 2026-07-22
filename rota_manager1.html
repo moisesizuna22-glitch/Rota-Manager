@@ -7540,9 +7540,25 @@ async function checarAcesso() {
     const d = await r.json();
     _temAcesso = d.ok ? !!d.tem_acesso : true;   // erro inesperado -> não bloqueia a UI
     atualizarBannerTrial(d.ok ? d.aviso_trial : null);
+    if (d.ok) _aplicarLimpezaCacheSeNecessario(d.cache_limpo_em);
   } catch (e) {
     _temAcesso = true;
   }
+}
+
+// Espelho client-side da limpeza manual que o admin faz (adminLimparCache):
+// o servidor marca um timestamp em cache_limpo_em quando limpa o
+// histórico desse usuário; aqui compara com o último que ESTE navegador
+// já viu e, se for mais novo, descarta o progresso do Modo de Entrega
+// salvo localmente — senão a próxima abertura reaproveitaria o dado
+// antigo que motivou a limpeza. Roda a cada /auth/status (a cada ~5s),
+// mas só age de fato na primeira vez que vê um timestamp novo.
+function _aplicarLimpezaCacheSeNecessario(cacheLimpoEm) {
+  if (!cacheLimpoEm) return;
+  const chave = '_rm_cache_limpo_visto';
+  if (localStorage.getItem(chave) === cacheLimpoEm) return;
+  localStorage.removeItem('_rm_entrega_progresso');
+  localStorage.setItem(chave, cacheLimpoEm);
 }
 
 // Mostra/atualiza o banner "seu teste grátis está acabando". Não mostra
@@ -11108,6 +11124,7 @@ function renderListaAdmin(lista, isFiltro) {
       <div class="admin-item-actions">
         <button onclick="iniciarEdicaoContato(${idx})">✏️ Editar contato</button>
         <button onclick="adminResetarSenha('${escHtml(u.usuario)}')">🔑 Resetar senha</button>
+        <button onclick="adminLimparCache('${escHtml(u.usuario)}')" title="Limpa o histórico de rotas salvas e o progresso do Modo de Entrega no navegador desse usuário">🧹 Limpar histórico/cache</button>
       </div>
       <div class="admin-item-actions">
         <button class="danger" onclick="adminApagarUsuario('${escHtml(u.usuario)}')">🗑 Apagar</button>
@@ -11204,6 +11221,28 @@ async function adminResetarSenha(usuario) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ usuario, nova_senha: nova })
+    });
+    const d = await r.json();
+    adminMsg(d.msg, d.ok ? 'ok' : 'erro');
+  } catch (e) {
+    adminMsg('Não foi possível conectar ao servidor.', 'erro');
+  }
+}
+
+// Limpeza pontual manual (não é automática a cada deploy) — pra quando uma
+// rota salva antiga estiver com dado desatualizado/errado e o usuário
+// precisar de fato reimportar do zero. Limpa o histórico de rotas dele no
+// servidor e agenda a limpeza do progresso do Modo de Entrega salvo no
+// navegador dele (aplicada sozinha no próximo /auth/status que o
+// navegador dele fizer — ver _aplicarLimpezaCacheSeNecessario). Nunca
+// mexe em gamificação/XP nem no banco de coordenadas confirmadas.
+async function adminLimparCache(usuario) {
+  if (!(await mostrarConfirm(`Limpar o histórico de rotas salvas de "${usuario}" e o progresso do Modo de Entrega no navegador dele? Ele vai precisar reimportar a planilha na próxima vez.`, true))) return;
+  try {
+    const r = await fetch(SERVER + '/admin/usuarios/limpar-cache', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ usuario })
     });
     const d = await r.json();
     adminMsg(d.msg, d.ok ? 'ok' : 'erro');

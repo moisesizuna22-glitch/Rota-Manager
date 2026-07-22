@@ -1457,6 +1457,38 @@ def admin_liberar_acesso(username: str, dias: int) -> tuple[bool, str]:
     salvar_usuarios(users)
     return True, f"Acesso liberado até {expira_em.strftime('%d/%m/%Y %H:%M')}."
 
+def admin_limpar_cache_usuario(username: str) -> tuple[bool, str]:
+    """Limpeza pontual manual (disparada pelo admin, não automática a cada
+    deploy): apaga o histórico de rotas salvas desse usuário — força
+    reimportar do zero da próxima vez, resolvendo o caso de uma rota
+    antiga ficar com coordenada desatualizada/errada — e marca
+    cache_limpo_em, que o frontend usa (via /auth/status) pra também
+    descartar o progresso do Modo de Entrega salvo no navegador dele.
+    Nunca mexe em gamificação/XP nem no banco de coordenadas confirmadas
+    (só nos overrides pessoais dele, mesmo comportamento de quando uma
+    rota sai do histórico normalmente)."""
+    users = carregar_usuarios()
+    chave, u = _buscar_usuario(users, username)
+    if u is None:
+        return False, "Usuário não encontrado."
+    user_id = u.get("id", "")
+
+    historico = carregar_historico()
+    antes = len(historico)
+    novo_historico = [h for h in historico if h.get("user_id") != user_id]
+    salvar_historico(novo_historico)
+    removidos = antes - len(novo_historico)
+
+    banco_coords_limpar_overrides_usuario(user_id)
+
+    u["cache_limpo_em"] = datetime.now().isoformat()
+    salvar_usuarios(users)
+
+    return True, (
+        f'Histórico limpo ({removidos} rota(s) removida(s)) para "{chave}". '
+        'O progresso do Modo de Entrega salvo no navegador dele também será limpo no próximo acesso.'
+    )
+
 def admin_revogar_acesso(username: str) -> tuple[bool, str]:
     users = carregar_usuarios()
     chave, u = _buscar_usuario(users, username)
@@ -1907,27 +1939,35 @@ async def auth_status(request: Request):
     is_admin = bool(sess.get("is_admin"))
     tem_acesso = is_admin or usuario_tem_acesso_ativo(sess["usuario"])
 
+    users = carregar_usuarios()
+    _, u = _buscar_usuario(users, sess["usuario"])
+    # Marcado por admin_limpar_cache_usuario — o frontend compara com o
+    # último valor que já viu e, se for mais novo, descarta o progresso do
+    # Modo de Entrega salvo no localStorage dele (ver
+    # _aplicarLimpezaCacheSeNecessario no rota_manager1.html).
+    cache_limpo_em = (u or {}).get("cache_limpo_em")
+
     # Aviso de teste grátis acabando — só pra quem ainda está no
     # "teste_gratis" (não afeta plano pago nem créditos avulsos).
     aviso_trial = None
-    if not is_admin and tem_acesso:
-        users = carregar_usuarios()
-        _, u = _buscar_usuario(users, sess["usuario"])
-        if u and u.get("origem_acesso") == "teste_gratis":
-            expira_raw = u.get("acesso_expira_em")
-            if expira_raw:
-                try:
-                    expira_em = datetime.fromisoformat(expira_raw)
-                    horas_restantes = (expira_em - datetime.now()).total_seconds() / 3600
-                    if horas_restantes <= AVISO_TRIAL_HORAS_ANTES:
-                        aviso_trial = {
-                            "dias_restantes":  max(0, round(horas_restantes / 24, 1)),
-                            "expira_em":       expira_raw,
-                        }
-                except ValueError:
-                    pass
+    if not is_admin and tem_acesso and u and u.get("origem_acesso") == "teste_gratis":
+        expira_raw = u.get("acesso_expira_em")
+        if expira_raw:
+            try:
+                expira_em = datetime.fromisoformat(expira_raw)
+                horas_restantes = (expira_em - datetime.now()).total_seconds() / 3600
+                if horas_restantes <= AVISO_TRIAL_HORAS_ANTES:
+                    aviso_trial = {
+                        "dias_restantes":  max(0, round(horas_restantes / 24, 1)),
+                        "expira_em":       expira_raw,
+                    }
+            except ValueError:
+                pass
 
-    return ok_json({"ok": True, "tem_acesso": tem_acesso, "is_admin": is_admin, "aviso_trial": aviso_trial})
+    return ok_json({
+        "ok": True, "tem_acesso": tem_acesso, "is_admin": is_admin,
+        "aviso_trial": aviso_trial, "cache_limpo_em": cache_limpo_em,
+    })
 
 @app.get("/api/config")
 async def api_config(request: Request):
@@ -2292,6 +2332,13 @@ async def admin_revogar_route(request: Request):
     _sessao_admin_ou_403(request)
     data = await request.json()
     ok, msg = admin_revogar_acesso(data.get("usuario", ""))
+    return ok_json({"ok": ok, "msg": msg})
+
+@app.post("/admin/usuarios/limpar-cache")
+async def admin_limpar_cache_route(request: Request):
+    _sessao_admin_ou_403(request)
+    data = await request.json()
+    ok, msg = admin_limpar_cache_usuario(data.get("usuario", ""))
     return ok_json({"ok": ok, "msg": msg})
 
 @app.post("/admin/usuarios/confirmar-plano")
