@@ -4495,6 +4495,19 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         </div>
       </div>
 
+      <div id="admin-limpeza">
+        <div class="admin-novo-toggle" id="admin-limpeza-toggle" onclick="toggleLimpezaPainel()">
+          <span>🧹 Limpeza de histórico/cache</span><span id="admin-limpeza-seta">▾</span>
+        </div>
+        <div id="admin-limpeza-body" style="display:none">
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:10px">
+            Apaga as rotas salvas no histórico e agenda a limpeza do progresso do Modo de Entrega salvo no navegador. Não mexe em gamificação/XP nem no banco de coordenadas confirmadas. Use por usuário na lista abaixo, ou em todos de uma vez aqui.
+          </div>
+          <button class="btn btn-secondary" id="btn-limpeza-todos" onclick="adminLimparCacheTodos()" style="width:100%">🧹 Limpar histórico/cache de TODOS os usuários</button>
+          <div id="admin-limpeza-msg" class="admin-msg"></div>
+        </div>
+      </div>
+
       <div id="admin-filtro">
         <input class="login-input" id="adm-busca" type="text" placeholder="🔎 Buscar por usuário ou email..." autocomplete="off" oninput="filtrarListaAdmin()">
       </div>
@@ -10945,6 +10958,38 @@ async function carregarListaAdmin() {
     document.getElementById('admin-list').innerHTML =
       '<div id="admin-empty">Não foi possível conectar ao servidor.</div>';
   }
+}
+
+let _limpezaAberta = false;
+
+function toggleLimpezaPainel() {
+  _limpezaAberta = !_limpezaAberta;
+  document.getElementById('admin-limpeza-body').style.display = _limpezaAberta ? 'block' : 'none';
+  document.getElementById('admin-limpeza-seta').textContent = _limpezaAberta ? '▴' : '▾';
+}
+
+// Mesma ideia do adminLimparCache (por usuário), só que pra todo mundo de
+// uma vez — pensado pra depois de corrigir um bug que deixou coordenada
+// errada espalhada no histórico de vários usuários.
+async function adminLimparCacheTodos() {
+  if (!(await mostrarConfirm('Limpar o histórico de rotas salvas de TODOS os usuários e agendar a limpeza do progresso do Modo de Entrega de cada um? Todo mundo vai precisar reimportar a planilha na próxima vez.', true))) return;
+  try {
+    const r = await fetch(SERVER + '/admin/usuarios/limpar-cache-todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    });
+    const d = await r.json();
+    _adminLimpezaMsg(d.msg, d.ok ? 'ok' : 'erro');
+  } catch (e) {
+    _adminLimpezaMsg('Não foi possível conectar ao servidor.', 'erro');
+  }
+}
+
+function _adminLimpezaMsg(msg, tipo) {
+  const el = document.getElementById('admin-limpeza-msg');
+  el.textContent = msg;
+  el.className = 'admin-msg show ' + (tipo === 'erro' ? 'erro' : 'ok');
+  setTimeout(() => { el.className = 'admin-msg'; }, 5000);
 }
 
 let _backupAberto = false;

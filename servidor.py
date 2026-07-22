@@ -279,14 +279,18 @@ def _snapshot_mais_recente(path: Path) -> Path | None:
     )
     return candidatos[-1] if candidatos else None
 
-def _salvar_com_backup(path_str: str, conteudo_serializado: str, dados_novos_vazios: bool):
+def _salvar_com_backup(path_str: str, conteudo_serializado: str, dados_novos_vazios: bool, forcar: bool = False):
     """Escrita segura e comum a usuarios/historico/banco_coords:
-    1) tira snapshot do estado atual antes de mexer;
+    1) tira snapshot do estado atual antes de mexer (mesmo com forcar=True
+       — só o BLOQUEIO abaixo é pulado, o snapshot pra recuperação manual
+       continua sendo tirado sempre);
     2) recusa sobrescrever um arquivo COM dados por um payload vazio
        (a causa mais comum de perda de dados: um bug ou uma corrida
-       de leitura fizeram o app achar que estava tudo vazio)."""
+       de leitura fizeram o app achar que estava tudo vazio) — a menos
+       que forcar=True, pra ações de limpeza deliberadas e confirmadas
+       pelo admin (ex.: limpar histórico de todo mundo de propósito)."""
     path = Path(path_str)
-    if path.exists() and dados_novos_vazios:
+    if path.exists() and dados_novos_vazios and not forcar:
         try:
             tinha_conteudo = len(path.read_text("utf-8").strip()) > 2  # mais que "{}"/"[]"
         except Exception:
@@ -684,11 +688,12 @@ def redefinir_senha_recuperacao(recovery_token: str, nova_senha: str) -> tuple[b
 def carregar_historico() -> list:
     return _carregar_com_recuperacao(HISTORICO_FILE, [])
 
-def salvar_historico(historico: list):
+def salvar_historico(historico: list, forcar: bool = False):
     _salvar_com_backup(
         HISTORICO_FILE,
         json.dumps(historico, ensure_ascii=False, indent=2),
         dados_novos_vazios=(len(historico) == 0),
+        forcar=forcar,
     )
 
 def adicionar_ao_historico(nome_arquivo: str, rows: list, headers: list, user_id: str = ""):
@@ -1476,7 +1481,10 @@ def admin_limpar_cache_usuario(username: str) -> tuple[bool, str]:
     historico = carregar_historico()
     antes = len(historico)
     novo_historico = [h for h in historico if h.get("user_id") != user_id]
-    salvar_historico(novo_historico)
+    # forcar=True: é intencional o histórico desse usuário zerar por completo
+    # (ex.: só ele tinha rota salva) — a confirmação já foi pedida no
+    # frontend antes de chamar essa função, não é acidente pra bloquear.
+    salvar_historico(novo_historico, forcar=True)
     removidos = antes - len(novo_historico)
 
     banco_coords_limpar_overrides_usuario(user_id)
@@ -1487,6 +1495,32 @@ def admin_limpar_cache_usuario(username: str) -> tuple[bool, str]:
     return True, (
         f'Histórico limpo ({removidos} rota(s) removida(s)) para "{chave}". '
         'O progresso do Modo de Entrega salvo no navegador dele também será limpo no próximo acesso.'
+    )
+
+def admin_limpar_cache_todos_usuarios() -> tuple[bool, str]:
+    """Igual admin_limpar_cache_usuario, mas pra todos os usuários de uma
+    vez — zera o histórico de rotas inteiro (todo mundo precisa reimportar
+    na próxima vez) e os overrides pessoais de todo mundo no banco de
+    coordenadas, e marca cache_limpo_em em cada usuário. Nunca mexe em
+    gamificação/XP nem no "global" do banco de coordenadas confirmadas
+    (só o "overrides", que é sempre pessoal/temporário por natureza)."""
+    historico = carregar_historico()
+    total_rotas = len(historico)
+    salvar_historico([], forcar=True)
+
+    banco = banco_coords_carregar()
+    banco["overrides"] = {}
+    banco_coords_salvar(banco)
+
+    users = carregar_usuarios()
+    agora = datetime.now().isoformat()
+    for u in users.values():
+        u["cache_limpo_em"] = agora
+    salvar_usuarios(users)
+
+    return True, (
+        f"Histórico limpo para todos os usuários ({total_rotas} rota(s) removida(s) no total). "
+        "O progresso do Modo de Entrega salvo no navegador de cada um será limpo no próximo acesso."
     )
 
 def admin_revogar_acesso(username: str) -> tuple[bool, str]:
@@ -2339,6 +2373,12 @@ async def admin_limpar_cache_route(request: Request):
     _sessao_admin_ou_403(request)
     data = await request.json()
     ok, msg = admin_limpar_cache_usuario(data.get("usuario", ""))
+    return ok_json({"ok": ok, "msg": msg})
+
+@app.post("/admin/usuarios/limpar-cache-todos")
+async def admin_limpar_cache_todos_route(request: Request):
+    _sessao_admin_ou_403(request)
+    ok, msg = admin_limpar_cache_todos_usuarios()
     return ok_json({"ok": ok, "msg": msg})
 
 @app.post("/admin/usuarios/confirmar-plano")
