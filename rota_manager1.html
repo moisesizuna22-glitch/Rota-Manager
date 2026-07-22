@@ -10860,7 +10860,9 @@ btn.disabled = false;
 // Planilha exportada — deixa o Modo de Entrega pronto pra assumir a partir
 // daqui, igual pedido: a otimização de rota e as ações de entregar/não deu
 // certo substituem o precisar abrir isso no Circuit depois.
-setTimeout(() => { abrirModoEntrega(); }, 900);
+// Só abre sozinho se o ponto de entrada estiver visível (MOSTRAR_BOTAO_ENTREGAR)
+// — com o ícone oculto, o Modo de Entrega fica fora de vista de verdade.
+if (MOSTRAR_BOTAO_ENTREGAR) setTimeout(() => { abrirModoEntrega(); }, 900);
 } catch(err) {
 await mostrarAlerta("Erro ao exportar: " + err.message);
 label.textContent = "Exportar";
