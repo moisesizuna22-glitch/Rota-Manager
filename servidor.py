@@ -46,6 +46,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import gamification
+from csv_para_rota_xlsx import _extrair_cep, _extrair_numero, _geocodificar_enderecos
 
 # ═══════════════════════════════════════════════════════════════════
 #  CONFIGURAÇÃO
@@ -2468,17 +2469,19 @@ async def coords_apagar_intervalo(request: Request):
 async def geocode_confirmar(request: Request):
     """
     Confirmação de geolocalização (tela "preparando sua rota"). Pra cada
-    endereço recebido, segue o ciclo: banco de coordenadas (override do
-    Confirmação de geolocalização (tela "preparando sua rota"). Pra cada
-    endereço recebido, olha só o banco de coordenadas (override do
-    usuário, senão o global já confirmado). Sem HERE e sem Google nessa
-    etapa automática — o HERE estava bagunçando endereço que a planilha
-    já trouxe certo. O HERE continua disponível pra busca manual na tela
-    de "abrir mapa" (isso é outro fluxo, no browser, não passa por aqui).
-    Se não tem no banco, volta "encontrado: false" e o front mantém a
-    geolocalização que já veio do tratamento_dados.py.
+    endereço recebido: 1) banco de coordenadas (override do usuário,
+    senão o global já confirmado); 2) se não tiver, cai na cascata de
+    CEP do csv_para_rota_xlsx.py (ViaCEP/BrasilAPI + Photon + Nominatim,
+    com HERE por CEP estruturado só se a chave estiver configurada) —
+    a mesma lógica do painel Anjun, aplicada aqui pra qualquer
+    importação. Só o CEP entra na busca (nunca o endereço livre pro
+    HERE/Google), porque nome de rua ambíguo é o que causava coordenada
+    errada antes; achar pelo CEP dá o pino no lote/rua certa, no pior
+    caso genérico mas nunca no bairro errado. Todo acerto vira entrada
+    permanente no banco global.
     """
     sess = _sessao_ou_401(request)
+    usuario = sess.get("usuario", "")   # só pra registrar quem confirmou, no banco global
     user_id = sess["user_id"]           # chave do override pessoal (some quando a rota sai do histórico)
     data = await request.json()
     enderecos = data.get("enderecos") or []
@@ -2488,12 +2491,32 @@ async def geocode_confirmar(request: Request):
     enderecos = enderecos[:300]  # limite de segurança por chamada
 
     resultados = {}
+    pares_por_endereco = {}
+    pares_unicos = set()
+
     for endereco in enderecos:
         cache = banco_coords_buscar(endereco, user_id)
         if cache:
             resultados[endereco] = {"encontrado": True, **cache}
-        else:
+            continue
+        cep = _extrair_cep(endereco)
+        if not cep:
             resultados[endereco] = {"encontrado": False}
+            continue
+        par = (cep, _extrair_numero(endereco))
+        pares_por_endereco[endereco] = par
+        pares_unicos.add(par)
+
+    if pares_unicos:
+        coords_por_par = _geocodificar_enderecos(pares_unicos, "Goiânia", "GO")
+        for endereco, par in pares_por_endereco.items():
+            coord = coords_por_par.get(par)
+            if not coord:
+                resultados[endereco] = {"encontrado": False}
+                continue
+            lat, lon, fonte = coord
+            banco_coords_salvar_global(endereco, lat, lon, fonte, usuario)
+            resultados[endereco] = {"encontrado": True, "lat": lat, "lon": lon, "fonte": fonte}
 
     return ok_json({"ok": True, "resultados": resultados})
 

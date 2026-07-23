@@ -3171,6 +3171,15 @@ font-size: 11px;
 td.td-coord::before { content: '📍 '; }
 
 .btn-map { width: 32px; height: 32px; font-size: 15px; }
+
+/* Item de sub-endereço agrupado: no card estreito do celular, Seq +
+   telefone + botão ✕ numa linha só espremiam o endereço numa coluna de
+   poucos pixels (quebrando palavra por palavra). Quebra em duas linhas:
+   Seq/telefone/✕ em cima, endereço embaixo ocupando a largura toda. */
+.membro-item { flex-wrap: wrap; }
+.membro-orig-wrap { flex-basis: 100%; order: 3; }
+.membro-stop { order: 1; }
+.membro-contato, .btn-ungroup { order: 2; }
 }
 
 /* ══ ALVOS DE TOQUE: aumenta a área clicável de botões/ícones pequenos no celular ══ */
@@ -7806,10 +7815,9 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
     _headers = dado.headers || [];
     _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
 
-    // Validação automática de geolocalização via HERE removida daqui —
-    // estava causando problema. A geolocalização que já vem do
-    // tratamento_dados.py fica como está; a confirmação manual continua
-    // disponível pelo "abrir mapa" de cada endereço.
+    // Confirma no banco/CEP os endereços que ainda não têm uma coordenada
+    // confiável, e já deixa salvo permanentemente pra próxima vez.
+    await confirmarGeolocalizacoes(_allRows, sinal);
     await sleep(500);
 
 // 4) Popula a tabela
@@ -7897,6 +7905,9 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
     _headers = dado.headers || [];
     _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+
+    // Mesma confirmação de geolocalização do fluxo principal (banco/CEP).
+    await confirmarGeolocalizacoes(_allRows, sinal);
     await sleep(500);
 
 // 3) Popula a tabela
