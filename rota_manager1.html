@@ -1022,6 +1022,14 @@ header .badge b { color: var(--accent2); }
     vertical-align: middle;
     text-decoration: none;
   }
+  .scan-seq-chip-group { display: inline-flex; align-items: center; gap: 2px; }
+  .scan-seq-grande-btn {
+    font-size: 18px; line-height: 1; padding: 2px 4px; border-radius: 8px;
+    border: none; background: transparent; cursor: pointer; opacity: .35;
+    filter: grayscale(1); transition: all .15s;
+  }
+  .scan-seq-grande-btn:hover { opacity: .7; }
+  .scan-seq-grande-btn.active { opacity: 1; filter: none; background: rgba(199,211,74,0.18); }
   .scan-match-addr { font-size: 13px; color: var(--text); text-align: center; padding: 0 6px 2px; }
   .scan-match-detail {
     font-family: 'JetBrains Mono', monospace, monospace;
@@ -1049,6 +1057,7 @@ header .badge b { color: var(--accent2); }
   }
   .scan-alt-item .scan-seq-chip { font-size: 12px; padding: 0 4px; border-radius: 6px; }
   .scan-alt-item .scan-seq-chip.chosen::after { font-size: 13px; }
+  .scan-alt-item .scan-seq-grande-btn { font-size: 13px; padding: 1px 3px; }
   .scan-alt-item .scan-alt-addr { font-size: 12px; color: var(--muted); line-height: 1.4; flex: 1; word-break: break-word; }
   .scan-alt-item .scan-alt-pct {
     font-family: 'JetBrains Mono', monospace, monospace;
@@ -5558,7 +5567,11 @@ const membros = Array.isArray(row.membros) && row.membros.length
 ? row.membros
 : [{ stop: row.stop, original: row.endereco_original || row.address }];
 
-const stopsStr = membros.map(m => m.stop).filter(Boolean).join(', ') || row.group_stops || row.stop || '';
+const stopsGrandes = new Set((row._stopsGrandes || []).map(String));
+const stopsList = membros.map(m => m.stop).filter(Boolean);
+const stopsStr = stopsList.length
+? stopsList.map(s => stopsGrandes.has(String(s)) ? `${s} 📦` : s).join(', ')
+: (row.group_stops || row.stop || '');
 
 // Badge de grupo
 let grupoHtml;
@@ -5618,7 +5631,7 @@ let membrosHtml = '';
 if (row.group_size > 1) {
 membrosHtml = `<div class="membros-list">` + membros.map((m, mi) => `
        <div class="membro-item">
-         ${m.stop ? `<span class="membro-stop">Seq ${escHtml(m.stop)}</span>` : ''}
+         ${m.stop ? `<span class="membro-stop">Seq ${escHtml(m.stop)}${stopsGrandes.has(String(m.stop)) ? ' 📦' : ''}</span>` : ''}
          <span class="membro-orig-wrap" data-cid="${row._cid}" data-mi="${mi}">
            <span class="membro-orig">${escHtml(m.original)}</span>
            <button type="button" class="btn-edit-inline orig" title="Editar este endereço">✎</button>
@@ -7710,15 +7723,21 @@ else document.getElementById('file-input').click();
 
 // Confirmação de geolocalização: manda pro servidor só os endereços sem
 // coordenada confiável (não veio do banco nem foi validado pelo HERE no
-// tratamento). O servidor tenta banco → HERE → Google (condicional) e
-// devolve o que achar; endereços não encontrados seguem com o que já tinham.
+// tratamento). O servidor tenta banco → cascata de CEP e devolve o que
+// achar; endereços não encontrados seguem com o que já tinham.
+//
+// Manda endereco -> endereco_original (não só o endereco limpo): a rota
+// Anjun tem o CEP removido do texto limpo (anjun_tratamento.py monta o
+// endereço só com rua+número, sem cidade/UF/CEP), mas o texto original
+// intacto continua com o CEP — é dele que o servidor precisa pra achar
+// a cascata de CEP (ver _extrair_cep em csv_para_rota_xlsx.py).
 async function confirmarGeolocalizacoes(rows, signal) {
-const precisamConfirmar = new Set();
+const precisamConfirmar = new Map();
 rows.forEach(r => {
 const temCoord = parseFloat(r.lat) && parseFloat(r.lon);
 const validacaoOk = /ok|valid|encontrad/i.test(r.validacao_here || '');
 if (!r.do_banco && (!temCoord || !validacaoOk) && r.address) {
-precisamConfirmar.add(r.address);
+precisamConfirmar.set(r.address, r.endereco_original || r.address);
 }
 });
 if (!precisamConfirmar.size) return;
@@ -7727,7 +7746,7 @@ try {
 const resp = await fetch(SERVER + '/geocode/confirmar', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', ...authHeaders() },
-body: JSON.stringify({ enderecos: Array.from(precisamConfirmar) }),
+body: JSON.stringify({ enderecos: Object.fromEntries(precisamConfirmar) }),
 signal,
 });
 const d = await resp.json();
@@ -10496,9 +10515,14 @@ function scanRenderSeqChips(row) {
   const nums = String(seqRaw).split(',').map(s => s.trim()).filter(Boolean);
   if (!nums.length) return `#—`;
   const escolhidos = new Set((row._stopsEscolhidos || []).map(String));
+  const grandes = new Set((row._stopsGrandes || []).map(String));
   return nums.map(n => {
     const chosen = escolhidos.has(String(n));
-    return `<span class="scan-seq-chip${chosen ? ' chosen' : ''}" data-cid="${row._cid}" data-num="${escHtml(n)}" onclick="scanToggleStopEscolhido(event, '${row._cid}', '${escHtml(n)}')">#${escHtml(n)}</span>`;
+    const grande = grandes.has(String(n));
+    return `<span class="scan-seq-chip-group">
+      <span class="scan-seq-chip${chosen ? ' chosen' : ''}" data-cid="${row._cid}" data-num="${escHtml(n)}" onclick="scanToggleStopEscolhido(event, '${row._cid}', '${escHtml(n)}')">#${escHtml(n)}</span>
+      <button type="button" class="scan-seq-grande-btn${grande ? ' active' : ''}" title="Marcar pacote grande" data-cid="${row._cid}" data-num="${escHtml(n)}" onclick="scanToggleStopGrande(event, '${row._cid}', '${escHtml(n)}')">📦</button>
+    </span>`;
   }).join('');
 }
 
@@ -10519,6 +10543,27 @@ function scanToggleStopEscolhido(ev, cid, num) {
   document.querySelectorAll(`.scan-seq-chip[data-cid="${CSS.escape(String(cid))}"][data-num="${CSS.escape(nStr)}"]`)
     .forEach(el => el.classList.toggle('chosen', idx < 0));
 
+  try { autoSaveDraft(); } catch (e) { /* sem rascunho ativo — ignora */ }
+}
+
+// Marca/desmarca um número de sequência como "pacote grande". Igual a
+// row._stopsEscolhidos, mas independente dela — um pacote pode estar
+// escolhido e ser grande ao mesmo tempo. A marcação aparece na lista
+// (renderTable) e é levada pra exportação.
+function scanToggleStopGrande(ev, cid, num) {
+  if (ev) ev.stopPropagation();
+  const row = _allRows.find(r => String(r._cid) === String(cid));
+  if (!row) return;
+  if (!Array.isArray(row._stopsGrandes)) row._stopsGrandes = [];
+  const nStr = String(num);
+  const idx = row._stopsGrandes.findIndex(x => String(x) === nStr);
+  if (idx >= 0) row._stopsGrandes.splice(idx, 1);
+  else row._stopsGrandes.push(nStr);
+
+  document.querySelectorAll(`.scan-seq-grande-btn[data-cid="${CSS.escape(String(cid))}"][data-num="${CSS.escape(nStr)}"]`)
+    .forEach(el => el.classList.toggle('active', idx < 0));
+
+  renderTable(_allRows);
   try { autoSaveDraft(); } catch (e) { /* sem rascunho ativo — ignora */ }
 }
 
@@ -10737,6 +10782,10 @@ return String(a).localeCompare(String(b), undefined, { numeric: true });
 });
 
 const seqStr = stops.join(', ');
+const stopsGrandes = new Set((row._stopsGrandes || []).map(String));
+// Mantém a Sequence limpa (só número) pra não quebrar app que espera
+// inteiro nesse campo — o pacote grande aparece no endereço/texto livre.
+const temGrande = stops.some(s => stopsGrandes.has(String(s)));
 
 const originaisVistos = [];
 for (const m of membros) {
@@ -10755,7 +10804,7 @@ endereco = row.group_label || standardize(row.address) || row.address || '';
 return {
 lat: row.lat || '', lon: row.lon || '', seqStr, endereco, original,
 bairro: row.bairro || '', zip: row.zip || '', contato: row.contato || '',
-fonte: row.fonte_coord || '',
+fonte: row.fonte_coord || '', temGrande,
 };
 });
 
@@ -10891,8 +10940,9 @@ if (_rotaOrigem === 'anjun') {
   linkColIdx = 9;
   for (const it of _exportPreviewData) {
     const temCoord = it.lat && it.lon;
+    const prefixoGrande = it.temGrande ? '📦 PACOTE GRANDE — ' : '';
     dataOut.push([
-      it.seqStr, it.endereco, 'Goiânia', 'GO', it.original || it.endereco, it.contato,
+      it.seqStr, prefixoGrande + it.endereco, 'Goiânia', 'GO', prefixoGrande + (it.original || it.endereco), it.contato,
       it.lat, it.lon, it.fonte || 'Sem coordenada', temCoord ? 'Abrir no Maps' : '',
     ]);
   }
@@ -10902,7 +10952,8 @@ if (_rotaOrigem === 'anjun') {
   // LATITUDE | LONGITUDE | SEQUENCE + ENDERECO
   dataOut = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
   for (const it of _exportPreviewData) {
-    const celula = it.seqStr ? `${it.seqStr} - ${it.endereco}` : it.endereco;
+    const prefixoGrande = it.temGrande ? '📦 PACOTE GRANDE — ' : '';
+    const celula = prefixoGrande + (it.seqStr ? `${it.seqStr} - ${it.endereco}` : it.endereco);
     dataOut.push([it.lat, it.lon, celula]);
   }
   sufixoApp = '_CIRCUIT';

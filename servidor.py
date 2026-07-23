@@ -2483,31 +2483,40 @@ async def geocode_confirmar(request: Request):
     errada antes; achar pelo CEP dá o pino no lote/rua certa, no pior
     caso genérico mas nunca no bairro errado. Todo acerto vira entrada
     permanente no banco global.
+
+    'enderecos' é um dict endereço_exibido -> texto_original: a rota Anjun
+    tem o CEP removido do endereço já limpo (anjun_tratamento.py monta só
+    rua+número, sem cidade/UF/CEP), então o CEP só sobrevive no texto
+    original bruto — é dele, não do endereço de exibição, que o CEP é
+    extraído aqui.
     """
     sess = _sessao_ou_401(request)
     usuario = sess.get("usuario", "")   # só pra registrar quem confirmou, no banco global
     user_id = sess["user_id"]           # chave do override pessoal (some quando a rota sai do histórico)
     data = await request.json()
-    enderecos = data.get("enderecos") or []
-    if not isinstance(enderecos, list):
-        return err_json("Formato inválido: 'enderecos' deve ser uma lista.")
-    enderecos = [e.strip() for e in enderecos if isinstance(e, str) and e.strip()]
-    enderecos = enderecos[:300]  # limite de segurança por chamada
+    enderecos = data.get("enderecos") or {}
+    if not isinstance(enderecos, dict):
+        return err_json("Formato inválido: 'enderecos' deve ser um objeto endereço -> texto original.")
+    itens = [
+        (endereco.strip(), (texto_original or endereco).strip())
+        for endereco, texto_original in enderecos.items()
+        if isinstance(endereco, str) and endereco.strip()
+    ][:300]  # limite de segurança por chamada
 
     resultados = {}
     pares_por_endereco = {}
     pares_unicos = set()
 
-    for endereco in enderecos:
+    for endereco, texto_original in itens:
         cache = banco_coords_buscar(endereco, user_id)
         if cache:
             resultados[endereco] = {"encontrado": True, **cache}
             continue
-        cep = _extrair_cep(endereco)
+        cep = _extrair_cep(texto_original)
         if not cep:
             resultados[endereco] = {"encontrado": False}
             continue
-        par = (cep, _extrair_numero(endereco))
+        par = (cep, _extrair_numero(texto_original))
         pares_por_endereco[endereco] = par
         pares_unicos.add(par)
 
