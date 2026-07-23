@@ -1723,6 +1723,8 @@ def ler_processado(user_id: str = "", caminho: "Path | None" = None):
     col_membros = find_col([r"membros.?json", r"membros"])
     col_validacao_here = find_col([r"validacao_here", r"validacao.here"])
     col_contato = find_col([r"\bcontato\b", r"contact", r"telefone", r"\bphone\b"])
+    col_bairro  = find_col([r"\bbairro\b", r"neighbo"])
+    col_zip     = find_col([r"zip", r"postal", r"\bcep\b"])
 
     rows = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -1781,6 +1783,8 @@ def ler_processado(user_id: str = "", caminho: "Path | None" = None):
             "endereco_original":  endereco_original,
             "membros":            membros,
             "contato":            contato_grupo,
+            "bairro":             g(col_bairro),
+            "zip":                g(col_zip),
             "validacao_here":     g(col_validacao_here),
             "_cid":               str(uuid.uuid4()),
         }

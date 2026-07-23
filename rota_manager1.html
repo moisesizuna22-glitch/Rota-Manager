@@ -7814,6 +7814,7 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
     _headers = dado.headers || [];
     _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+    _rotaOrigem = 'padrao';
 
     // Confirma no banco/CEP os endereços que ainda não têm uma coordenada
     // confiável, e já deixa salvo permanentemente pra próxima vez.
@@ -7905,6 +7906,7 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
     _headers = dado.headers || [];
     _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+    _rotaOrigem = 'anjun';
 
     // Mesma confirmação de geolocalização do fluxo principal (banco/CEP).
     await confirmarGeolocalizacoes(_allRows, sinal);
@@ -10707,6 +10709,9 @@ _fecharOverlayAnimado('export-overlay', 'export-modal', 'animate__zoomOut');
 
 let _exportModoAtual = 'clean';
 let _exportPreviewData = [];
+// De onde a rota carregada veio ('padrao' = Shopee/rota.xlsx, 'anjun' = Rota
+// Anjun) — decide o formato de exportação em confirmarExportacaoFinal().
+let _rotaOrigem = 'padrao';
 
 // Passo 1: monta a prévia (sequência + endereço calculado) e abre o modal
 // de revisão, onde o usuário pode renomear qualquer endereço antes de gerar
@@ -10733,19 +10738,25 @@ return String(a).localeCompare(String(b), undefined, { numeric: true });
 
 const seqStr = stops.join(', ');
 
-let endereco;
-if (modo === 'detailed') {
 const originaisVistos = [];
 for (const m of membros) {
 const orig = String(m.original || '').trim();
 if (orig && !originaisVistos.includes(orig)) originaisVistos.push(orig);
 }
-endereco = originaisVistos.join(' | ') || row.group_label || standardize(row.address) || row.address || '';
+const original = originaisVistos.join(' | ');
+
+let endereco;
+if (modo === 'detailed') {
+endereco = original || row.group_label || standardize(row.address) || row.address || '';
 } else {
 endereco = row.group_label || standardize(row.address) || row.address || '';
 }
 
-return { lat: row.lat || '', lon: row.lon || '', seqStr, endereco };
+return {
+lat: row.lat || '', lon: row.lon || '', seqStr, endereco, original,
+bairro: row.bairro || '', zip: row.zip || '', contato: row.contato || '',
+fonte: row.fonte_coord || '',
+};
 });
 
 fecharExportModal();
@@ -10866,25 +10877,51 @@ btn.disabled = true;
 label.textContent = "Exportando...";
 
 try {
-// Exporta só 3 colunas — formato pensado pra importar direto no Circuit:
-// LATITUDE | LONGITUDE | SEQUENCE + ENDERECO
-const dataOut = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
-for (const it of _exportPreviewData) {
-const celula = it.seqStr ? `${it.seqStr} - ${it.endereco}` : it.endereco;
-dataOut.push([it.lat, it.lon, celula]);
-}
-
-const ws = XLSX.utils.aoa_to_sheet(dataOut);
-const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, ws, "Rotas Consolidadas");
-
-// Nome do arquivo exportado = nome do arquivo importado (sem extensão) + "_CIRCUIT"
-// Ex.: "21-06-2026 MARCOS VINICIUS FERREIRA GOMES.xlsx" -> "21-06-2026 MARCOS VINICIUS FERREIRA GOMES_CIRCUIT.xlsx"
 const baseName = String(_fileName || 'rota')
   .replace(/\.(xlsx|xls|csv)$/i, '')
   .trim() || 'rota';
 const sufixoDetalhado = _exportModoAtual === 'detailed' ? '_DETALHADO' : '';
-XLSX.writeFile(wb, `${baseName}_CIRCUIT${sufixoDetalhado}.xlsx`);
+
+let dataOut, sufixoApp, linkColIdx = null;
+if (_rotaOrigem === 'anjun') {
+  // Rota Anjun: mesmo formato que o csv_para_rota_xlsx.py já gera no painel
+  // Anjun (Sequence/Address/City/State/Address (Original)/Contact/Lat/Lon/
+  // Geo Fonte/Link Mapa) — já validado, geocodifica certinho por CEP.
+  dataOut = [["Sequence", "Address", "City", "State", "Address (Original)", "Contact", "Lat", "Lon", "Geo Fonte", "Link Mapa"]];
+  linkColIdx = 9;
+  for (const it of _exportPreviewData) {
+    const temCoord = it.lat && it.lon;
+    dataOut.push([
+      it.seqStr, it.endereco, 'Goiânia', 'GO', it.original || it.endereco, it.contato,
+      it.lat, it.lon, it.fonte || 'Sem coordenada', temCoord ? 'Abrir no Maps' : '',
+    ]);
+  }
+  sufixoApp = '_GEO';
+} else {
+  // Exporta só 3 colunas — formato pensado pra importar direto no Circuit:
+  // LATITUDE | LONGITUDE | SEQUENCE + ENDERECO
+  dataOut = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
+  for (const it of _exportPreviewData) {
+    const celula = it.seqStr ? `${it.seqStr} - ${it.endereco}` : it.endereco;
+    dataOut.push([it.lat, it.lon, celula]);
+  }
+  sufixoApp = '_CIRCUIT';
+}
+
+const ws = XLSX.utils.aoa_to_sheet(dataOut);
+if (linkColIdx !== null) {
+  _exportPreviewData.forEach((it, i) => {
+    if (!(it.lat && it.lon)) return;
+    const addr = XLSX.utils.encode_cell({ r: i + 1, c: linkColIdx });
+    ws[addr].l = { Target: `https://www.google.com/maps?q=${it.lat},${it.lon}` };
+  });
+}
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, ws, "Rotas Consolidadas");
+
+// Nome do arquivo exportado = nome do arquivo importado (sem extensão) + sufixo do app
+// Ex.: "21-06-2026 MARCOS VINICIUS FERREIRA GOMES.xlsx" -> "21-06-2026 MARCOS VINICIUS FERREIRA GOMES_CIRCUIT.xlsx"
+XLSX.writeFile(wb, `${baseName}${sufixoApp}${sufixoDetalhado}.xlsx`);
 
 btn.classList.add('bn-sucesso');
 label.textContent = "Exportado!";
