@@ -2228,6 +2228,7 @@ flex-wrap: wrap;
 position: sticky;
 top: calc(56px + env(safe-area-inset-top));
 z-index: 90;
+transition: padding .15s;
 }
 
 .btn {
@@ -2269,6 +2270,17 @@ height: 36px;
 flex: 1;
 min-width: 0;
 max-width: 320px;
+}
+/* Toolbar "encolhida": ao rolar a lista, os outros botões (Importar,
+   Limpar lista, contador) somem e só a caixa de filtro fica visível na
+   barra fixa — position:sticky sozinho no .filter-wrap não funciona
+   aqui porque ele ficaria preso dentro da altura mínima da .toolbar
+   (o "containing block" do sticky), então quem precisa ficar sticky é a
+   .toolbar inteira; o "encolher" é feito escondendo os irmãos via classe
+   (ver toggle no scroll, mais abaixo no JS). */
+.toolbar.scrolled .btn,
+.toolbar.scrolled #count-badge {
+display: none;
 }
 .filter-wrap:focus-within { border-color: var(--accent2); }
 .filter-input {
@@ -3076,6 +3088,9 @@ width: 100%;
 order: 3;
 }
 #count-badge { order: 4; width: 100%; text-align: center; }
+/* Encolhida (rolando): sobra só a caixa de filtro, sem padding extra em
+   volta pra ela ocupar a barra inteirinha. */
+.toolbar.scrolled { padding-top: 0; padding-bottom: 8px; }
 
 /* Drop zone menor */
 #import-page { padding: 16px; }
@@ -6187,6 +6202,17 @@ count < _allRows.length
 ? `${count} de ${_allRows.length} exibidos`
 : `${count} endereços`;
 }
+
+// Ao rolar a lista pra baixo, a toolbar (fixa no topo) encolhe pra
+// sobrar só a caixa de filtro — os botões de importar/limpar e o
+// contador voltam assim que a página sobe de novo perto do topo.
+(() => {
+const TOOLBAR_SCROLL_LIMIAR = 24;
+const toolbarEl = document.getElementById('toolbar');
+window.addEventListener('scroll', () => {
+toolbarEl.classList.toggle('scrolled', window.scrollY > TOOLBAR_SCROLL_LIMIAR);
+}, { passive: true });
+})();
 
 // ══════════════════════════════════════════════════════════
 //  ABRIR MAPA — abre a interface HERE+Google para 1 endereço
