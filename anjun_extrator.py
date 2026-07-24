@@ -15,6 +15,7 @@ Uso:
 import hashlib
 import json
 import csv
+import os
 import re
 import time
 import sys
@@ -37,10 +38,12 @@ def _expandir_qd_lt(endereco: str) -> str:
     return endereco
 
 # ============================================================
-# CONFIGURACAO - preenche com seu usuario e senha do Anjun
+# CONFIGURACAO - preenche com seu usuario e senha do Anjun, OU exporta as
+# variaveis de ambiente ANJUN_USERNAME/ANJUN_PASSWORD (usado pelo servidor.py
+# quando roda esse script por conta de outro usuario, sem editar o arquivo).
 # ============================================================
-USERNAME = "02030332135"      # ex: "02030332135"
-PASSWORD = "smart1234"        # senha normal, sem hash - o script faz o MD5 sozinho
+USERNAME = os.environ.get("ANJUN_USERNAME") or "02030332135"
+PASSWORD = os.environ.get("ANJUN_PASSWORD") or "smart1234"
 
 # Hosts observados na captura de trafego (mesma infra, subdominios diferentes)
 HOST_AUTH = "https://newmanage.anjunexpress.com"      # login, lista de tarefas
@@ -49,9 +52,11 @@ HOST_CLIENT = "https://client.supplier.anjunexpress.com"  # waybills, geocodific
 # Delay entre chamadas de geocodificacao, pra nao sobrecarregar o servidor
 GEOCODE_DELAY_SECONDS = 0.3
 
-OUTPUT_JSON = "anjun_entregas.json"
-OUTPUT_CSV = "anjun_entregas.csv"
-OUTPUT_XLSX = "anjun_entregas_rota.xlsx"  # esse e o que voce importa no Rota Manager
+# Caminhos de saida tambem sobrescrevidos por variavel de ambiente, pra o
+# servidor.py poder gerar um arquivo por usuario sem colidir.
+OUTPUT_JSON = os.environ.get("ANJUN_OUTPUT_JSON") or "anjun_entregas.json"
+OUTPUT_CSV = os.environ.get("ANJUN_OUTPUT_CSV") or "anjun_entregas.csv"
+OUTPUT_XLSX = os.environ.get("ANJUN_OUTPUT_XLSX") or "anjun_entregas_rota.xlsx"  # esse e o que voce importa no Rota Manager
 
 
 def headers_base(token=None):
@@ -217,34 +222,42 @@ def main():
     token = login(USERNAME, PASSWORD)
     tarefas = listar_tarefas(token)
 
-    resultado = []
-
+    # Junta as encomendas de todas as tarefas primeiro, pra saber o total
+    # ANTES de comecar a geocodificar (o servidor.py le essa linha "TOTAL"
+    # pra desenhar a barra de progresso em tempo real).
+    itens = []
     for tarefa in tarefas:
         task_id = tarefa["taskId"]
         dispatch_number = tarefa.get("dispatchTaskNumber")
-        waybills = listar_waybills(token, task_id)
+        for wb in listar_waybills(token, task_id):
+            itens.append((dispatch_number, task_id, wb))
 
-        for wb in waybills:
-            geo = geocodificar(token, wb)
-            time.sleep(GEOCODE_DELAY_SECONDS)
+    total = len(itens)
+    print(f"[ANJUN-API] TOTAL {total}")
 
-            resultado.append({
-                "dispatchTaskNumber": dispatch_number,
-                "taskId": task_id,
-                "waybillNumber": wb.get("waybillNumber"),
-                "scanOrderNumber": wb.get("scanOrderNumber"),
-                "receiveName": wb.get("receiveName"),
-                "receiveMobile": wb.get("receiveMobile"),
-                "enderecoOriginal": wb.get("receiveAddress"),
-                "enderecoNormalizado": _expandir_qd_lt(extrair_endereco_anjun(wb.get("receiveAddress") or "")),
-                "area": wb.get("area"),
-                "city": wb.get("city"),
-                "state": wb.get("state"),
-                "zipCode": wb.get("receiveZipcode"),
-                "enderecoFormatado": geo.get("formattedAddress"),
-                "lat": geo.get("lat"),
-                "lng": geo.get("lng"),
-            })
+    resultado = []
+    for i, (dispatch_number, task_id, wb) in enumerate(itens, start=1):
+        geo = geocodificar(token, wb)
+        time.sleep(GEOCODE_DELAY_SECONDS)
+
+        resultado.append({
+            "dispatchTaskNumber": dispatch_number,
+            "taskId": task_id,
+            "waybillNumber": wb.get("waybillNumber"),
+            "scanOrderNumber": wb.get("scanOrderNumber"),
+            "receiveName": wb.get("receiveName"),
+            "receiveMobile": wb.get("receiveMobile"),
+            "enderecoOriginal": wb.get("receiveAddress"),
+            "enderecoNormalizado": _expandir_qd_lt(extrair_endereco_anjun(wb.get("receiveAddress") or "")),
+            "area": wb.get("area"),
+            "city": wb.get("city"),
+            "state": wb.get("state"),
+            "zipCode": wb.get("receiveZipcode"),
+            "enderecoFormatado": geo.get("formattedAddress"),
+            "lat": geo.get("lat"),
+            "lng": geo.get("lng"),
+        })
+        print(f"[ANJUN-API] PROGRESSO {i}/{total}")
 
     # --- salva JSON ---
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:

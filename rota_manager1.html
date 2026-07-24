@@ -1441,6 +1441,26 @@ header .badge b { color: var(--accent2); }
   }
   .origem-import-icone img { width: 100%; height: 100%; object-fit: contain; }
 
+  /* ── Login da conta Anjun (busca a rota direto do site) ── */
+  #anjun-api-overlay {
+    display: none; position: fixed; inset: 0; z-index: 900;
+    background: rgba(0,0,0,.55);
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #anjun-api-overlay.show { display: flex; }
+  #anjun-api-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    max-width: 380px; width: 100%;
+    padding: 22px 20px 20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+  }
+  #anjun-api-erro { color: var(--danger, #e05252); font-size: 12px; margin-top: 6px; min-height: 14px; }
+  #anjun-api-link-arquivo {
+    display: block; text-align: center; margin-top: 14px;
+    font-size: 12px; color: var(--muted); text-decoration: underline; cursor: pointer;
+  }
+
   /* ── Mapa com todas as paradas (tela cheia) ── */
   #mapa-overlay {
     display: none;
@@ -4988,6 +5008,32 @@ Limpar
 </div>
 </div>
 
+<!-- Login da conta Anjun: busca a rota direto do site (cada usuário entra
+     com a própria conta Anjun, nunca a que está fixa no anjun_extrator.py) -->
+<div id="anjun-api-overlay" onclick="fecharAnjunApiLogin(event)">
+<div id="anjun-api-panel">
+<div class="import-card-title" style="margin-bottom:16px"><span class="bar"></span>Entrar no Anjun</div>
+<div class="login-field">
+<label>Usuário Anjun</label>
+<div class="login-input-wrap">
+<span class="icon">👤</span>
+<input class="login-input" id="anjun-api-user" type="text" placeholder="Seu usuário Anjun" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('anjun-api-pass').focus()">
+</div>
+</div>
+<div class="login-field">
+<label>Senha Anjun</label>
+<div class="login-input-wrap">
+<span class="icon">🔒</span>
+<input class="login-input" id="anjun-api-pass" type="password" placeholder="Sua senha Anjun" autocomplete="off" onkeydown="if(event.key==='Enter')anjunApiBuscar()">
+<button class="toggle-pass" onclick="toggleSenha('anjun-api-pass',this)" title="Mostrar/ocultar senha">👁</button>
+</div>
+</div>
+<div id="anjun-api-erro"></div>
+<button class="btn btn-primary" style="width:100%;margin-top:10px" id="anjun-api-btn" onclick="anjunApiBuscar()">🔎 Buscar rota do Anjun</button>
+<span id="anjun-api-link-arquivo" onclick="_anjunApiUsarArquivo()">ou importar um arquivo manualmente</span>
+</div>
+</div>
+
 
 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="handleFile(event)">
 <input type="file" id="file-input-anjun-rota" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileAnjunRota(event)">
@@ -7765,8 +7811,145 @@ document.getElementById('origem-import-overlay').classList.remove('show');
 
 function _origemImportacaoEscolher(tipo) {
 fecharEscolhaOrigemImportacao();
-if (tipo === 'anjun') document.getElementById('file-input-anjun-rota').click();
+if (tipo === 'anjun') abrirAnjunApiLogin();
 else document.getElementById('file-input').click();
+}
+
+// ── Login Anjun + busca automática: pede usuário/senha DA CONTA ANJUN da
+// pessoa (nunca a fixa no anjun_extrator.py) e roda o script no servidor,
+// que já devolve a rota tratada igual ao fluxo de importar arquivo manual.
+function abrirAnjunApiLogin() {
+document.getElementById('anjun-api-erro').textContent = '';
+document.getElementById('anjun-api-overlay').classList.add('show');
+}
+
+function fecharAnjunApiLogin(e) {
+if (e && e.target !== document.getElementById('anjun-api-overlay')) return;
+document.getElementById('anjun-api-overlay').classList.remove('show');
+}
+
+// Fallback: quem preferir subir o CSV/xlsx exportado manualmente do Anjun
+// continua podendo, sem precisar digitar login/senha nenhum.
+function _anjunApiUsarArquivo() {
+fecharAnjunApiLogin();
+document.getElementById('file-input-anjun-rota').click();
+}
+
+async function anjunApiBuscar() {
+const usuario = document.getElementById('anjun-api-user').value.trim();
+const senha   = document.getElementById('anjun-api-pass').value;
+const erroEl  = document.getElementById('anjun-api-erro');
+erroEl.textContent = '';
+
+if (!usuario || !senha) {
+erroEl.textContent = 'Preenche usuário e senha do Anjun.';
+return;
+}
+if (!_serverOnline) {
+erroEl.textContent = 'Servidor não encontrado. Rode servidor.py e tente de novo.';
+return;
+}
+
+setBtnLoading('anjun-api-btn', true, '🔎 Buscar rota do Anjun');
+try {
+const ini = await fetch(SERVER + '/anjun-rota/buscar-api', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', ...authHeaders() },
+body: JSON.stringify({ usuario, senha }),
+});
+if (ini.status === 403) {
+  let motivo = '';
+  try { motivo = (await ini.json()).erro || ''; } catch (e) {}
+  fecharAnjunApiLogin();
+  mostrarSemAcesso(motivo);
+  return;
+}
+const di = await ini.json();
+if (!di.ok) { erroEl.textContent = di.erro || 'Não consegui iniciar a busca.'; return; }
+
+fecharAnjunApiLogin();
+document.getElementById('anjun-api-pass').value = ''; // não deixa a senha na tela depois de enviada
+await _anjunApiAcompanharBusca();
+
+} catch (err) {
+erroEl.textContent = 'Erro: ' + err.message;
+} finally {
+setBtnLoading('anjun-api-btn', false, '🔎 Buscar rota do Anjun');
+}
+}
+
+async function _anjunApiAcompanharBusca() {
+showLoading('Entrando no Anjun...', 0);
+_loadingAbort = new AbortController();
+const sinal = _loadingAbort.signal;
+
+try {
+let dadosProntos = null;
+while (true) {
+  await sleep(900);
+  const r = await fetch(SERVER + '/anjun-rota/api-progresso', { headers: authHeaders(), signal: sinal });
+  const p = await r.json();
+  if (!p.ok) throw new Error(p.erro || 'Erro ao acompanhar a busca no Anjun');
+
+  if (p.total > 0) {
+    setLoadingStage(1, `Buscando entregas no Anjun... ${p.done}/${p.total}`);
+  } else {
+    setLoadingStage(1, 'Buscando entregas no Anjun...');
+  }
+
+  if (p.erro) throw new Error(p.erro);
+  if (p.pronto) { dadosProntos = p; break; }
+}
+
+if (dadosProntos.gamificacao) gamiProcessarResposta(dadosProntos);
+setLoadingStage(2, 'Organizando rota do Anjun...');
+await sleep(600);
+
+// Busca o resultado já carregado na sessão (mesmo endpoint dos outros fluxos)
+setLoadingStage(3, 'Confirmando geolocalização...');
+const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: sinal });
+const dado = await res.json();
+if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
+
+_headers = dado.headers || [];
+_allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+_rotaOrigem = 'anjun';
+
+await confirmarGeolocalizacoes(_allRows, sinal);
+await sleep(500);
+
+setLoadingStage(4, 'Preparando visualização...');
+await sleep(500);
+clearDraft();
+
+const hUp = _headers.map(x => String(x||'').toUpperCase().trim());
+_colLat  = hUp.findIndex(h => /LATITUDE|LAT/.test(h));
+_colLon  = hUp.findIndex(h => /LONGITUDE|LON|LNG/.test(h));
+_colCoor = hUp.findIndex(h => /COORDENADAS|COORD/.test(h));
+if (_colLat  < 0) _colLat  = null;
+if (_colLon  < 0) _colLon  = null;
+if (_colCoor < 0) _colCoor = null;
+
+hideLoading();
+renderTable(_allRows);
+updateStats(_allRows);
+
+document.getElementById('file-badge').innerHTML =
+  `🧾 <b>Rota Anjun</b> — ${_allRows.length} endereços`;
+document.getElementById('file-badge').classList.add('show');
+document.getElementById('table-section').classList.add('show');
+document.getElementById('drop-zone').style.display = 'none';
+document.getElementById('import-page').style.display = 'none';
+document.getElementById('toolbar').style.display = 'flex';
+document.getElementById('bottom-nav').classList.add('show');
+document.body.classList.add('has-bottom-nav');
+
+} catch (err) {
+hideLoading();
+aplicarVisibilidadeDropZone();
+if (err && err.name === 'AbortError') return;
+await mostrarAlerta('❌ Erro: ' + err.message);
+}
 }
 
 // Confirmação de geolocalização: manda pro servidor só os endereços sem

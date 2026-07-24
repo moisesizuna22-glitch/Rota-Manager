@@ -61,6 +61,7 @@ ARQ_VALIDADO   = "rota_validada_here.xlsx"
 TRATAMENTO_PY  = "tratamento_dados.py"
 ANJUN_SCRIPT   = "csv_para_rota_xlsx.py"
 ANJUN_TRATAMENTO_PY = "anjun_tratamento.py"
+ANJUN_EXTRATOR_PY = "anjun_extrator.py"
 
 HERE_API_KEY   = os.environ.get("HERE_API_KEY", "P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M").strip()
 HERE_CIDADE_UF = os.environ.get("HERE_CIDADE_UF", "Goiânia - GO, Brasil").strip()
@@ -2917,6 +2918,141 @@ async def anjun_rota_importar(request: Request, arquivo: UploadFile = File(...))
     resposta = {"ok": True, "total": len(rows)}
     if xp_resultado:
         resposta["gamificacao"] = xp_resultado
+    return ok_json(resposta)
+
+# ─── Buscar Rota Anjun direto do site: sem upload manual ──────────────
+# Roda anjun_extrator.py em segundo plano com o usuario/senha DO ANJUN que
+# a pessoa digitou na hora (nunca os que estao no topo do .py) — assim cada
+# usuario do Rota Manager usa a propria conta Anjun. anjun_extrator.py ja
+# devolve o xlsx com endereco normalizado + lat/lng oficiais do Anjun,
+# prontos pra cair direto em ler_processado(), igual ao /anjun-rota/importar.
+_ANJUN_API_JOBS: dict = {}  # uid -> {status, total, done, erro, pronto, carregado, saida_path}
+
+def _anjun_api_processar_bg(uid: str, usuario_anjun: str, senha_anjun: str, saida_path: Path):
+    job = _ANJUN_API_JOBS[uid]
+    try:
+        env_anjun = {
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "ANJUN_USERNAME": usuario_anjun,
+            "ANJUN_PASSWORD": senha_anjun,
+            "ANJUN_OUTPUT_XLSX": str(saida_path),
+            "ANJUN_OUTPUT_JSON": str(DATA_DIR / f"anjunapi_entrada_{uid}.json"),
+            "ANJUN_OUTPUT_CSV": str(DATA_DIR / f"anjunapi_entrada_{uid}.csv"),
+        }
+        proc = subprocess.Popen(
+            [sys.executable, ANJUN_EXTRATOR_PY],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=env_anjun,
+        )
+        for linha in proc.stdout:
+            linha = linha.rstrip("\n")
+            if linha:
+                print(f"  [ANJUN-API] {linha}")
+            m_total = re.match(r"\[ANJUN-API\] TOTAL (\d+)", linha)
+            if m_total:
+                job["total"] = int(m_total.group(1))
+            m_item = re.match(r"\[ANJUN-API\] PROGRESSO (\d+)/(\d+)", linha)
+            if m_item:
+                job["done"] = int(m_item.group(1))
+                job["total"] = int(m_item.group(2))
+        proc.wait(timeout=600)
+        if proc.returncode != 0:
+            job["erro"] = "Não consegui buscar no Anjun (confira usuário e senha)."
+        elif not saida_path.exists():
+            job["erro"] = "Busca concluída, mas não há entregas pendentes no Anjun agora."
+        else:
+            job["total"] = max(job["total"], job["done"], 1)
+            job["done"] = job["total"]
+            job["pronto"] = True
+    except subprocess.TimeoutExpired:
+        job["erro"] = "Timeout: a busca no Anjun demorou mais que o esperado."
+    except Exception as e:
+        job["erro"] = str(e)
+    finally:
+        job["status"] = "concluido"
+
+@app.post("/anjun-rota/buscar-api")
+async def anjun_rota_buscar_api(request: Request):
+    sess = _sessao_com_acesso_ou_403(request)
+
+    if not Path(ANJUN_EXTRATOR_PY).exists():
+        return err_json(f"{ANJUN_EXTRATOR_PY} não encontrado na pasta do servidor.")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    usuario_anjun = (body.get("usuario") or "").strip()
+    senha_anjun = body.get("senha") or ""
+    if not usuario_anjun or not senha_anjun:
+        return err_json("Informe usuário e senha da sua conta Anjun.")
+
+    uid = sess["user_id"]
+    saida_path = DATA_DIR / f"anjunapi_saida_{uid}.xlsx"
+
+    _ANJUN_API_JOBS[uid] = {
+        "status": "rodando", "total": 0, "done": 0,
+        "erro": None, "pronto": False, "carregado": False,
+        "saida_path": str(saida_path),
+    }
+
+    print(f"  [ANJUN-API] busca iniciada — usuário Rota Manager: {sess['usuario']}")
+
+    thread = threading.Thread(
+        target=_anjun_api_processar_bg,
+        args=(uid, usuario_anjun, senha_anjun, saida_path),
+        daemon=True,
+    )
+    thread.start()
+
+    return ok_json({"ok": True})
+
+@app.get("/anjun-rota/api-progresso")
+async def anjun_rota_api_progresso(request: Request):
+    sess = _sessao_com_acesso_ou_403(request)
+    uid = sess["user_id"]
+    job = _ANJUN_API_JOBS.get(uid)
+    if not job:
+        return err_json("Nenhuma busca em andamento.")
+
+    resposta = {
+        "ok": True,
+        "status": job["status"],
+        "total": job["total"],
+        "done": job["done"],
+        "pronto": job["pronto"],
+        "erro": job["erro"],
+    }
+
+    if job["pronto"] and not job.get("carregado"):
+        saida_path = Path(job["saida_path"])
+        try:
+            rows, headers = ler_processado(uid, caminho=saida_path)
+            sess["dados"] = (rows, headers)
+            sess["_rota_hash"] = gamification.calcular_hash_rota(saida_path.read_bytes())
+            adicionar_ao_historico(saida_path.name, rows, headers, uid)
+            if not sess.get("is_admin"):
+                usuario_consumir_credito_avulso_se_necessario(sess["usuario"])
+                registrar_importacao_hoje(sess["usuario"])
+            print(f"  [ANJUN-API] ✅ {len(rows)} endereços carregados — usuário: {sess['usuario']}")
+
+            xp_resultado = None
+            rota_hash = sess.get("_rota_hash")
+            if rota_hash:
+                paradas = len(rows)
+                pacotes = sum(int(r.get("group_size") or 1) for r in rows)
+                xp_resultado = _conceder_xp_rota(uid, paradas, pacotes, rota_hash)
+                sess["_rota_hash"] = None
+            if xp_resultado:
+                resposta["gamificacao"] = xp_resultado
+
+            resposta["total_enderecos"] = len(rows)
+            job["carregado"] = True
+        except Exception as e:
+            job["erro"] = f"Erro ao carregar o resultado: {e}"
+            resposta["erro"] = job["erro"]
+
     return ok_json(resposta)
 
 @app.post("/rota/otimizar")
