@@ -5199,8 +5199,16 @@ return [null, null];
 function extractStreetNumber(addr) {
 const u = stripAccents(addr.toUpperCase().trim());
 const streetRe = u.match(/^((?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|ALAMEDA|TRAVESSA|R\.?)\s+(?:C[-\s]?\d+|T[-\s]?\d+|[A-Z]\s*\d+|\d+))(.*)/);
-if (!streetRe) return null;
-let rest = streetRe[2];
+let rest;
+if (streetRe) {
+rest = streetRe[2];
+} else {
+// Rua com nome (não numerada, ex.: "Avenida Circular") — sem código logo
+// após o prefixo, o número da casa vem em algum ponto depois do nome.
+const namedRe = u.match(/^(?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|ALAMEDA|TRAVESSA|R\.?)\s+(.*)/);
+if (!namedRe) return null;
+rest = namedRe[1];
+}
 let firstToken = rest.trim().replace(/^,/, '').trim().split(/\s+/)[0] || '';
 if (/^S\/?N$/.test(firstToken)) return null;
 let restClean = rest.replace(/\b(?:APT|APTO|AP|APARTAMENTO|SALA|UNID|CASA)\s*\.?\s*\d+\b/g, '');
@@ -5266,9 +5274,15 @@ return s ? s.length + (s.includes(',') ? 100 : 0) : -1;
 }
 
 function melhorPadronizado(addr, original) {
-const a = standardize(addr);
+// O original (texto do courier) é a fonte de verdade pro número/QD-LT — o
+// "reformado" é só uma aproximação de geocodificação/CEP e pode ter o
+// número errado (achou a rua certa, mas o prédio genérico do CEP). Por
+// isso o original manda sempre que tiver QD/LT, número ou prédio (vírgula);
+// o reformado só entra quando o original não tem nada disso.
 const o = original ? standardize(original) : '';
-return scoreStd(o) > scoreStd(a) ? o : a;
+if (o.includes(',')) return o;
+const a = standardize(addr);
+return a.includes(',') ? a : (o || a);
 }
 
 function fuzzyKey(addr) {
@@ -5843,7 +5857,10 @@ if (!wrap) return;
 const cid = wrap.dataset.cid;
 const row = _allRows.find(r => String(r._cid) === String(cid));
 if (!row) return;
-const atual = row.group_label || standardize(row.address) || row.address || '';
+// Usa o texto que já está na tela (span .td-addr-reformado), não recalcula
+// do zero — senão diverge do que renderTable() decidiu mostrar.
+const spanAtual = wrap.querySelector('.td-addr-reformado');
+const atual = row.group_label || (spanAtual ? spanAtual.textContent : '') || row.address || '';
 wrap.classList.add('editing');
 wrap.innerHTML = `
     <input type="text" class="input-nome-endereco" value="${escHtml(atual)}">
