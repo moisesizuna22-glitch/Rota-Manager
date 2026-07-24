@@ -2222,6 +2222,9 @@ display: flex;
 align-items: center;
 gap: 10px;
 flex-wrap: wrap;
+position: sticky;
+top: calc(56px + env(safe-area-inset-top));
+z-index: 90;
 }
 
 .btn {
@@ -3061,6 +3064,7 @@ white-space: nowrap;
 .toolbar {
 padding: 8px 12px;
 gap: 8px;
+top: calc(48px + env(safe-area-inset-top));
 }
 .toolbar .btn { font-size: 12px; padding: 8px 12px; }
 .filter-wrap {
