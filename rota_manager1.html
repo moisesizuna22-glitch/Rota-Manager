@@ -876,7 +876,9 @@ header .badge b { color: var(--accent2); }
     opacity: 0;
     transition: opacity .25s;
     pointer-events: none;
-    white-space: nowrap;
+    max-width: calc(100% - 28px);
+    text-align: center;
+    white-space: normal;
   }
   #scan-cam-toast.show { opacity: 1; }
   #scan-cam-controls {
@@ -10283,13 +10285,13 @@ function scanAlternarCamera() {
 let _scanListaItens = []; // [{id, endereco, lat, lng, fonte}]
 let _scanListaSeq = 0;
 
-function scanMostrarToast(msg) {
+function scanMostrarToast(msg, duracaoMs) {
   const toast = document.getElementById('scan-cam-toast');
   if (!toast) return;
   toast.textContent = msg;
   toast.classList.add('show');
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => toast.classList.remove('show'), 1600);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), duracaoMs || 1600);
 }
 
 function scanAtualizarBadgeCam() {
@@ -10303,15 +10305,13 @@ function scanAtualizarBadgeCam() {
   }
 }
 
+// OCR client-side via Tesseract.js (mesmo worker do painel "Extrair de
+// Prints", ver _extrGetWorker) — nada de Google Vision aqui, que é pago
+// por chamada; roda 100% no navegador, sem custo de API.
 async function scanOcrSoTexto(base64) {
-  const r = await fetch(SERVER + '/scan/ocr', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ imagem: base64 })
-  });
-  const d = await r.json();
-  if (!d.ok) throw new Error(d.erro || 'Falha no OCR.');
-  return (d.texto || '').replace(/\s+/g, ' ').trim();
+  const worker = await _extrGetWorker();
+  const { data } = await worker.recognize(base64);
+  return (data.text || '').replace(/\s+/g, ' ').trim();
 }
 
 function scanCropFrameParaBase64() {
@@ -10393,7 +10393,7 @@ async function scanCapturarFotoViva() {
       scanMostrarToast(`✅ Item adicionado (${_scanListaItens.length})`);
     }
   } catch (e) {
-    scanMostrarToast('❌ Erro no OCR');
+    scanMostrarToast('❌ ' + (e && e.message ? e.message : 'Erro no OCR'), 4000);
   } finally {
     shutter.disabled = false;
   }
@@ -10421,20 +10421,11 @@ async function scanReconhecerTexto() {
   if (!_scanFotoBase64) return;
   status.textContent = '⏳ Reconhecendo texto da imagem...';
   try {
-    const r = await fetch(SERVER + '/scan/ocr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ imagem: _scanFotoBase64 })
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      status.textContent = '❌ ' + (d.erro || 'Falha no OCR.');
-      return;
-    }
-    textoEl.value = d.texto || '';
-    status.textContent = d.texto ? '✅ Texto reconhecido. Confira e ajuste se preciso.' : '⚠️ Nenhum texto encontrado na imagem.';
+    const texto = await scanOcrSoTexto(_scanFotoBase64);
+    textoEl.value = texto;
+    status.textContent = texto ? '✅ Texto reconhecido. Confira e ajuste se preciso.' : '⚠️ Nenhum texto encontrado na imagem.';
   } catch (e) {
-    status.textContent = '❌ Erro ao conectar com o servidor de OCR.';
+    status.textContent = '❌ ' + (e && e.message ? e.message : 'Erro no OCR.');
   }
 }
 
