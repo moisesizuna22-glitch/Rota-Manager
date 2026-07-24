@@ -5256,6 +5256,21 @@ if (name) return `${sk}, ${bldPrefix(addr)} ${name}`;
 return sk;
 }
 
+// Pontua um endereço padronizado: quanto mais informação prática (QD/LT,
+// número, prédio — tudo isso vem com vírgula), melhor. Usado pra escolher,
+// entre o endereço "reformado" (geocodificação/CEP) e o texto original do
+// courier, qual tem QD+LT pra virar a linha de cima da lista (é o que bate
+// com o banco de dados de endereços já confirmados).
+function scoreStd(s) {
+return s ? s.length + (s.includes(',') ? 100 : 0) : -1;
+}
+
+function melhorPadronizado(addr, original) {
+const a = standardize(addr);
+const o = original ? standardize(original) : '';
+return scoreStd(o) > scoreStd(a) ? o : a;
+}
+
 function fuzzyKey(addr) {
 if (!addr || typeof addr !== 'string') return '';
 let t = stripAccents(addr.toUpperCase());
@@ -5338,11 +5353,7 @@ groups[root].push(i);
 
 for (const [root, members] of Object.entries(groups)) {
 const labels = members.map(m => standardize(rows[m].address));
-const best = labels.reduce((a, b) => {
-const scoreA = a.length + (a.includes(',') ? 1 : 0) * 100;
-const scoreB = b.length + (b.includes(',') ? 1 : 0) * 100;
-return scoreA >= scoreB ? a : b;
-}, '');
+const best = labels.reduce((a, b) => scoreStd(a) >= scoreStd(b) ? a : b, '');
 const stops = members
 .map(m => rows[m].stop)
 .filter(Boolean)
@@ -5637,11 +5648,17 @@ if (row._editado) tr.classList.add('voce-editou');
 if (_selecionados.has(row._cid)) tr.classList.add('tr-selecionada');
 
 const coordText  = row.coord || '—';
-const endReformado = row.group_label || standardize(row.address) || row.address;
-
 const membros = Array.isArray(row.membros) && row.membros.length
 ? row.membros
 : [{ stop: row.stop, original: row.endereco_original || row.address }];
+
+// Entre o endereço reformado (geocodificação/CEP) e o texto original do
+// courier, usa o que tiver QD+LT (ou número/prédio) pra virar a linha de
+// cima — é essa forma "RUA X, QD-LT" que bate com o banco de endereços.
+// Só pra item único; grupo (group_size > 1) mantém o rótulo de consenso.
+const endReformado = row.group_size > 1
+? (row.group_label || standardize(row.address) || row.address)
+: (melhorPadronizado(row.address, membros[0] ? membros[0].original : '') || row.address);
 
 const stopsGrandes = new Set((row._stopsGrandes || []).map(String));
 const stopsList = membros.map(m => m.stop).filter(Boolean);
