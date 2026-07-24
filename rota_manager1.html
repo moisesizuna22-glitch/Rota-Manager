@@ -469,6 +469,12 @@ header .badge b { color: var(--accent2); }
     font-weight: 700;
   }
   .badge-confianca.conf-alta .bc-dot { background: #6fcf91; }
+  .badge-confianca.conf-media {
+    background: rgba(199,211,74,.1);
+    color: var(--accent);
+    border-color: rgba(199,211,74,.3);
+  }
+  .badge-confianca.conf-media .bc-dot { background: var(--accent); }
 
   /* ── Linha confirmada via banco de coords ──────────────────────────
      Estado normal/maioria: sem destaque de cor próprio (o badge já avisa).
@@ -5695,7 +5701,7 @@ if (validacao.startsWith('✅')) {
 let confiancaBadgeHtml = '';
 if (row.do_banco) {
   const fonte = row.fonte_coord || '';
-  let label, title;
+  let label, title, confClass = 'conf-alta';
   if (fonte === 'here') {
     label = '✅ Confirmado (HERE)';
     title = 'Endereço encontrado e confirmado pelo HERE WeGo.';
@@ -5705,11 +5711,18 @@ if (row.do_banco) {
   } else if (fonte === 'override') {
     label = '📍 Você confirmou';
     title = 'Você corrigiu esta coordenada manualmente (vale só até essa rota sair do seu histórico).';
+  } else if (fonte) {
+    // Vem da cascata de CEP (here_cep, photon_*, nominatim_*): achou pelo
+    // CEP, não pelo endereço exato — o pino cai perto da rua/quadra certa,
+    // mas pode não bater o número/lote exato. Avisa o entregador.
+    label = '📍 Coordenada genérica';
+    title = 'Coordenada aproximada pelo CEP (achada via ' + fonte.replace(/_/g, ' ') + '), não confirmada pelo endereço exato — confira antes de confiar 100%.';
+    confClass = 'conf-media';
   } else {
     label = '✅ Coordenada confirmada';
     title = 'Coordenada encontrada no banco de coordenadas.';
   }
-  confiancaBadgeHtml = `<span class="badge-confianca conf-alta" title="${escHtml(title)}"><span class="bc-dot"></span>${label}</span>`;
+  confiancaBadgeHtml = `<span class="badge-confianca ${confClass}" title="${escHtml(title)}"><span class="bc-dot"></span>${label}</span>`;
 } else if (!hasCoord) {
   confiancaBadgeHtml = `<span class="badge-sem-coord" title="Esta linha ainda não tem coordenada."><span class="bc-dot"></span>Sem coordenada</span>`;
 }
