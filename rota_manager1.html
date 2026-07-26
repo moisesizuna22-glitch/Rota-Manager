@@ -790,6 +790,30 @@ header .badge b { color: var(--accent2); }
     animation: scan-guide-respira 2s ease-in-out infinite;
   }
   #scan-cam-guide.capturando { animation: none; opacity: 1; }
+  #scan-cam-guide.ajustando {
+    pointer-events: auto;
+    cursor: move;
+    animation: none;
+    opacity: 1;
+    touch-action: none;
+  }
+  #scan-cam-guide-handle {
+    display: none;
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: 26px;
+    height: 26px;
+    background: #ffb300;
+    border: 2px solid #1a1200;
+    border-radius: 6px;
+    cursor: nwse-resize;
+    touch-action: none;
+  }
+  #scan-cam-guide.ajustando #scan-cam-guide-handle { display: block; }
+  #scan-cam-ajustar.ativo {
+    color: #ffb300;
+  }
   @keyframes scan-guide-respira {
     0%, 100% { opacity: 1; }
     50% { opacity: .55; }
@@ -4363,7 +4387,8 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
         <img id="scan-preview-img" alt="Foto capturada">
         <div id="scan-capture-hint">Tire uma foto da etiqueta ou envie da galeria</div>
         <div class="scan-cam-row">
-          <button class="btn btn-primary" onclick="scanAbrirCameraViva()">📷 Câmera</button>
+          <button class="btn btn-primary" onclick="scanAbrirCameraViva('lista','camera')">📷 Câmera</button>
+          <button class="btn" onclick="scanAbrirCameraViva('lista','tela')">🖥 Tela (split-screen)</button>
           <button class="btn" onclick="document.getElementById('scan-file-galeria').click()">🖼 Galeria</button>
         </div>
       </div>
@@ -4394,7 +4419,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <div id="scan-cam-overlay">
   <div id="scan-cam-video-wrap">
     <video id="scan-cam-video" autoplay playsinline muted></video>
-    <div id="scan-cam-guide"></div>
+    <div id="scan-cam-guide"><div id="scan-cam-guide-handle"></div></div>
     <div id="scan-cam-hint">Encaixe a linha aqui dentro</div>
     <div id="scan-cam-topbar">
       <span class="scan-cam-pill active" style="flex:none; padding-left:14px; padding-right:14px;">📍 Endereço</span>
@@ -4406,6 +4431,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     <button id="scan-cam-close" onclick="scanFecharCameraViva()">✕</button>
     <button id="scan-cam-shutter" onclick="scanCapturarFotoViva()" aria-label="Capturar"></button>
     <button id="scan-cam-flip" onclick="scanAlternarCamera()">🔄</button>
+    <button id="scan-cam-ajustar" onclick="scanAlternarAjuste()" style="display:none">🔧</button>
   </div>
   <canvas id="scan-cam-canvas" style="display:none"></canvas>
 </div>
@@ -4425,7 +4451,8 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
       <div class="scan-campos-tags" id="scan-campos-tags"></div>
       <div id="scan-buscar-row">
         <button class="btn btn-primary" id="scan-buscar-btn" onclick="scanExecutarBusca()">🔎 Buscar sequência</button>
-        <button class="btn" onclick="scanAbrirCameraViva('busca')">📷 Câmera</button>
+        <button class="btn" onclick="scanAbrirCameraViva('busca','camera')">📷 Câmera</button>
+        <button class="btn" onclick="scanAbrirCameraViva('busca','tela')">🖥 Tela</button>
         <button class="btn" onclick="scanLimpar()">Limpar</button>
       </div>
       <div id="scan-status"></div>
@@ -10247,16 +10274,43 @@ async function anjunBaixarResultado() {
 let _scanCamStream = null;
 let _scanCamFacing = 'environment';
 let _scanCamModo = 'lista'; // 'lista' = adiciona à lista pra gerar planilha; 'busca' = OCR + busca sequência direto
+let _scanCamFonte = 'camera'; // 'camera' = getUserMedia (etiqueta física); 'tela' = getDisplayMedia (split-screen com emulador/app de e-mail)
+let _scanAjustando = false; // true enquanto o usuário está arrastando/redimensionando a guia (modo 'tela')
 
-async function scanAbrirCameraViva(modo) {
+async function scanAbrirCameraViva(modo, fonte) {
   _scanCamModo = modo === 'busca' ? 'busca' : 'lista';
+  _scanCamFonte = fonte === 'tela' ? 'tela' : 'camera';
+
   const pill = document.querySelector('#scan-cam-topbar .scan-cam-pill');
   if (pill) pill.textContent = _scanCamModo === 'busca' ? '🔎 Buscar sequência' : '📍 Endereço';
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    // Sem suporte: cai no input de arquivo com câmera nativa do sistema
-    document.getElementById('scan-file-camera').click();
-    return;
+
+  const flipBtn = document.getElementById('scan-cam-flip');
+  const ajustarBtn = document.getElementById('scan-cam-ajustar');
+  const hint = document.getElementById('scan-cam-hint');
+  const guide = document.getElementById('scan-cam-guide');
+
+  if (_scanCamFonte === 'tela') {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      await mostrarAlerta('Esse navegador não suporta compartilhamento de tela. Use a câmera ou a galeria.');
+      return;
+    }
+    if (flipBtn) flipBtn.style.display = 'none';
+    if (ajustarBtn) ajustarBtn.style.display = '';
+    if (hint) hint.textContent = 'Encaixe a área do endereço aqui — toque em 🔧 pra arrastar/redimensionar';
+    scanAplicarGuiaSalva();
+  } else {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Sem suporte: cai no input de arquivo com câmera nativa do sistema
+      document.getElementById('scan-file-camera').click();
+      return;
+    }
+    if (flipBtn) flipBtn.style.display = '';
+    if (ajustarBtn) ajustarBtn.style.display = 'none';
+    if (hint) hint.textContent = 'Encaixe a linha aqui dentro';
+    // guia volta ao padrão fixo da câmera (a de tela pode ter sido movida/redimensionada)
+    if (guide) { guide.style.left = ''; guide.style.top = ''; guide.style.width = ''; guide.style.height = ''; guide.style.right = ''; }
   }
+
   document.getElementById('scan-cam-overlay').classList.add('show');
   scanAtualizarBadgeCam();
   await scanIniciarStream();
@@ -10265,14 +10319,35 @@ async function scanAbrirCameraViva(modo) {
 async function scanIniciarStream() {
   scanPararStream();
   try {
-    _scanCamStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: _scanCamFacing, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false
-    });
+    if (_scanCamFonte === 'tela') {
+      // Pede compartilhamento de tela inteira (ou janela) — dialogo nativo do SO/navegador.
+      // No celular, usar com split-screen: a outra metade da tela mostra o app de origem
+      // (emulador, e-mail, etc.) e essa metade mostra o preview + botão de captura.
+      _scanCamStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'monitor' },
+        audio: false
+      });
+      const track = _scanCamStream.getVideoTracks()[0];
+      if (track) {
+        // Se o usuário parar o compartilhamento pelos controles do navegador/SO, fecha o overlay.
+        track.addEventListener('ended', () => scanFecharCameraViva());
+      }
+    } else {
+      _scanCamStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: _scanCamFacing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+    }
     const video = document.getElementById('scan-cam-video');
     video.srcObject = _scanCamStream;
   } catch (e) {
-    await mostrarAlerta('Não foi possível acessar a câmera: ' + e.message);
+    // Usuário cancelou o seletor de compartilhamento de tela: não é um erro de verdade, só fecha.
+    if (_scanCamFonte === 'tela' && e && (e.name === 'NotAllowedError' || e.name === 'AbortError')) {
+      scanFecharCameraViva();
+      return;
+    }
+    const msg = _scanCamFonte === 'tela' ? 'Não foi possível iniciar o compartilhamento de tela: ' : 'Não foi possível acessar a câmera: ';
+    await mostrarAlerta(msg + e.message);
     scanFecharCameraViva();
   }
 }
@@ -10285,6 +10360,7 @@ function scanPararStream() {
 }
 
 function scanFecharCameraViva() {
+  if (_scanAjustando) scanAlternarAjuste(); // sai do modo ajuste salvando a área antes de fechar
   scanPararStream();
   document.getElementById('scan-cam-overlay').classList.remove('show');
 }
@@ -10293,6 +10369,120 @@ function scanAlternarCamera() {
   _scanCamFacing = _scanCamFacing === 'environment' ? 'user' : 'environment';
   scanIniciarStream();
 }
+
+// ── Ajuste da área de recorte (arrastar/redimensionar) — usado no modo 'tela',
+// já que a posição da lista de endereços na outra metade da split-screen varia
+// (diferente da câmera, que o próprio usuário aproxima/afasta da etiqueta). ──
+function scanAlternarAjuste() {
+  _scanAjustando = !_scanAjustando;
+  const guide = document.getElementById('scan-cam-guide');
+  const btn = document.getElementById('scan-cam-ajustar');
+  if (guide) guide.classList.toggle('ajustando', _scanAjustando);
+  if (btn) btn.classList.toggle('ativo', _scanAjustando);
+  if (_scanAjustando) {
+    scanMostrarToast('🔧 Arraste pra mover, puxe o canto pra redimensionar', 2400);
+  } else {
+    scanSalvarGuia();
+    scanMostrarToast('✅ Área salva');
+  }
+}
+
+function scanSalvarGuia() {
+  const guide = document.getElementById('scan-cam-guide');
+  const wrap = document.getElementById('scan-cam-video-wrap');
+  if (!guide || !wrap) return;
+  const wr = wrap.getBoundingClientRect();
+  const gr = guide.getBoundingClientRect();
+  if (!wr.width || !wr.height) return;
+  const dados = {
+    left: (gr.left - wr.left) / wr.width * 100,
+    top: (gr.top - wr.top) / wr.height * 100,
+    width: gr.width / wr.width * 100,
+    height: gr.height / wr.height * 100
+  };
+  try { localStorage.setItem('scanGuiaTela', JSON.stringify(dados)); } catch (e) {}
+}
+
+function scanAplicarGuiaSalva() {
+  const guide = document.getElementById('scan-cam-guide');
+  if (!guide) return;
+  try {
+    const raw = localStorage.getItem('scanGuiaTela');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    guide.style.left = d.left + '%';
+    guide.style.top = d.top + '%';
+    guide.style.width = d.width + '%';
+    guide.style.height = d.height + '%';
+    guide.style.right = 'auto';
+  } catch (e) {}
+}
+
+// Arraste/redimensionamento por ponteiro (mouse ou touch) — só faz efeito
+// quando a guia está com a classe 'ajustando' (botão 🔧 ativado).
+(function scanInitGuiaDrag() {
+  const guide = document.getElementById('scan-cam-guide');
+  const wrap = document.getElementById('scan-cam-video-wrap');
+  if (!guide || !wrap) return;
+
+  let modo = null; // 'mover' | 'redimensionar'
+  let inicio = null;
+
+  function pctAtual() {
+    const wr = wrap.getBoundingClientRect();
+    const gr = guide.getBoundingClientRect();
+    return {
+      left: (gr.left - wr.left) / wr.width * 100,
+      top: (gr.top - wr.top) / wr.height * 100,
+      width: gr.width / wr.width * 100,
+      height: gr.height / wr.height * 100
+    };
+  }
+
+  guide.addEventListener('pointerdown', (ev) => {
+    if (!_scanAjustando) return;
+    const handle = document.getElementById('scan-cam-guide-handle');
+    const alvoRedimensionar = handle && (ev.target === handle || handle.contains(ev.target));
+    modo = alvoRedimensionar ? 'redimensionar' : 'mover';
+    inicio = { x: ev.clientX, y: ev.clientY, rect: pctAtual() };
+    try { guide.setPointerCapture(ev.pointerId); } catch (e) {}
+    ev.preventDefault();
+  });
+
+  guide.addEventListener('pointermove', (ev) => {
+    if (!modo || !inicio) return;
+    const wr = wrap.getBoundingClientRect();
+    if (!wr.width || !wr.height) return;
+    const dxPct = (ev.clientX - inicio.x) / wr.width * 100;
+    const dyPct = (ev.clientY - inicio.y) / wr.height * 100;
+
+    if (modo === 'mover') {
+      let left = inicio.rect.left + dxPct;
+      let top = inicio.rect.top + dyPct;
+      left = Math.max(0, Math.min(100 - inicio.rect.width, left));
+      top = Math.max(0, Math.min(100 - inicio.rect.height, top));
+      guide.style.left = left + '%';
+      guide.style.top = top + '%';
+      guide.style.right = 'auto';
+    } else {
+      let width = Math.max(10, inicio.rect.width + dxPct);
+      let height = Math.max(6, inicio.rect.height + dyPct);
+      width = Math.min(width, 100 - inicio.rect.left);
+      height = Math.min(height, 100 - inicio.rect.top);
+      guide.style.width = width + '%';
+      guide.style.height = height + '%';
+      guide.style.right = 'auto';
+    }
+    ev.preventDefault();
+  });
+
+  function finalizar(ev) {
+    if (modo) { try { guide.releasePointerCapture(ev.pointerId); } catch (e) {} }
+    modo = null; inicio = null;
+  }
+  guide.addEventListener('pointerup', finalizar);
+  guide.addEventListener('pointercancel', finalizar);
+})();
 
 // ── Modos de captura (Nome / Endereço) e lista acumulada ────────────
 let _scanListaItens = []; // [{id, endereco, lat, lng, fonte}]
