@@ -11414,9 +11414,35 @@ if (linkColIdx !== null) {
 const wb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wb, ws, "Rotas Consolidadas");
 
+// Rota Anjun também precisa do arquivo _CIRCUIT (LATITUDE/LONGITUDE em
+// maiúsculo — mapeamento automático do Circuit reconhece de cara — com o
+// endereço REAL do cliente, não o padronizado/genérico da coluna "Address"
+// acima). Sem isso o usuário só tinha o arquivo _GEO pra importar no
+// Circuit, e o Circuit geocodifica pela coluna "Address" (padronizada,
+// às vezes com rua/número errado por vir de geocodificação aproximada),
+// ignorando o Lat/Lon já calculado — pino cai no lugar errado.
+let dataOutCircuit = null, sufixoAppCircuit = null;
+if (_rotaOrigem === 'anjun') {
+  dataOutCircuit = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
+  for (const it of _exportPreviewData) {
+    const prefixoGrande = it.temGrande ? '📦 PACOTE GRANDE — ' : '';
+    const enderecoReal = it.original || it.endereco;
+    const celula = prefixoGrande + (it.seqStr ? `${it.seqStr} - ${enderecoReal}` : enderecoReal);
+    dataOutCircuit.push([it.lat, it.lon, celula]);
+  }
+  sufixoAppCircuit = '_CIRCUIT';
+}
+
 // Nome do arquivo exportado = nome do arquivo importado (sem extensão) + sufixo do app
 // Ex.: "21-06-2026 MARCOS VINICIUS FERREIRA GOMES.xlsx" -> "21-06-2026 MARCOS VINICIUS FERREIRA GOMES_CIRCUIT.xlsx"
 XLSX.writeFile(wb, `${baseName}${sufixoApp}${sufixoDetalhado}.xlsx`);
+
+if (dataOutCircuit) {
+  const wsCircuit = XLSX.utils.aoa_to_sheet(dataOutCircuit);
+  const wbCircuit = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbCircuit, wsCircuit, "Rotas Consolidadas");
+  XLSX.writeFile(wbCircuit, `${baseName}${sufixoAppCircuit}${sufixoDetalhado}.xlsx`);
+}
 
 btn.classList.add('bn-sucesso');
 label.textContent = "Exportado!";
