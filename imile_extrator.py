@@ -29,6 +29,8 @@ from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from openpyxl import Workbook
 
+import gemini_enderecos
+
 # ---------------------------------------------------------------------------
 # CONFIGURACAO - preenche com seu usuario/senha antes de rodar, OU exporta as
 # variaveis de ambiente IMILE_USERNAME/IMILE_PASSWORD (usado pelo servidor.py
@@ -351,6 +353,14 @@ def main():
     if not resultado:
         print("Nenhuma entrega encontrada - nada pra salvar.")
         return
+
+    print("Corrigindo enderecos com Gemini...")
+    corrigidos = gemini_enderecos.limpar_enderecos(
+        [item.get("enderecoOriginal") or "" for item in resultado]
+    )
+    for item, corrigido in zip(resultado, corrigidos):
+        if corrigido:
+            item["enderecoFormatado"] = corrigido
 
     salvar_json(resultado, OUTPUT_JSON)
     salvar_csv(resultado, OUTPUT_CSV)

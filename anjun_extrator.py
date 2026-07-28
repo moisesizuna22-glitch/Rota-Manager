@@ -25,6 +25,7 @@ import requests
 from openpyxl import Workbook
 
 from anjun_tratamento import extrair_endereco_anjun
+import gemini_enderecos
 
 _RE_QD_ABREV = re.compile(r'\bQD\b', re.IGNORECASE)
 _RE_LT_ABREV = re.compile(r'\bLT\b', re.IGNORECASE)
@@ -258,6 +259,16 @@ def main():
             "lng": geo.get("lng"),
         })
         print(f"[ANJUN-API] PROGRESSO {i}/{total}")
+
+    # --- arruma os enderecos com o Gemini antes de exportar ---
+    if resultado:
+        print("[ANJUN-API] Corrigindo enderecos com Gemini...")
+        corrigidos = gemini_enderecos.limpar_enderecos(
+            [item.get("enderecoOriginal") or "" for item in resultado]
+        )
+        for item, corrigido in zip(resultado, corrigidos):
+            if corrigido:
+                item["enderecoFormatado"] = corrigido
 
     # --- salva JSON ---
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
