@@ -1465,22 +1465,22 @@ header .badge b { color: var(--accent2); }
   }
   .origem-import-icone img { width: 100%; height: 100%; object-fit: contain; }
 
-  /* ── Login da conta Anjun (busca a rota direto do site) ── */
-  #anjun-api-overlay {
+  /* ── Login da conta Anjun / iMile (busca a rota direto do site) ── */
+  #anjun-api-overlay, #imile-api-overlay {
     display: none; position: fixed; inset: 0; z-index: 900;
     background: rgba(0,0,0,.55);
     align-items: center; justify-content: center;
     padding: 20px;
   }
-  #anjun-api-overlay.show { display: flex; }
-  #anjun-api-panel {
+  #anjun-api-overlay.show, #imile-api-overlay.show { display: flex; }
+  #anjun-api-panel, #imile-api-panel {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     max-width: 380px; width: 100%;
     padding: 22px 20px 20px;
     box-shadow: 0 12px 40px rgba(0,0,0,.4);
   }
-  #anjun-api-erro { color: var(--danger, #e05252); font-size: 12px; margin-top: 6px; min-height: 14px; }
-  #anjun-api-link-arquivo {
+  #anjun-api-erro, #imile-api-erro { color: var(--danger, #e05252); font-size: 12px; margin-top: 6px; min-height: 14px; }
+  #anjun-api-link-arquivo, #imile-api-link-arquivo {
     display: block; text-align: center; margin-top: 14px;
     font-size: 12px; color: var(--muted); text-decoration: underline; cursor: pointer;
   }
@@ -5032,6 +5032,10 @@ Limpar
 <span class="origem-import-icone"><img src="/static/icons/anjun.jpg" alt="" aria-hidden="true"></span>
 <span>Anjun</span>
 </button>
+<button class="origem-import-opcao" onclick="_origemImportacaoEscolher('imile')">
+<span class="origem-import-icone"><img src="/static/icons/imile.svg" alt="" aria-hidden="true"></span>
+<span>iMile</span>
+</button>
 </div>
 </div>
 
@@ -5058,6 +5062,31 @@ Limpar
 <div id="anjun-api-erro"></div>
 <button class="btn btn-primary" style="width:100%;margin-top:10px" id="anjun-api-btn" onclick="anjunApiBuscar()">🔎 Buscar rota do Anjun</button>
 <span id="anjun-api-link-arquivo" onclick="_anjunApiUsarArquivo()">ou importar um arquivo manualmente</span>
+</div>
+</div>
+
+<!-- Login da conta iMile: mesmo fluxo do Anjun acima, usando imile_extrator.py
+     (cada usuário entra com a própria conta iMile Redelivery) -->
+<div id="imile-api-overlay" onclick="fecharImileApiLogin(event)">
+<div id="imile-api-panel">
+<div class="import-card-title" style="margin-bottom:16px"><span class="bar"></span>Entrar no iMile</div>
+<div class="login-field">
+<label>Usuário iMile</label>
+<div class="login-input-wrap">
+<span class="icon">👤</span>
+<input class="login-input" id="imile-api-user" type="text" placeholder="Seu usuário iMile" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('imile-api-pass').focus()">
+</div>
+</div>
+<div class="login-field">
+<label>Senha iMile</label>
+<div class="login-input-wrap">
+<span class="icon">🔒</span>
+<input class="login-input" id="imile-api-pass" type="password" placeholder="Sua senha iMile" autocomplete="off" onkeydown="if(event.key==='Enter')imileApiBuscar()">
+<button class="toggle-pass" onclick="toggleSenha('imile-api-pass',this)" title="Mostrar/ocultar senha">👁</button>
+</div>
+</div>
+<div id="imile-api-erro"></div>
+<button class="btn btn-primary" style="width:100%;margin-top:10px" id="imile-api-btn" onclick="imileApiBuscar()">🔎 Buscar rota do iMile</button>
 </div>
 </div>
 
@@ -7873,6 +7902,7 @@ document.getElementById('origem-import-overlay').classList.remove('show');
 function _origemImportacaoEscolher(tipo) {
 fecharEscolhaOrigemImportacao();
 if (tipo === 'anjun') abrirAnjunApiLogin();
+else if (tipo === 'imile') abrirImileApiLogin();
 else document.getElementById('file-input').click();
 }
 
@@ -7997,6 +8027,136 @@ updateStats(_allRows);
 
 document.getElementById('file-badge').innerHTML =
   `🧾 <b>Rota Anjun</b> — ${_allRows.length} endereços`;
+document.getElementById('file-badge').classList.add('show');
+document.getElementById('table-section').classList.add('show');
+document.getElementById('drop-zone').style.display = 'none';
+document.getElementById('import-page').style.display = 'none';
+document.getElementById('toolbar').style.display = 'flex';
+document.getElementById('bottom-nav').classList.add('show');
+document.body.classList.add('has-bottom-nav');
+
+} catch (err) {
+hideLoading();
+aplicarVisibilidadeDropZone();
+if (err && err.name === 'AbortError') return;
+await mostrarAlerta('❌ Erro: ' + err.message);
+}
+}
+
+// ── Login iMile + busca automática: mesmo fluxo do Anjun acima, só troca
+// o endpoint (imile_extrator.py já devolve endereço + lat/lng oficiais do
+// iMile, prontos, sem precisar de geocodificação nem tratamento à parte).
+function abrirImileApiLogin() {
+document.getElementById('imile-api-erro').textContent = '';
+document.getElementById('imile-api-overlay').classList.add('show');
+}
+
+function fecharImileApiLogin(e) {
+if (e && e.target !== document.getElementById('imile-api-overlay')) return;
+document.getElementById('imile-api-overlay').classList.remove('show');
+}
+
+async function imileApiBuscar() {
+const usuario = document.getElementById('imile-api-user').value.trim();
+const senha   = document.getElementById('imile-api-pass').value;
+const erroEl  = document.getElementById('imile-api-erro');
+erroEl.textContent = '';
+
+if (!usuario || !senha) {
+erroEl.textContent = 'Preenche usuário e senha do iMile.';
+return;
+}
+if (!_serverOnline) {
+erroEl.textContent = 'Servidor não encontrado. Rode servidor.py e tente de novo.';
+return;
+}
+
+setBtnLoading('imile-api-btn', true, '🔎 Buscar rota do iMile');
+try {
+const ini = await fetch(SERVER + '/imile-rota/buscar-api', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', ...authHeaders() },
+body: JSON.stringify({ usuario, senha }),
+});
+if (ini.status === 403) {
+  let motivo = '';
+  try { motivo = (await ini.json()).erro || ''; } catch (e) {}
+  fecharImileApiLogin();
+  mostrarSemAcesso(motivo);
+  return;
+}
+const di = await ini.json();
+if (!di.ok) { erroEl.textContent = di.erro || 'Não consegui iniciar a busca.'; return; }
+
+fecharImileApiLogin();
+document.getElementById('imile-api-pass').value = ''; // não deixa a senha na tela depois de enviada
+await _imileApiAcompanharBusca();
+
+} catch (err) {
+erroEl.textContent = 'Erro: ' + err.message;
+} finally {
+setBtnLoading('imile-api-btn', false, '🔎 Buscar rota do iMile');
+}
+}
+
+async function _imileApiAcompanharBusca() {
+showLoading('Entrando no iMile...', 0);
+_loadingAbort = new AbortController();
+const sinal = _loadingAbort.signal;
+
+try {
+let dadosProntos = null;
+while (true) {
+  await sleep(900);
+  const r = await fetch(SERVER + '/imile-rota/api-progresso', { headers: authHeaders(), signal: sinal });
+  const p = await r.json();
+  if (!p.ok) throw new Error(p.erro || 'Erro ao acompanhar a busca no iMile');
+
+  if (p.total > 0) {
+    setLoadingStage(1, `Buscando entregas no iMile... ${p.done}/${p.total}`);
+  } else {
+    setLoadingStage(1, 'Buscando entregas no iMile...');
+  }
+
+  if (p.erro) throw new Error(p.erro);
+  if (p.pronto) { dadosProntos = p; break; }
+}
+
+if (dadosProntos.gamificacao) gamiProcessarResposta(dadosProntos);
+setLoadingStage(2, 'Organizando rota do iMile...');
+await sleep(600);
+
+// Busca o resultado já carregado na sessão (mesmo endpoint dos outros fluxos)
+setLoadingStage(3, 'Confirmando geolocalização...');
+const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: sinal });
+const dado = await res.json();
+if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
+
+_headers = dado.headers || [];
+_allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+_rotaOrigem = 'imile';
+
+await confirmarGeolocalizacoes(_allRows, sinal);
+await sleep(500);
+
+setLoadingStage(4, 'Preparando visualização...');
+await sleep(500);
+clearDraft();
+
+const hUp = _headers.map(x => String(x||'').toUpperCase().trim());
+_colLat  = hUp.findIndex(h => /LATITUDE|LAT/.test(h));
+_colLon  = hUp.findIndex(h => /LONGITUDE|LON|LNG/.test(h));
+_colCoor = hUp.findIndex(h => /COORDENADAS|COORD/.test(h));
+if (_colLat  < 0) _colLat  = null;
+if (_colLon  < 0) _colLon  = null;
+if (_colCoor < 0) _colCoor = null;
+
+hideLoading();
+renderTable(_allRows);
+updateStats(_allRows);
+
+document.getElementById('file-badge').innerHTML =
+  `🧾 <b>Rota iMile</b> — ${_allRows.length} endereços`;
 document.getElementById('file-badge').classList.add('show');
 document.getElementById('table-section').classList.add('show');
 document.getElementById('drop-zone').style.display = 'none';
@@ -11376,10 +11536,11 @@ const baseName = String(_fileName || 'rota')
 const sufixoDetalhado = _exportModoAtual === 'detailed' ? '_DETALHADO' : '';
 
 let dataOut, sufixoApp, linkColIdx = null;
-if (_rotaOrigem === 'anjun') {
-  // Rota Anjun: mesmo formato que o csv_para_rota_xlsx.py já gera no painel
-  // Anjun (Sequence/Address/City/State/Address (Original)/Contact/Lat/Lon/
-  // Geo Fonte/Link Mapa) — já validado, geocodifica certinho por CEP.
+if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile') {
+  // Rota Anjun/iMile: mesmo formato que o csv_para_rota_xlsx.py já gera no
+  // painel Anjun (Sequence/Address/City/State/Address (Original)/Contact/
+  // Lat/Lon/Geo Fonte/Link Mapa) — endereço já vem geocodificado por essas
+  // origens, sem precisar de tratamento por CEP.
   dataOut = [["Sequence", "Address", "City", "State", "Address (Original)", "Contact", "Lat", "Lon", "Geo Fonte", "Link Mapa"]];
   linkColIdx = 9;
   for (const it of _exportPreviewData) {
@@ -11422,7 +11583,7 @@ XLSX.utils.book_append_sheet(wb, ws, "Rotas Consolidadas");
 // às vezes com rua/número errado por vir de geocodificação aproximada),
 // ignorando o Lat/Lon já calculado — pino cai no lugar errado.
 let dataOutCircuit = null, sufixoAppCircuit = null;
-if (_rotaOrigem === 'anjun') {
+if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile') {
   dataOutCircuit = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
   for (const it of _exportPreviewData) {
     const prefixoGrande = it.temGrande ? '📦 PACOTE GRANDE — ' : '';

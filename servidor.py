@@ -62,6 +62,7 @@ TRATAMENTO_PY  = "tratamento_dados.py"
 ANJUN_SCRIPT   = "csv_para_rota_xlsx.py"
 ANJUN_TRATAMENTO_PY = "anjun_tratamento.py"
 ANJUN_EXTRATOR_PY = "anjun_extrator.py"
+IMILE_EXTRATOR_PY = "imile_extrator.py"
 
 HERE_API_KEY   = os.environ.get("HERE_API_KEY", "P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M").strip()
 HERE_CIDADE_UF = os.environ.get("HERE_CIDADE_UF", "Goiânia - GO, Brasil").strip()
@@ -3036,6 +3037,139 @@ async def anjun_rota_api_progresso(request: Request):
                 usuario_consumir_credito_avulso_se_necessario(sess["usuario"])
                 registrar_importacao_hoje(sess["usuario"])
             print(f"  [ANJUN-API] ✅ {len(rows)} endereços carregados — usuário: {sess['usuario']}")
+
+            xp_resultado = None
+            rota_hash = sess.get("_rota_hash")
+            if rota_hash:
+                paradas = len(rows)
+                pacotes = sum(int(r.get("group_size") or 1) for r in rows)
+                xp_resultado = _conceder_xp_rota(uid, paradas, pacotes, rota_hash)
+                sess["_rota_hash"] = None
+            if xp_resultado:
+                resposta["gamificacao"] = xp_resultado
+
+            resposta["total_enderecos"] = len(rows)
+            job["carregado"] = True
+        except Exception as e:
+            job["erro"] = f"Erro ao carregar o resultado: {e}"
+            resposta["erro"] = job["erro"]
+
+    return ok_json(resposta)
+
+# ─── Buscar Rota iMile direto do site: mesmo fluxo do Anjun acima ────────
+# imile_extrator.py já devolve endereço + lat/lng oficiais do iMile (a API
+# do app manda tudo pronto, sem precisar geocodificar), então cai direto em
+# ler_processado() igual à Rota Anjun.
+_IMILE_API_JOBS: dict = {}  # uid -> {status, total, done, erro, pronto, carregado, saida_path}
+
+def _imile_api_processar_bg(uid: str, usuario_imile: str, senha_imile: str, saida_path: Path):
+    job = _IMILE_API_JOBS[uid]
+    try:
+        env_imile = {
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "IMILE_USERNAME": usuario_imile,
+            "IMILE_PASSWORD": senha_imile,
+            "IMILE_OUTPUT_XLSX": str(saida_path),
+            "IMILE_OUTPUT_JSON": str(DATA_DIR / f"imileapi_entrada_{uid}.json"),
+            "IMILE_OUTPUT_CSV": str(DATA_DIR / f"imileapi_entrada_{uid}.csv"),
+        }
+        proc = subprocess.Popen(
+            [sys.executable, IMILE_EXTRATOR_PY],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=env_imile,
+        )
+        for linha in proc.stdout:
+            linha = linha.rstrip("\n")
+            if linha:
+                print(f"  [IMILE-API] {linha}")
+            m_total = re.match(r"\[IMILE-API\] TOTAL (\d+)", linha)
+            if m_total:
+                job["total"] = int(m_total.group(1))
+            m_item = re.match(r"\[IMILE-API\] PROGRESSO (\d+)", linha)
+            if m_item:
+                job["done"] = int(m_item.group(1))
+                job["total"] = max(job["total"], job["done"])
+        proc.wait(timeout=600)
+        if proc.returncode != 0:
+            job["erro"] = "Não consegui buscar no iMile (confira usuário e senha)."
+        elif not saida_path.exists():
+            job["erro"] = "Busca concluída, mas não há entregas pendentes no iMile agora."
+        else:
+            job["total"] = max(job["total"], job["done"], 1)
+            job["done"] = job["total"]
+            job["pronto"] = True
+    except subprocess.TimeoutExpired:
+        job["erro"] = "Timeout: a busca no iMile demorou mais que o esperado."
+    except Exception as e:
+        job["erro"] = str(e)
+    finally:
+        job["status"] = "concluido"
+
+@app.post("/imile-rota/buscar-api")
+async def imile_rota_buscar_api(request: Request):
+    sess = _sessao_com_acesso_ou_403(request)
+
+    if not Path(IMILE_EXTRATOR_PY).exists():
+        return err_json(f"{IMILE_EXTRATOR_PY} não encontrado na pasta do servidor.")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    usuario_imile = (body.get("usuario") or "").strip()
+    senha_imile = body.get("senha") or ""
+    if not usuario_imile or not senha_imile:
+        return err_json("Informe usuário e senha da sua conta iMile.")
+
+    uid = sess["user_id"]
+    saida_path = DATA_DIR / f"imileapi_saida_{uid}.xlsx"
+
+    _IMILE_API_JOBS[uid] = {
+        "status": "rodando", "total": 0, "done": 0,
+        "erro": None, "pronto": False, "carregado": False,
+        "saida_path": str(saida_path),
+    }
+
+    print(f"  [IMILE-API] busca iniciada — usuário Rota Manager: {sess['usuario']}")
+
+    thread = threading.Thread(
+        target=_imile_api_processar_bg,
+        args=(uid, usuario_imile, senha_imile, saida_path),
+        daemon=True,
+    )
+    thread.start()
+
+    return ok_json({"ok": True})
+
+@app.get("/imile-rota/api-progresso")
+async def imile_rota_api_progresso(request: Request):
+    sess = _sessao_com_acesso_ou_403(request)
+    uid = sess["user_id"]
+    job = _IMILE_API_JOBS.get(uid)
+    if not job:
+        return err_json("Nenhuma busca em andamento.")
+
+    resposta = {
+        "ok": True,
+        "status": job["status"],
+        "total": job["total"],
+        "done": job["done"],
+        "pronto": job["pronto"],
+        "erro": job["erro"],
+    }
+
+    if job["pronto"] and not job.get("carregado"):
+        saida_path = Path(job["saida_path"])
+        try:
+            rows, headers = ler_processado(uid, caminho=saida_path)
+            sess["dados"] = (rows, headers)
+            sess["_rota_hash"] = gamification.calcular_hash_rota(saida_path.read_bytes())
+            adicionar_ao_historico(saida_path.name, rows, headers, uid)
+            if not sess.get("is_admin"):
+                usuario_consumir_credito_avulso_se_necessario(sess["usuario"])
+                registrar_importacao_hoje(sess["usuario"])
+            print(f"  [IMILE-API] ✅ {len(rows)} endereços carregados — usuário: {sess['usuario']}")
 
             xp_resultado = None
             rota_hash = sess.get("_rota_hash")
