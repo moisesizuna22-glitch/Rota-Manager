@@ -5229,17 +5229,33 @@ function extractStreetKey(addr) {
 if (!addr || typeof addr !== 'string') return '';
 const u = stripAccents(addr.toUpperCase().trim());
 const m = u.match(/^(RUA|R\.?|AVENIDA|AV\.?|PRACA|PRAÇA|PÇ|ALAMEDA|AL\.?|TRAVESSA|TV\.?)\s+(C[-\s]?\d+|T[-\s]?\d+|[A-Z]\s+\d+|\d+)/);
-if (!m) return u.split(',')[0].trim();
+if (m) {
 let raw = m[1].replace(/\.$/, '');
 let code = normStreetCode(m[2].trim());
 let pfx = PREFIX_MAP[raw] || raw;
 if (pfx === 'PRACA' || pfx === 'PCA') pfx = 'PRAÇA';
 return `${pfx} ${code}`;
 }
+// Via com nome, não numerada (ex.: "Av Segunda Radial") — expande o prefixo
+// abreviado aqui também, senão o rótulo ficava com "AV"/"AL" cru em vez de
+// "AVENIDA"/"ALAMEDA" (o ramo acima só expande quando a via tem código numérico).
+const named = u.split(',')[0].trim();
+const nm = named.match(/^(RUA|R\.?|AVENIDA|AV\.?|PRACA|PRAÇA|PÇ|ALAMEDA|AL\.?|TRAVESSA|TV\.?)\s+(.+)/);
+if (!nm) return named;
+let raw = nm[1].replace(/\.$/, '');
+let pfx = PREFIX_MAP[raw] || raw;
+if (pfx === 'PRACA' || pfx === 'PCA') pfx = 'PRAÇA';
+return `${pfx} ${nm[2]}`;
+}
 
 function parseQdLt(addr) {
 const u = stripAccents(addr.toUpperCase());
 let c = u.match(/\bQD\s*(\d+[A-Z]?)\s*LT\s*(\d+)/);
+if (c) return [c[1], String(parseInt(c[2]))];
+// Abreviação de uma letra só ("Q 49 L 05") — sem isso, o número da quadra
+// era lido como se fosse o número da casa (ex.: "Rua 1002 Q 14 L 14 n 263"
+// virava "RUA 1002, 14" em vez de "RUA 1002, 14-14").
+c = u.match(/\bQ\s*(\d+[A-Z]?)\s*L\s*(\d+)\b/);
 if (c) return [c[1], String(parseInt(c[2]))];
 let qd = u.match(/\b(?:QUADRA|QDR?\.?)\s*:?\s*(\d+[A-Z]?)/);
 let lt = u.match(/\b(?:LOTE|LT\.?)\s*:?\s*(\d+)/);
@@ -5249,7 +5265,7 @@ return [null, null];
 
 function extractStreetNumber(addr) {
 const u = stripAccents(addr.toUpperCase().trim());
-const streetRe = u.match(/^((?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|ALAMEDA|TRAVESSA|R\.?)\s+(?:C[-\s]?\d+|T[-\s]?\d+|[A-Z]\s*\d+|\d+))(.*)/);
+const streetRe = u.match(/^((?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|PÇ|ALAMEDA|AL\.?|TRAVESSA|TV\.?|R\.?)\s+(?:C[-\s]?\d+|T[-\s]?\d+|[A-Z]\s*\d+|\d+))(.*)/);
 let rest, codigoRua = null;
 if (streetRe) {
 rest = streetRe[2];
@@ -5261,13 +5277,16 @@ if (mCod) codigoRua = mCod[1];
 } else {
 // Rua com nome (não numerada, ex.: "Avenida Circular") — sem código logo
 // após o prefixo, o número da casa vem em algum ponto depois do nome.
-const namedRe = u.match(/^(?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|ALAMEDA|TRAVESSA|R\.?)\s+(.*)/);
+const namedRe = u.match(/^(?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|PÇ|ALAMEDA|AL\.?|TRAVESSA|TV\.?|R\.?)\s+(.*)/);
 if (!namedRe) return null;
 rest = namedRe[1];
 }
 let firstToken = rest.trim().replace(/^,/, '').trim().split(/\s+/)[0] || '';
 if (/^S\/?N$/.test(firstToken)) return null;
-let restClean = rest.replace(/\b(?:APT|APTO|AP|APARTAMENTO|SALA|UNID|CASA)\s*\.?\s*\d+\b/g, '');
+// [:.] em vez de só \.? — "Ap:401", "Qd:36B Ap:401" (Anjun costuma separar
+// label:valor com dois-pontos) senão o número do apto vazava como se fosse
+// o número da casa.
+let restClean = rest.replace(/\b(?:APT|APTO|AP|APARTAMENTO|SALA|UNID|CASA)\s*[:.]?\s*\d+\b/g, '');
 // CEP (00000-000 ou 00000000) nunca é número de casa — sem isso, o CEP que
 // aparece antes do detalhe entre parênteses (formato do Anjun) era lido
 // como se fosse o número do imóvel.
@@ -5348,7 +5367,7 @@ return a.includes(',') ? a : (o || a);
 function fuzzyKey(addr) {
 if (!addr || typeof addr !== 'string') return '';
 let t = stripAccents(addr.toUpperCase());
-t = t.replace(/^(RUA|AVENIDA|AV\.?|PRACA|PRAÇA|PÇ|ALAMEDA|TRAVESSA|R\.?)\s+/, '');
+t = t.replace(/^(RUA|AVENIDA|AV\.?|PRACA|PRAÇA|PÇ|ALAMEDA|AL\.?|TRAVESSA|TV\.?|R\.?)\s+/, '');
 t = normStreetCode(t);
 t = t.replace(BLDG_RE, '');
 t = t.replace(/\b(APT|APTO|AP|APARTAMENTO|CASA|CS)\s*\d+\b/g, '');
