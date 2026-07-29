@@ -5255,9 +5255,14 @@ return [null, null];
 function extractStreetNumber(addr) {
 const u = stripAccents(addr.toUpperCase().trim());
 const streetRe = u.match(/^((?:RUA|AVENIDA|AV\.?|PRACA|PRAÇA|ALAMEDA|TRAVESSA|R\.?)\s+(?:C[-\s]?\d+|T[-\s]?\d+|[A-Z]\s*\d+|\d+))(.*)/);
-let rest;
+let rest, codigoRua = null;
 if (streetRe) {
 rest = streetRe[2];
+// código já usado no nome da rua (ex.: "85" em "AV 85") — se ele se repetir
+// mais adiante (comum no formato do Anjun, que repete a rua dentro dos
+// parênteses), não é o número da casa, é só a rua citada de novo.
+const mCod = streetRe[1].match(/(\d+)\s*$/);
+if (mCod) codigoRua = mCod[1];
 } else {
 // Rua com nome (não numerada, ex.: "Avenida Circular") — sem código logo
 // após o prefixo, o número da casa vem em algum ponto depois do nome.
@@ -5268,8 +5273,12 @@ rest = namedRe[1];
 let firstToken = rest.trim().replace(/^,/, '').trim().split(/\s+/)[0] || '';
 if (/^S\/?N$/.test(firstToken)) return null;
 let restClean = rest.replace(/\b(?:APT|APTO|AP|APARTAMENTO|SALA|UNID|CASA)\s*\.?\s*\d+\b/g, '');
+// CEP (00000-000 ou 00000000) nunca é número de casa — sem isso, o CEP que
+// aparece antes do detalhe entre parênteses (formato do Anjun) era lido
+// como se fosse o número do imóvel.
+restClean = restClean.replace(/\b\d{5}-?\d{3}\b/g, '');
 let allNums = [...restClean.matchAll(/\b(\d+)\b/g)].map(m => m[1]);
-let candidates = allNums.filter(n => n !== '0');
+let candidates = allNums.filter(n => n !== '0' && n !== codigoRua);
 if (!candidates.length) return null;
 if (candidates[0].length >= 2) return candidates[0];
 let longer = candidates.slice(1).filter(n => n.length >= 2);
