@@ -1075,28 +1075,24 @@ header .badge b { color: var(--accent2); }
 
   .scan-alt-list { margin-top: 16px; }
   .scan-alt-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px; border-radius: 10px;
-    border: 1px solid var(--border); background: var(--surface2);
-    margin-bottom: 8px; cursor: pointer;
-    transition: border-color .15s;
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 7px 4px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background-color .15s;
   }
-  .scan-alt-item:hover { border-color: var(--accent2); }
+  .scan-alt-item:last-child { border-bottom: none; }
+  .scan-alt-item:hover { background: var(--surface2); }
   .scan-alt-item .scan-alt-seq {
     font-family: 'JetBrains Mono', monospace, monospace;
-    font-weight: 700; font-size: 12px;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    min-width: 34px; min-height: 34px; padding: 4px 6px;
-    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 3px 6px;
-    flex-shrink: 0; color: var(--text);
+    font-weight: 700; font-size: 13px;
+    color: var(--accent2);
+    flex-shrink: 0;
   }
-  .scan-alt-item .scan-seq-chip { font-size: 12px; padding: 0 4px; border-radius: 6px; }
-  .scan-alt-item .scan-seq-chip.chosen::after { font-size: 13px; }
-  .scan-alt-item .scan-seq-grande-btn { font-size: 13px; padding: 1px 3px; }
-  .scan-alt-item .scan-alt-addr { font-size: 12px; color: var(--muted); line-height: 1.4; flex: 1; word-break: break-word; }
+  .scan-alt-item .scan-alt-addr { font-size: 12px; color: var(--muted); line-height: 1.3; flex: 1; word-break: break-word; }
   .scan-alt-item .scan-alt-pct {
     font-family: 'JetBrains Mono', monospace, monospace;
-    font-size: 11px; color: var(--accent); flex-shrink: 0;
+    font-size: 10px; color: var(--accent); flex-shrink: 0;
   }
   #scan-nada { text-align: center; padding: 10px 8px; color: var(--muted); font-size: 13px; }
 
@@ -5991,7 +5987,12 @@ const row = _allRows.find(r => String(r._cid) === String(cid));
 if (!row || !Array.isArray(row.membros) || !row.membros[mi]) return;
 const valor = String(novoValor || '').trim();
 if (valor) {
-row.membros[mi].original = valor;
+const membro = row.membros[mi];
+// Guarda o texto de antes da edição (só na primeira vez) — é o que está
+// impresso na etiqueta do courier, então Buscar Sequência (scanBuildIndex)
+// continua achando a parada mesmo depois de corrigir o endereço errado.
+if (membro._original_bruto === undefined) membro._original_bruto = membro.original;
+membro.original = valor;
 // Recalcula o endereço original consolidado (join único de todos os
 // membros), igual ao que já acontece ao agrupar/desagrupar manualmente.
 const origsVistos = [];
@@ -10135,7 +10136,13 @@ function scanNumeroNoEndereco(num, item) {
 // campos auxiliares prefixados com "_scan".
 function scanBuildIndex(rows) {
   rows.forEach(it => {
-    const textoBase = [it.address, it.endereco_original, it.group_label]
+    // Inclui o texto de antes de qualquer edição (row.membros[i]._original_bruto,
+    // ver salvarOriginalEndereco) — assim a busca acha a parada mesmo que o
+    // endereço exibido tenha sido corrigido depois que a etiqueta foi impressa.
+    const brutos = Array.isArray(it.membros)
+      ? it.membros.map(m => m && m._original_bruto).filter(Boolean)
+      : [];
+    const textoBase = [it.address, it.endereco_original, it.group_label, ...brutos]
       .filter(Boolean).join(' | ');
     it._scanNorm = scanNormalize(textoBase);
     it._scanCampos = scanExtrairCampos(textoBase);
@@ -10968,9 +10975,12 @@ async function scanCapturarFotoViva() {
 
     if (_scanCamModo === 'busca') {
       document.getElementById('scan-texto').value = texto;
-      scanExecutarBusca();
+      const achou = scanExecutarBusca();
       const status = document.getElementById('scan-status');
       scanMostrarToast(status && status.textContent ? status.textContent : '✅ Buscado');
+      // Achou a sequência: fecha a câmera sozinho, sem precisar tocar no ✕.
+      // O toast de confirmação fica visível por um instante antes de fechar.
+      if (achou) setTimeout(() => scanFecharCameraViva(), 700);
     } else {
       _scanListaItens.push({
         id: ++_scanListaSeq,
@@ -11031,6 +11041,10 @@ function scanRenderCamposTags(campos) {
     : '';
 }
 
+// Devolve true quando achou uma correspondência boa o bastante pra contar
+// como "achou" (mesmo limiar usado em scanRenderResultado pra decidir se
+// mostra "nenhum endereço parecido") — usado por scanCapturarFotoViva pra
+// saber se fecha a câmera automaticamente depois da busca.
 function scanExecutarBusca() {
   const status = document.getElementById('scan-status');
   const textoEl = document.getElementById('scan-texto');
@@ -11041,11 +11055,11 @@ function scanExecutarBusca() {
     status.textContent = '⚠️ Digite ou reconheça um texto antes de buscar.';
     card.classList.remove('on');
     scanRenderCamposTags({});
-    return;
+    return false;
   }
   if (!_allRows || !_allRows.length) {
     status.textContent = '⚠️ Nenhuma rota carregada para buscar.';
-    return;
+    return false;
   }
 
   scanRenderCamposTags(scanExtrairCampos(texto));
@@ -11059,6 +11073,8 @@ function scanExecutarBusca() {
   // Limpa o texto pra já deixar pronto pro próximo endereço.
   textoEl.value = '';
   textoEl.focus();
+
+  return matches.length > 0 && matches[0].pct >= 0.25;
 }
 
 function scanRenderResultado(matches) {
@@ -11104,9 +11120,9 @@ function scanRenderResultado(matches) {
         const addr = row.endereco_original || row.address || row.group_label || '';
         const pct = Math.round(m.pct * 100);
         return `<div class="scan-alt-item" data-alt-cid="${row._cid}">
-          <div class="scan-alt-seq">${scanRenderSeqChips(row)}</div>
-          <div class="scan-alt-addr">${escHtml(addr)}</div>
-          <div class="scan-alt-pct">${pct}%</div>
+          <span class="scan-alt-seq">${escHtml(scanSeqPlana(row))}</span>
+          <span class="scan-alt-addr">${escHtml(addr)}</span>
+          <span class="scan-alt-pct">${pct}%</span>
         </div>`;
       }).join('')
     : '';
@@ -11117,6 +11133,15 @@ function scanRenderResultado(matches) {
       scanIrParaLinha(cid);
     });
   });
+}
+
+// Versão simples (só texto "#44" ou "#44, #45"), sem os botões clicáveis de
+// scanRenderSeqChips — usada na lista de "outras possibilidades", que é só
+// pra escolher qual endereço é o certo, não pra marcar pacote já nomeado.
+function scanSeqPlana(row) {
+  const seqRaw = row.stop || row.group_stops || '—';
+  const nums = String(seqRaw).split(',').map(s => s.trim()).filter(Boolean);
+  return nums.length ? nums.map(n => '#' + n).join(', ') : '#—';
 }
 
 // Monta os "chips" clicáveis de números de sequência de um endereço.
@@ -11670,9 +11695,19 @@ function adminMsg(msg, tipo) {
   setTimeout(() => { el.className = 'admin-msg'; }, 3500);
 }
 
-// Formata telefone BR (DDD + 9 + 8 dígitos, ex: 62991153473) pra exibição: (62) 99115-3473
+// Formata telefone BR pra exibição.
+// Com código do país (55 + DDD + 9 + 8 dígitos, 13 dígitos — formato das
+// colunas Contact do Anjun/iMile, ex: 5562991153473) -> "55 62 9 9115-3473".
+// Sem código do país (DDD + 9 + 8 dígitos, 11 dígitos — cadastro de usuário
+// do Rota Manager) -> "(62) 99115-3473".
 function formatTelefoneExibicao(tel) {
   const d = (tel || '').replace(/\D/g, '');
+  if (d.length === 13 && d.startsWith('55')) {
+    const ddd = d.slice(2, 4);
+    const nono = d.slice(4, 5);
+    const resto = d.slice(5);
+    return `${d.slice(0, 2)} ${ddd} ${nono} ${resto.slice(0, 4)}-${resto.slice(4)}`;
+  }
   if (d.length !== 11) return tel || '';
   return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
 }
