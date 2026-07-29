@@ -11175,7 +11175,7 @@ function scanRenderResultado(matches) {
         const addr = row.endereco_original || row.address || row.group_label || '';
         const pct = Math.round(m.pct * 100);
         return `<div class="scan-alt-item" data-alt-cid="${row._cid}">
-          <span class="scan-alt-seq">${escHtml(scanSeqPlana(row))}</span>
+          <span class="scan-alt-seq">${scanRenderSeqChips(row)}</span>
           <span class="scan-alt-addr">${scanFormatEnderecoMultiplo(addr)}</span>
           <span class="scan-alt-pct">${pct}%</span>
         </div>`;
@@ -11188,15 +11188,6 @@ function scanRenderResultado(matches) {
       scanIrParaLinha(cid);
     });
   });
-}
-
-// Versão simples (só texto "#44" ou "#44, #45"), sem os botões clicáveis de
-// scanRenderSeqChips — usada na lista de "outras possibilidades", que é só
-// pra escolher qual endereço é o certo, não pra marcar pacote já nomeado.
-function scanSeqPlana(row) {
-  const seqRaw = row.stop || row.group_stops || '—';
-  const nums = String(seqRaw).split(',').map(s => s.trim()).filter(Boolean);
-  return nums.length ? nums.map(n => '#' + n).join(', ') : '#—';
 }
 
 // Monta os "chips" clicáveis de números de sequência de um endereço.
