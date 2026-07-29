@@ -11102,6 +11102,18 @@ function scanExecutarBusca() {
   return matches.length > 0 && matches[0].pct >= 0.25;
 }
 
+// Quando o endereço junta vários textos brutos diferentes (grupo com mais
+// de um endereço original, unidos por " | " — ver consolidate_p2), mostra
+// um por linha em vez de um parágrafo só correndo tudo junto.
+function scanFormatEnderecoMultiplo(texto) {
+  return String(texto || '')
+    .split('|')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => escHtml(s))
+    .join(' |<br>');
+}
+
 function scanRenderResultado(matches) {
   const card = document.getElementById('scan-resultado-card');
   const melhor = document.getElementById('scan-melhor-resultado');
@@ -11125,7 +11137,7 @@ function scanRenderResultado(matches) {
       <div class="scan-carimbo-label">Sequência</div>
       <div class="scan-carimbo-num">${scanRenderSeqChips(topRow)}</div>
     </div>
-    <div class="scan-match-addr">${escHtml(topAddr)}</div>
+    <div class="scan-match-addr">${scanFormatEnderecoMultiplo(topAddr)}</div>
     ${top.detalhes.length ? `<div class="scan-match-detail">${escHtml(top.detalhes.join(' · '))}</div>` : ''}
     <div class="scan-confidence"><i style="width:${topPct}%"></i></div>`;
 
@@ -11146,7 +11158,7 @@ function scanRenderResultado(matches) {
         const pct = Math.round(m.pct * 100);
         return `<div class="scan-alt-item" data-alt-cid="${row._cid}">
           <span class="scan-alt-seq">${escHtml(scanSeqPlana(row))}</span>
-          <span class="scan-alt-addr">${escHtml(addr)}</span>
+          <span class="scan-alt-addr">${scanFormatEnderecoMultiplo(addr)}</span>
           <span class="scan-alt-pct">${pct}%</span>
         </div>`;
       }).join('')
