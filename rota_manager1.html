@@ -6340,21 +6340,46 @@ function sortByAddress(rows) {
   });
 }
 
+// Filtra e ORDENA por prioridade (sequência bate antes de endereço/telefone),
+// pra achar rápido no meio de uma rota grande: sequência exata > sequência
+// parcial > telefone (últimos dígitos também servem) > texto do endereço.
 function filtrarTabela() {
-const q = document.getElementById('filter-input').value.trim().toUpperCase();
+const qRaw = document.getElementById('filter-input').value.trim();
+const q = qRaw.toUpperCase();
 if (!q) {
 renderTable(_allRows);
 return;
 }
-const filtered = _allRows.filter(r => {
+const qDigits = qRaw.replace(/\D/g, '');
+
+const casados = [];
+for (const r of _allRows) {
 const label = (r.group_label || r.address || '').toUpperCase();
 const orig  = (r.address || '').toUpperCase();
 const stop  = (r.stop || '').toUpperCase();
 const coord = (r.coord || '').toUpperCase();
-const membrosTxt = (r.membros || []).map(m => `${m.stop} ${m.original}`).join(' ').toUpperCase();
-return label.includes(q) || orig.includes(q) || stop.includes(q) || coord.includes(q) || membrosTxt.includes(q);
-});
-renderTable(filtered);
+const membros = r.membros || [];
+const membrosTxt = membros.map(m => `${m.stop} ${m.original}`).join(' ').toUpperCase();
+
+const stopsList = (membros.length ? membros.map(m => m.stop) : stop.split(','))
+.map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
+const seqExato   = stopsList.includes(q);
+const seqParcial = !seqExato && (stopsList.some(s => s.includes(q)) || stop.includes(q));
+
+const contatoDigits = [r.contato, ...membros.map(m => m.contato)]
+.filter(Boolean).join(' ').replace(/\D/g, '');
+const telBate = qDigits.length >= 4 && contatoDigits.includes(qDigits);
+
+const textoBate = label.includes(q) || orig.includes(q) || coord.includes(q) || membrosTxt.includes(q);
+
+if (!seqExato && !seqParcial && !telBate && !textoBate) continue;
+
+const prioridade = seqExato ? 0 : seqParcial ? 1 : telBate ? 2 : 3;
+casados.push({ r, prioridade });
+}
+// sort é estável (V8/ES2019+): dentro da mesma prioridade mantém a ordem original.
+casados.sort((a, b) => a.prioridade - b.prioridade);
+renderTable(casados.map(c => c.r));
 }
 
 function updateCountBadge(count) {
