@@ -46,6 +46,7 @@ import sys
 from pathlib import Path
 
 import tratamento_dados as td
+import gemini_enderecos
 
 # ── Extração do endereço detalhado (mesma ideia do csv_para_rota_xlsx.py) ──
 
@@ -354,6 +355,13 @@ def processar_anjun(caminho_csv: str, caminho_saida: str) -> str:
     print("Consolidando...")
     rows_p2 = _passo1_para_passo2(rows_p1)
     groups = td.consolidate_p2(rows_p2)
+
+    print("Corrigindo enderecos com Gemini...")
+    brutos = [(g['original'].split(' | ', 1)[0] if g['original'] else g['key']) for g in groups]
+    corrigidos = gemini_enderecos.limpar_enderecos(brutos)
+    for g, corrigido in zip(groups, corrigidos):
+        if corrigido:
+            g['key'] = corrigido
 
     caminho_saida = Path(caminho_saida)
     print(f"Salvando: {caminho_saida}")
