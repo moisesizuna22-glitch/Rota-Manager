@@ -56,6 +56,14 @@ import re
 import sys
 from pathlib import Path
 
+# Windows roda esse script via subprocess (servidor.py) com stdout capturado
+# por um pipe, que cai no cp1252 em vez de utf-8 - sem isso, o print do
+# resumo final (usa "✅") quebra com UnicodeEncodeError e o subprocess volta
+# returncode != 0, fazendo o servidor achar que deu erro mesmo com o xlsx
+# de saída já gravado certinho.
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 from openpyxl import load_workbook
 
 import tratamento_dados as td

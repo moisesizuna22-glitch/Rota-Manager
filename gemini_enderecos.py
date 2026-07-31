@@ -7,8 +7,11 @@ organizado (Endereco_Reformado).
 Uso: gemini_enderecos.limpar_enderecos(["end 1 bruto", "end 2 bruto", ...])
      -> ["end 1 limpo", "end 2 limpo", ...] (mesma ordem, mesmo tamanho)
 
-Se a chave nao estiver configurada ou a chamada falhar, devolve os
-enderecos originais sem quebrar a extracao.
+Se a chave nao estiver configurada ou a chamada falhar, devolve None no
+lugar do endereco (em vez do bruto original), pra quem chama saber que
+nao teve correcao e manter o proprio endereco ja tratado/padronizado -
+sem isso, "if corrigido: usa_corrigido" acabava trocando um endereco ja
+limpo pelo bruto sem tratamento sempre que o Gemini nao rodava.
 """
 
 import json
@@ -58,10 +61,11 @@ def _limpar_lote(enderecos: list) -> list:
 
 def limpar_enderecos(enderecos: list) -> list:
     """Limpa uma lista de enderecos brutos, em lotes. Se um lote falhar
-    (rede, chave invalida, resposta malformada), mantem os enderecos
-    originais desse lote em vez de derrubar a extracao inteira."""
+    (rede, chave invalida, resposta malformada), devolve None nesse lote
+    em vez do bruto original - quem chama ja tem um endereco tratado
+    localmente e deve manter o proprio em vez de regredir pro bruto."""
     if not GEMINI_API_KEY:
-        return list(enderecos)
+        return [None] * len(enderecos)
 
     resultado = []
     for i in range(0, len(enderecos), _LOTE):
@@ -71,8 +75,8 @@ def limpar_enderecos(enderecos: list) -> list:
             resultado.extend(corrigidos)
             print(f"  [GEMINI] {i + len(lote)}/{len(enderecos)} enderecos corrigidos")
         except Exception as e:
-            print(f"  [GEMINI] lote {i}-{i + len(lote)} falhou, mantendo original: {e}")
-            resultado.extend(lote)
+            print(f"  [GEMINI] lote {i}-{i + len(lote)} falhou, sem correcao: {e}")
+            resultado.extend([None] * len(lote))
     return resultado
 
 
@@ -87,17 +91,24 @@ def _demo():
             raise RuntimeError("simulado")
         return [f"OK: {e}" for e in lote]
 
-    global _limpar_lote
+    global _limpar_lote, GEMINI_API_KEY
     original = _limpar_lote
+    original_key = GEMINI_API_KEY
     _limpar_lote = fake_lote
+    GEMINI_API_KEY = "dummy"  # sem isso, limpar_enderecos nem chega a chamar _limpar_lote
     try:
         enderecos = [f"end {i}" for i in range(_LOTE + 5)]
         out = limpar_enderecos(enderecos)
         assert len(out) == len(enderecos)
         assert out[0] == "OK: end 0", out[0]
-        assert out[_LOTE] == "end 40", out[_LOTE]  # 2o lote falhou -> manteve original
+        assert out[_LOTE] is None, out[_LOTE]  # 2o lote falhou -> None, nao o bruto
+
+        GEMINI_API_KEY = ""
+        assert limpar_enderecos(["x", "y"]) == [None, None]  # sem chave -> None, nao o bruto
+
         print("[gemini_enderecos] self-check OK")
     finally:
+        GEMINI_API_KEY = original_key
         _limpar_lote = original
 
 
