@@ -63,6 +63,7 @@ ANJUN_SCRIPT   = "csv_para_rota_xlsx.py"
 ANJUN_TRATAMENTO_PY = "anjun_tratamento.py"
 ANJUN_EXTRATOR_PY = "anjun_extrator.py"
 IMILE_EXTRATOR_PY = "imile_extrator.py"
+IMILE_TRATAMENTO_PY = "imile_tratamento.py"
 
 HERE_API_KEY   = os.environ.get("HERE_API_KEY", "P8C0izk0pJ1PIZr3d5CpeAI8b_dc7YFLkNKJlzP0A-M").strip()
 HERE_CIDADE_UF = os.environ.get("HERE_CIDADE_UF", "Goiânia - GO, Brasil").strip()
@@ -3187,6 +3188,87 @@ async def imile_rota_api_progresso(request: Request):
             job["erro"] = f"Erro ao carregar o resultado: {e}"
             resposta["erro"] = job["erro"]
 
+    return ok_json(resposta)
+
+# ─── Importar Rota iMile (Circuit Detalhado): fluxo paralelo ao /upload ──
+# Recebe o xlsx/csv "Circuit Detalhado" (LATITUDE, LONGITUDE, SEQUENCE +
+# ENDERECO_ORIGINAL) exportado depois de rodar os endereços do Imile na
+# Circuit, roda o tratamento Imile (desinverte número/rua, tira bairro/
+# cidade/UF, já reaproveitando lat/long que vieram prontos) e cai na mesma
+# lógica de agrupamento/consolidação do tratamento_dados.py — igual ao
+# /anjun-rota/importar, mas pro export da Circuit em vez do Anjun.
+@app.post("/imile-rota/importar")
+async def imile_rota_importar(request: Request, arquivo: UploadFile = File(...)):
+    sess = _sessao_com_acesso_ou_403(request)
+
+    if not Path(IMILE_TRATAMENTO_PY).exists():
+        return err_json(f"{IMILE_TRATAMENTO_PY} não encontrado na pasta do servidor.")
+
+    contents = await arquivo.read()
+    if len(contents) <= 4:
+        return err_json("Arquivo vazio ou inválido.")
+
+    uid = sess["user_id"]
+    sufixo_original = Path(arquivo.filename or "entrada.xlsx").suffix.lower() or ".xlsx"
+    if sufixo_original == ".xls":
+        return err_json(
+            "Arquivo .xls (formato antigo do Excel) não é suportado. "
+            "Salve como .xlsx ou .csv e envie de novo."
+        )
+
+    # imile_tratamento.py lê .xlsx/.csv direto, sem precisar de conversão.
+    entrada_path = DATA_DIR / f"imilerota_entrada_{uid}{sufixo_original}"
+    saida_xlsx = DATA_DIR / f"imilerota_saida_{uid}.xlsx"
+    entrada_path.write_bytes(contents)
+
+    print(f"  [IMILE-ROTA] {entrada_path.name} salvo ({len(contents)} bytes) — usuário: {sess['usuario']}")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, IMILE_TRATAMENTO_PY, str(entrada_path), str(saida_xlsx)],
+            capture_output=True, text=True, timeout=180,
+        )
+        if result.returncode != 0:
+            erro = result.stderr or result.stdout or "Erro desconhecido"
+            print(f"  [IMILE-ROTA] ❌ {erro}")
+            return err_json(erro)
+        if result.stdout:
+            print(result.stdout)
+        if not saida_xlsx.exists():
+            return err_json("O tratamento rodou mas não gerou o arquivo de saída.")
+    except subprocess.TimeoutExpired:
+        return err_json("Timeout: o tratamento demorou mais que o esperado.")
+    except Exception as e:
+        print(f"  [IMILE-ROTA] ❌ {e}")
+        return err_json(str(e))
+
+    # guarda o hash do arquivo original pra dar XP uma única vez por rota
+    # (mesma lógica anti-fraude do /upload principal)
+    sess["_rota_hash"] = gamification.calcular_hash_rota(contents)
+
+    try:
+        rows, headers = ler_processado(uid, caminho=saida_xlsx)
+    except Exception as e:
+        return err_json(f"Erro ao ler o resultado: {e}")
+
+    sess["dados"] = (rows, headers)
+    adicionar_ao_historico(saida_xlsx.name, rows, headers, uid)
+    if not sess.get("is_admin"):
+        usuario_consumir_credito_avulso_se_necessario(sess["usuario"])
+        registrar_importacao_hoje(sess["usuario"])
+    print(f"  [IMILE-ROTA] ✅ {len(rows)} endereços carregados")
+
+    xp_resultado = None
+    rota_hash = sess.get("_rota_hash")
+    if rota_hash:
+        paradas = len(rows)
+        pacotes = sum(int(r.get("group_size") or 1) for r in rows)
+        xp_resultado = _conceder_xp_rota(uid, paradas, pacotes, rota_hash)
+        sess["_rota_hash"] = None
+
+    resposta = {"ok": True, "total": len(rows)}
+    if xp_resultado:
+        resposta["gamificacao"] = xp_resultado
     return ok_json(resposta)
 
 @app.post("/rota/otimizar")

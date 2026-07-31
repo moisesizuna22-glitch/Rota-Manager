@@ -5082,12 +5082,14 @@ Limpar
 </div>
 <div id="imile-api-erro"></div>
 <button class="btn btn-primary" style="width:100%;margin-top:10px" id="imile-api-btn" onclick="imileApiBuscar()">🔎 Buscar rota do iMile</button>
+<span id="imile-api-link-arquivo" onclick="_imileApiUsarArquivo()">ou importar o Circuit Detalhado manualmente</span>
 </div>
 </div>
 
 
 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="handleFile(event)">
 <input type="file" id="file-input-anjun-rota" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileAnjunRota(event)">
+<input type="file" id="file-input-imile-rota" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileImileRota(event)">
 
 <!-- Loading -->
 <div id="loading">
@@ -8109,6 +8111,14 @@ if (e && e.target !== document.getElementById('imile-api-overlay')) return;
 document.getElementById('imile-api-overlay').classList.remove('show');
 }
 
+// Fallback: quem preferir subir o xlsx "Circuit Detalhado" (exportado
+// depois de rodar os endereços do Imile na Circuit) continua podendo,
+// sem precisar digitar login/senha do iMile.
+function _imileApiUsarArquivo() {
+fecharImileApiLogin();
+document.getElementById('file-input-imile-rota').click();
+}
+
 async function imileApiBuscar() {
 const usuario = document.getElementById('imile-api-user').value.trim();
 const senha   = document.getElementById('imile-api-pass').value;
@@ -8455,6 +8465,92 @@ if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
     document.getElementById('file-badge').innerHTML =
       `🧾 <b>Rota Anjun</b> — ${_allRows.length} endereços`;
+    document.getElementById('file-badge').classList.add('show');
+    document.getElementById('table-section').classList.add('show');
+    document.getElementById('drop-zone').style.display = 'none';
+    document.getElementById('import-page').style.display = 'none';
+    document.getElementById('toolbar').style.display = 'flex';
+    document.getElementById('bottom-nav').classList.add('show');
+    document.body.classList.add('has-bottom-nav');
+
+} catch(err) {
+hideLoading();
+aplicarVisibilidadeDropZone();
+if (err && err.name === 'AbortError') return;
+await mostrarAlerta('❌ Erro: ' + err.message);
+}
+}
+
+async function handleFileImileRota(event) {
+const file = event.target.files[0];
+if (!file) return;
+event.target.value = '';
+
+if (!_serverOnline) {
+await mostrarAlerta('⚠️ Servidor não encontrado.\nRode servidor.py na mesma pasta e tente novamente.');
+return;
+}
+
+processarComServidorImileRota(file);
+}
+
+async function processarComServidorImileRota(file) {
+showLoading(`Enviando ${file.name}...`, 0);
+_fileName = file.name;
+_loadingAbort = new AbortController();
+const sinal = _loadingAbort.signal;
+
+try {
+// 1) Upload + tratamento iMile (Circuit Detalhado) + agrupamento, tudo num só endpoint
+setLoadingStage(2, 'Organizando rota do iMile...');
+const fd = new FormData();
+fd.append('arquivo', file, file.name);
+const imp = await fetch(SERVER + '/imile-rota/importar', { method: 'POST', body: fd, headers: authHeaders(), signal: sinal });
+if (imp.status === 403) {
+  let motivo = '';
+  try { motivo = (await imp.json()).erro || ''; } catch (e) {}
+  hideLoading();
+  mostrarSemAcesso(motivo);
+  return;
+}
+const pd = await imp.json();
+if (!pd.ok) throw new Error(pd.erro || 'Erro ao importar a Rota iMile');
+gamiProcessarResposta(pd);
+await sleep(900);
+
+// 2) Busca o resultado já carregado na sessão
+setLoadingStage(3, 'Confirmando geolocalização...');
+const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: sinal });
+const dado = await res.json();
+if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
+
+    _headers = dado.headers || [];
+    _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
+    _rotaOrigem = 'imile';
+
+    // Mesma confirmação de geolocalização do fluxo principal (banco/CEP).
+    await confirmarGeolocalizacoes(_allRows, sinal);
+    await sleep(500);
+
+// 3) Popula a tabela
+    setLoadingStage(4, 'Preparando visualização...');
+    await sleep(500);
+    clearDraft();
+
+    const hUp = _headers.map(x => String(x||'').toUpperCase().trim());
+    _colLat  = hUp.findIndex(h => /LATITUDE|LAT/.test(h));
+    _colLon  = hUp.findIndex(h => /LONGITUDE|LON|LNG/.test(h));
+    _colCoor = hUp.findIndex(h => /COORDENADAS|COORD/.test(h));
+    if (_colLat  < 0) _colLat  = null;
+    if (_colLon  < 0) _colLon  = null;
+    if (_colCoor < 0) _colCoor = null;
+
+    hideLoading();
+    renderTable(_allRows);
+    updateStats(_allRows);
+
+    document.getElementById('file-badge').innerHTML =
+      `🧾 <b>Rota iMile</b> — ${_allRows.length} endereços`;
     document.getElementById('file-badge').classList.add('show');
     document.getElementById('table-section').classList.add('show');
     document.getElementById('drop-zone').style.display = 'none';
