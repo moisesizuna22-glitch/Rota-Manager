@@ -5751,9 +5751,19 @@ const membros = Array.isArray(row.membros) && row.membros.length
 // courier, usa o que tiver QD+LT (ou número/prédio) pra virar a linha de
 // cima — é essa forma "RUA X, QD-LT" que bate com o banco de endereços.
 // Só pra item único; grupo (group_size > 1) mantém o rótulo de consenso.
+// melhorPadronizado() assume que o texto original tem a rua seguida de
+// vírgula (formato do Anjun) — no iMile o original é frase corrida sem
+// vírgula (ou vem com o número invertido antes da rua), então reprocessar
+// esse texto no navegador produz lixo. O address que já vem do servidor
+// pro iMile já é o padronizado certo (imile_tratamento.py já fez esse
+// trabalho em Python) — usa ele direto, sem reprocessar (nem com
+// standardize(): reaplicado em cima do próprio "RUA X, 93-5" ele quebra
+// o "-5" do lote, porque \b\d+\b não casa o número composto com hífen).
 const endReformado = row.group_size > 1
 ? (row.group_label || standardize(row.address) || row.address)
-: (melhorPadronizado(row.address, membros[0] ? membros[0].original : '') || row.address);
+: (_rotaOrigem === 'imile'
+    ? (row.group_label || row.address)
+    : (melhorPadronizado(row.address, membros[0] ? membros[0].original : '') || row.address));
 
 const stopsGrandes = new Set((row._stopsGrandes || []).map(String));
 const stopsList = membros.map(m => m.stop).filter(Boolean);
