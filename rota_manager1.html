@@ -2805,6 +2805,27 @@ color: var(--muted);
 font-size: 11px;
 }
 
+/* Marca a origem (Anjun/iMile) de cada parada — só aparece quando a lista
+   atual tem as duas origens juntas (ver "+ Adicionar outra origem"). */
+.badge-origem {
+display: block;
+margin-top: 4px;
+font-size: 9px;
+font-weight: 800;
+letter-spacing: .04em;
+padding: 1px 6px;
+border-radius: 999px;
+text-align: center;
+}
+.badge-origem-anjun {
+background: rgba(79,154,144,.18);
+color: var(--accent2);
+}
+.badge-origem-imile {
+background: rgba(201,96,74,.18);
+color: var(--danger);
+}
+
 /* ── Lista de endereços individuais dentro de um grupo ── */
 .membros-list {
 margin-top: 6px;
@@ -4957,6 +4978,9 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <button class="btn" onclick="document.getElementById('file-input-anjun-rota').click()">
 🧾 Importar Rota Anjun
 </button>
+<button class="btn" onclick="abrirEscolhaOrigemImportacaoAdicionar()" title="Soma outra origem (Anjun/iMile) na lista já carregada, em vez de substituir">
+➕ Adicionar outra origem
+</button>
 <button class="btn btn-secondary" id="btn-limpar-lista" onclick="limparListaCarregada()" title="Limpar a rota carregada">
 🗑️ Limpar lista
 </button>
@@ -5018,8 +5042,8 @@ Limpar
 <!-- Escolha de origem da planilha ao clicar em "Selecionar Planilha" -->
 <div id="origem-import-overlay" onclick="fecharEscolhaOrigemImportacao(event)">
 <div id="origem-import-panel">
-<div class="import-card-title" style="margin-bottom:16px"><span class="bar"></span>De onde vem essa planilha?</div>
-<button class="origem-import-opcao" onclick="_origemImportacaoEscolher('shopee')">
+<div class="import-card-title" style="margin-bottom:16px" id="origem-import-titulo"><span class="bar"></span>De onde vem essa planilha?</div>
+<button class="origem-import-opcao" id="origem-import-opcao-shopee" onclick="_origemImportacaoEscolher('shopee')">
 <span class="origem-import-icone"><img src="/static/icons/shopee.png" alt="" aria-hidden="true"></span>
 <span>Shopee</span>
 </button>
@@ -5517,6 +5541,32 @@ return { rows, headers, colAddr, colLat, colLon, colCoor };
 
 let _allRows = [];
 
+// Quando true, o próximo import de Rota Anjun/iMile (via API ou arquivo)
+// soma na lista já carregada (marcando a origem de cada linha nova) em vez
+// de substituir — ligado pelo botão "➕ Adicionar outra origem" da toolbar.
+let _modoAdicionarOrigem = false;
+
+// Funde `novasRows` (já normalizadas/ordenadas) na lista atual quando
+// _modoAdicionarOrigem estiver ligado; senão substitui como sempre foi.
+// Marca `_origem` em cada linha nova pra poder mostrar de qual fonte ela
+// veio quando a lista ficar "mista" (Anjun + iMile juntos).
+function _aplicarRowsImportadas(novasRows, headers, origemNova) {
+for (const r of novasRows) r._origem = origemNova;
+if (_modoAdicionarOrigem && _allRows.length) {
+// normalizarLinhas() reatribui _cid por índice dentro do array que
+// recebe — juntar dois lotes já normalizados (cada um com _cid 1..N)
+// duplicaria _cid entre eles, então tem que renumerar o array
+// concatenado inteiro, não só o lote novo.
+_allRows = sortByAddress(normalizarLinhas([..._allRows, ...novasRows]));
+if (_rotaOrigem !== origemNova) _rotaOrigem = 'mista';
+} else {
+_headers = headers || [];
+_allRows = novasRows;
+_rotaOrigem = origemNova;
+}
+_modoAdicionarOrigem = false;
+}
+
 // ── Auto-save do estado da rota no localStorage ─────────────────────────────
 // Chave do rascunho é por usuário (não uma constante global!) — senão,
 // no mesmo navegador/celular, a conta B abriria o rascunho que ficou
@@ -5761,7 +5811,7 @@ const membros = Array.isArray(row.membros) && row.membros.length
 // o "-5" do lote, porque \b\d+\b não casa o número composto com hífen).
 const endReformado = row.group_size > 1
 ? (row.group_label || standardize(row.address) || row.address)
-: (_rotaOrigem === 'imile'
+: (row._origem === 'imile'
     ? (row.group_label || row.address)
     : (melhorPadronizado(row.address, membros[0] ? membros[0].original : '') || row.address));
 
@@ -5917,8 +5967,15 @@ const nomeEditadoBadgeHtml = row._nome_editado
   ? `<span class="badge-nome-editado" title="Você editou o nome deste endereço.">✎ Nome editado</span>`
   : '';
 
+// Marca a origem (Anjun/iMile) de cada parada — só quando a lista atual
+// juntou as duas origens (botão "➕ Adicionar outra origem"); numa lista
+// de uma origem só, o rótulo não acrescenta informação.
+const origemBadgeHtml = (_rotaOrigem === 'mista' && row._origem)
+  ? `<span class="badge-origem badge-origem-${row._origem}">${escHtml(row._origem)}</span>`
+  : '';
+
 tr.insertAdjacentHTML('beforeend', `
-       <td class="td-stop">${escHtml(stopsStr || '—')}</td>
+       <td class="td-stop">${escHtml(stopsStr || '—')}${origemBadgeHtml}</td>
        <td class="td-addr">
          <div class="td-addr-reformado-wrap" data-cid="${row._cid}">
            <span class="td-addr-reformado">${escHtml(endReformado)}</span>
@@ -7956,11 +8013,26 @@ document.getElementById('file-input').value = '';
 // de abrir o seletor de arquivo certo — substitui os dois botões separados
 // que existiam antes (Buscar & Processar / Importar Rota Anjun).
 function abrirEscolhaOrigemImportacao() {
+_modoAdicionarOrigem = false;
+document.getElementById('origem-import-opcao-shopee').style.display = '';
+document.getElementById('origem-import-titulo').lastChild.textContent = 'De onde vem essa planilha?';
+document.getElementById('origem-import-overlay').classList.add('show');
+}
+
+// Mesmo painel de escolha de origem, mas soma na lista já carregada em vez
+// de substituir (ver _aplicarRowsImportadas) — esconde Shopee porque só faz
+// sentido somar Anjun/iMile (a mesma "forma" de dado); Shopee usa
+// tratamento por CEP e não se mistura com o formato dessas duas origens.
+function abrirEscolhaOrigemImportacaoAdicionar() {
+_modoAdicionarOrigem = true;
+document.getElementById('origem-import-opcao-shopee').style.display = 'none';
+document.getElementById('origem-import-titulo').lastChild.textContent = 'Adicionar outra origem';
 document.getElementById('origem-import-overlay').classList.add('show');
 }
 
 function fecharEscolhaOrigemImportacao(e) {
 if (e && e.target !== document.getElementById('origem-import-overlay')) return;
+if (e) _modoAdicionarOrigem = false; // fechou clicando fora, sem escolher — cancela o modo adicionar
 document.getElementById('origem-import-overlay').classList.remove('show');
 }
 
@@ -7981,6 +8053,7 @@ document.getElementById('anjun-api-overlay').classList.add('show');
 
 function fecharAnjunApiLogin(e) {
 if (e && e.target !== document.getElementById('anjun-api-overlay')) return;
+if (e) _modoAdicionarOrigem = false; // fechou sem entrar — cancela o modo adicionar
 document.getElementById('anjun-api-overlay').classList.remove('show');
 }
 
@@ -8067,9 +8140,7 @@ const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: si
 const dado = await res.json();
 if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
-_headers = dado.headers || [];
-_allRows = sortByAddress(normalizarLinhas(dado.rows || []));
-_rotaOrigem = 'anjun';
+_aplicarRowsImportadas(sortByAddress(normalizarLinhas(dado.rows || [])), dado.headers, 'anjun');
 
 await confirmarGeolocalizacoes(_allRows, sinal);
 await sleep(500);
@@ -8118,6 +8189,7 @@ document.getElementById('imile-api-overlay').classList.add('show');
 
 function fecharImileApiLogin(e) {
 if (e && e.target !== document.getElementById('imile-api-overlay')) return;
+if (e) _modoAdicionarOrigem = false; // fechou sem entrar — cancela o modo adicionar
 document.getElementById('imile-api-overlay').classList.remove('show');
 }
 
@@ -8205,9 +8277,7 @@ const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: si
 const dado = await res.json();
 if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
-_headers = dado.headers || [];
-_allRows = sortByAddress(normalizarLinhas(dado.rows || []));
-_rotaOrigem = 'imile';
+_aplicarRowsImportadas(sortByAddress(normalizarLinhas(dado.rows || [])), dado.headers, 'imile');
 
 await confirmarGeolocalizacoes(_allRows, sinal);
 await sleep(500);
@@ -8448,9 +8518,7 @@ const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: si
 const dado = await res.json();
 if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
-    _headers = dado.headers || [];
-    _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
-    _rotaOrigem = 'anjun';
+    _aplicarRowsImportadas(sortByAddress(normalizarLinhas(dado.rows || [])), dado.headers, 'anjun');
 
     // Mesma confirmação de geolocalização do fluxo principal (banco/CEP).
     await confirmarGeolocalizacoes(_allRows, sinal);
@@ -8534,9 +8602,7 @@ const res  = await fetch(SERVER + '/dados', { headers: authHeaders(), signal: si
 const dado = await res.json();
 if (!dado.ok) throw new Error(dado.erro || 'Erro ao buscar dados');
 
-    _headers = dado.headers || [];
-    _allRows = sortByAddress(normalizarLinhas(dado.rows || []));
-    _rotaOrigem = 'imile';
+    _aplicarRowsImportadas(sortByAddress(normalizarLinhas(dado.rows || [])), dado.headers, 'imile');
 
     // Mesma confirmação de geolocalização do fluxo principal (banco/CEP).
     await confirmarGeolocalizacoes(_allRows, sinal);
@@ -11594,7 +11660,7 @@ endereco = row.group_label || standardize(row.address) || row.address || '';
 return {
 lat: row.lat || '', lon: row.lon || '', seqStr, endereco, original,
 bairro: row.bairro || '', zip: row.zip || '', contato: row.contato || '',
-fonte: row.fonte_coord || '', temGrande,
+fonte: row.fonte_coord || '', temGrande, origem: row._origem || '',
 };
 });
 
@@ -11722,7 +11788,7 @@ const baseName = String(_fileName || 'rota')
 const sufixoDetalhado = _exportModoAtual === 'detailed' ? '_DETALHADO' : '';
 
 let dataOut, sufixoApp, linkColIdx = null;
-if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile') {
+if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile' || _rotaOrigem === 'mista') {
   // Rota Anjun/iMile: mesmo formato que o csv_para_rota_xlsx.py já gera no
   // painel Anjun (Sequence/Address/City/State/Address (Original)/Contact/
   // Lat/Lon/Geo Fonte/Link Mapa) — endereço já vem geocodificado por essas
@@ -11769,11 +11835,15 @@ XLSX.utils.book_append_sheet(wb, ws, "Rotas Consolidadas");
 // às vezes com rua/número errado por vir de geocodificação aproximada),
 // ignorando o Lat/Lon já calculado — pino cai no lugar errado.
 let dataOutCircuit = null, sufixoAppCircuit = null;
-if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile') {
+if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile' || _rotaOrigem === 'mista') {
   dataOutCircuit = [["LATITUDE", "LONGITUDE", "SEQUENCE + ENDERECO_ORIGINAL"]];
   for (const it of _exportPreviewData) {
     const prefixoGrande = it.temGrande ? '📦 PACOTE GRANDE — ' : '';
-    const enderecoReal = it.original || it.endereco;
+    // Numa rota mista (Anjun + iMile somadas via "➕ Adicionar outra
+    // origem"), marca a origem de cada parada — sem isso, no Circuit não
+    // dá pra saber de qual fonte cada endereço veio.
+    const prefixoOrigem = _rotaOrigem === 'mista' && it.origem ? `[${it.origem.toUpperCase()}] ` : '';
+    const enderecoReal = prefixoOrigem + (it.original || it.endereco);
     const celula = prefixoGrande + (it.seqStr ? `${it.seqStr} - ${enderecoReal}` : enderecoReal);
     dataOutCircuit.push([it.lat, it.lon, celula]);
   }
