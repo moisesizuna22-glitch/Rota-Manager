@@ -11793,7 +11793,11 @@ if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile' || _rotaOrigem === 'mista
   // painel Anjun (Sequence/Address/City/State/Address (Original)/Contact/
   // Lat/Lon/Geo Fonte/Link Mapa) — endereço já vem geocodificado por essas
   // origens, sem precisar de tratamento por CEP.
-  dataOut = [["Sequence", "Address", "City", "State", "Address (Original)", "Contact", "Lat", "Lon", "Geo Fonte", "Link Mapa"]];
+  const temOrigemMista = _rotaOrigem === 'mista';
+  dataOut = [[
+    "Sequence", "Address", "City", "State", "Address (Original)", "Contact", "Lat", "Lon", "Geo Fonte", "Link Mapa",
+    ...(temOrigemMista ? ["Origem"] : []),
+  ]];
   linkColIdx = 9;
   for (const it of _exportPreviewData) {
     const temCoord = it.lat && it.lon;
@@ -11801,6 +11805,7 @@ if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile' || _rotaOrigem === 'mista
     dataOut.push([
       it.seqStr, prefixoGrande + it.endereco, 'Goiânia', 'GO', prefixoGrande + (it.original || it.endereco), it.contato,
       it.lat, it.lon, it.fonte || 'Sem coordenada', temCoord ? 'Abrir no Maps' : '',
+      ...(temOrigemMista ? [(it.origem || '').toUpperCase()] : []),
     ]);
   }
   sufixoApp = '_GEO';
@@ -11855,6 +11860,11 @@ if (_rotaOrigem === 'anjun' || _rotaOrigem === 'imile' || _rotaOrigem === 'mista
 XLSX.writeFile(wb, `${baseName}${sufixoApp}${sufixoDetalhado}.xlsx`);
 
 if (dataOutCircuit) {
+  // Alguns navegadores bloqueiam o 2º download automático quando os dois
+  // disparam em sequência imediata (tratam como "vários downloads" e pedem
+  // permissão, ou simplesmente descartam o segundo) — essa pausa dá tempo
+  // do primeiro download ser processado antes do próximo disparar.
+  await sleep(600);
   const wsCircuit = XLSX.utils.aoa_to_sheet(dataOutCircuit);
   const wbCircuit = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wbCircuit, wsCircuit, "Rotas Consolidadas");
