@@ -1567,6 +1567,21 @@ def _creditar_plano(u: dict, plano_id: str) -> str:
     u.pop("origem_acesso", None)
     return f"{plano['nome']} liberado até {expira_em.strftime('%d/%m/%Y %H:%M')}."
 
+def admin_atribuir_plano_teste(username: str, plano_id: str) -> tuple[bool, str]:
+    """Credita um plano sem passar pelo InfinitePay — suporte (comp de crédito
+    pra um usuário) e QA (testar o gate de cota sem gastar dinheiro de verdade).
+    Reusa _creditar_plano, a mesma função que o webhook de pagamento confirmado
+    chama, então o resultado é idêntico a um pagamento real aprovado."""
+    if plano_id not in PLANOS:
+        return False, "Plano inválido."
+    users = carregar_usuarios()
+    chave, u = _buscar_usuario(users, username)
+    if u is None:
+        return False, "Usuário não encontrado."
+    msg = _creditar_plano(u, plano_id)
+    salvar_usuarios(users)
+    return True, f"{msg} (\"{chave}\")"
+
 def usuario_solicitar_plano(username: str, plano_id: str) -> tuple[bool, str]:
     plano = PLANOS.get(plano_id)
     if plano is None:
@@ -2401,6 +2416,13 @@ async def admin_liberar_route(request: Request):
     _sessao_admin_ou_403(request)
     data = await request.json()
     ok, msg = admin_liberar_acesso(data.get("usuario", ""), data.get("dias", 0))
+    return ok_json({"ok": ok, "msg": msg})
+
+@app.post("/admin/usuarios/atribuir-plano-teste")
+async def admin_atribuir_plano_teste_route(request: Request):
+    _sessao_admin_ou_403(request)
+    data = await request.json()
+    ok, msg = admin_atribuir_plano_teste(data.get("usuario", ""), data.get("plano", ""))
     return ok_json({"ok": ok, "msg": msg})
 
 @app.post("/admin/usuarios/revogar-acesso")
