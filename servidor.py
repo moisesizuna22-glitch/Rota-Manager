@@ -2129,6 +2129,28 @@ async def assinatura_status(request: Request):
         } if pendente else None,
     })
 
+@app.post("/assinatura/registrar-importacao")
+async def assinatura_registrar_importacao(request: Request):
+    """App Android roda o parsing/agrupamento/otimização da planilha 100% local
+    (não passa por /upload + /pipeline), então chama isso antes de salvar a rota
+    pra aplicar o MESMO gate de acesso/limite diário e consumir crédito avulso
+    que /pipeline já aplica pro site — reusa as mesmas funções, mesma fonte de
+    verdade (usuarios.json), pra site e app nunca discordarem sobre a cota."""
+    sess = _sessao_com_acesso_ou_403(request)
+    if not sess.get("is_admin"):
+        usuario_consumir_credito_avulso_se_necessario(sess["usuario"])
+        registrar_importacao_hoje(sess["usuario"])
+    users = carregar_usuarios()
+    _, u = _buscar_usuario(users, sess["usuario"])
+    if u is None:
+        return err_json("Usuário não encontrado.", 404)
+    return ok_json({
+        "ok": True,
+        "avulsa_creditos": int(u.get("avulsa_creditos", 0) or 0),
+        "usadas_hoje": _contagem_hoje(u),
+        "limite_hoje": PLANOS.get(u.get("plano_ativo", ""), {}).get("importacoes_por_dia"),
+    })
+
 @app.get("/assinatura/confirmar-pagamento")
 async def assinatura_confirmar_pagamento(request: Request,
                                           order_nsu: str = "",
