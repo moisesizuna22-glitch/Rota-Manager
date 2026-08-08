@@ -133,6 +133,18 @@ PLANOS = {
         "badge":     None,
         "pagamento_automatico": True,
         "importacoes_por_dia": None,
+        "quantidade": 1,
+    },
+    "avulsa_dupla": {
+        "nome":      "Importação Avulsa Dupla",
+        "preco":     4.00,
+        "tipo":      "avulso",
+        "dias":      None,
+        "beneficio": "2 importações avulsas — ex: Rota Anjun + iMile na mesma lista",
+        "badge":     None,
+        "pagamento_automatico": True,
+        "importacoes_por_dia": None,
+        "quantidade": 2,
     },
     "essencial": {
         "nome":      "Plano Essencial",
@@ -1543,10 +1555,12 @@ def admin_revogar_acesso(username: str) -> tuple[bool, str]:
 def _creditar_plano(u: dict, plano_id: str) -> str:
     plano = PLANOS[plano_id]
     if plano["tipo"] == "avulso":
-        u["avulsa_creditos"] = int(u.get("avulsa_creditos", 0) or 0) + 1
+        qtd = int(plano.get("quantidade", 1) or 1)
+        u["avulsa_creditos"] = int(u.get("avulsa_creditos", 0) or 0) + qtd
         u.pop("plano_ativo", None)
         u.pop("origem_acesso", None)
-        return "1 crédito de importação avulsa liberado."
+        sufixo = "" if qtd == 1 else "s"
+        return f"{qtd} crédito{sufixo} de importação avulsa liberado{sufixo}."
     expira_em = datetime.now() + timedelta(days=plano["dias"])
     u["acesso_expira_em"] = expira_em.isoformat()
     u["plano_ativo"] = plano_id
@@ -1578,10 +1592,8 @@ def admin_confirmar_plano(username: str) -> tuple[bool, str]:
     plano    = PLANOS.get(plano_id)
     if plano is None:
         return False, "Este usuário não tem solicitação de plano pendente."
-    _creditar_plano(u, plano_id)
-    msg = (f"1 crédito de importação avulsa liberado para \"{chave}\"."
-           if plano["tipo"] == "avulso"
-           else f"{plano['nome']} liberado para \"{chave}\".")
+    resultado = _creditar_plano(u, plano_id)
+    msg = f"{resultado} (\"{chave}\")" if plano["tipo"] == "avulso" else f"{plano['nome']} liberado para \"{chave}\"."
     u.pop("plano_solicitado", None)
     u.pop("plano_solicitado_em", None)
     salvar_usuarios(users)
